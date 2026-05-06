@@ -431,7 +431,10 @@ func registerFileEndpoint(mux *http.ServeMux, cfg *config.Config, signer *signed
 		contentType, disposition := files.ServeDisposition(disk, urlFilename)
 		w.Header().Set("Content-Type", contentType)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Cross-Origin-Resource-Policy", "same-site")
+		// Electron production renders from file://, which is not same-site with
+		// mqvi.net. Signed URLs already carry the authorization boundary, so
+		// allow cross-origin embedding for images/media loaded by the desktop app.
+		w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
 		w.Header().Set("Cache-Control", "private, max-age=3600")
 		if disposition != "" {
 			w.Header().Set("Content-Disposition", disposition)

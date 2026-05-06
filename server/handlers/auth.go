@@ -66,6 +66,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.signTokenURLs(tokens)
 	pkg.JSON(w, http.StatusCreated, tokens)
 }
 
@@ -99,6 +100,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		h.loginLimiter.Reset(ip)
 	}
 
+	h.signTokenURLs(tokens)
 	pkg.JSON(w, http.StatusOK, tokens)
 }
 
@@ -124,6 +126,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.signTokenURLs(tokens)
 	pkg.JSON(w, http.StatusOK, tokens)
 }
 
@@ -157,6 +160,12 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	user.AvatarURL = h.urlSigner.SignURLPtr(user.AvatarURL)
 	user.WallpaperURL = h.urlSigner.SignURLPtr(user.WallpaperURL)
 	pkg.JSON(w, http.StatusOK, user)
+}
+
+// signTokenURLs signs avatar and wallpaper URLs in the token response user.
+func (h *AuthHandler) signTokenURLs(tokens *services.AuthTokens) {
+	tokens.User.AvatarURL = h.urlSigner.SignURLPtr(tokens.User.AvatarURL)
+	tokens.User.WallpaperURL = h.urlSigner.SignURLPtr(tokens.User.WallpaperURL)
 }
 
 // ChangePassword handles POST /api/users/me/password
