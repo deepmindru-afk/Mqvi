@@ -238,17 +238,17 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG=${{ github.ref_name }}
-          NOTES=$(git tag -l --format='%(contents)' "$TAG")
-          if [ -z "$NOTES" ]; then
-            NOTES="Release $TAG"
+          NOTES_FILE="release-notes/${TAG}.md"
+
+          if [ ! -s "$NOTES_FILE" ]; then
+            echo "ERROR: Missing or empty release notes file: $NOTES_FILE"
+            exit 1
           fi
 
-          # Create release with tag annotation as notes
           gh release create "$TAG" \
             --title "$TAG" \
-            --notes "$NOTES" \
+            --notes-file "$NOTES_FILE" \
             artifacts/* \
             || echo "Release may already exist, uploading assets..."
 
-          # If release already exists, just upload
           gh release upload "$TAG" artifacts/* --clobber 2>/dev/null || true
