@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"syscall"
@@ -137,7 +136,7 @@ func main() {
 	initRoutes(mux, h, svcs.Auth, repos.User, repos.Role, repos.Server, fileSigner, fileACL)
 
 	// 14. Static file serving
-	registerStaticAndUploads(mux, cfg, fileSigner)
+	registerFileEndpoint(mux, cfg, fileSigner)
 
 	// 15. SPA frontend serving
 	frontendFS, hasFrontend := initFrontendFS()
@@ -389,31 +388,9 @@ func runStartupCleanup(db *database.DB, repos *Repositories, cfg *config.Config,
 	}
 }
 
-// registerStaticAndUploads sets up the upload file serving endpoint.
-func registerStaticAndUploads(mux *http.ServeMux, cfg *config.Config, signer *signedurl.Signer) {
-	uploadsHandler := http.StripPrefix("/api/uploads/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Block path traversal but allow one level of subdirectory (e.g. soundboard/)
-		if strings.Contains(r.URL.Path, "\\") || strings.Contains(r.URL.Path, "..") {
-			http.NotFound(w, r)
-			return
-		}
-		// Reject any request that targets a directory — prevents directory listing
-		// disclosure (Go's http.FileServer auto-renders index of files otherwise).
-		if r.URL.Path == "" || r.URL.Path == "/" || strings.HasSuffix(r.URL.Path, "/") {
-			http.NotFound(w, r)
-			return
-		}
-		fullPath := filepath.Join(cfg.Upload.Dir, filepath.FromSlash(r.URL.Path))
-		info, err := os.Stat(fullPath)
-		if err != nil || info.IsDir() {
-			http.NotFound(w, r)
-			return
-		}
-		http.FileServer(http.Dir(cfg.Upload.Dir)).ServeHTTP(w, r)
-	}))
-	mux.Handle("GET /api/uploads/", uploadsHandler)
-
-	// New segregated file endpoint. Path format:
+// registerFileEndpoint sets up the signed file serving endpoint.
+func registerFileEndpoint(mux *http.ServeMux, cfg *config.Config, signer *signedurl.Signer) {
+	// Segregated file endpoint. Path format:
 	//   /api/files/<kind>/<scopeID>/<filename>?exp=<unix>&sig=<base64url>
 	// Signature verified before serving. Path validation in Locator.ResolveServePath.
 	fileLocator := files.NewLocator(cfg.Upload.Dir, cfg.Upload.PublicURL)

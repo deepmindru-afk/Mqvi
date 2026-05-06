@@ -70,8 +70,7 @@ func IsValidKind(s string) bool {
 }
 
 // URLPathPrefix is the public URL path under which all new files are served.
-// Old uploads under /api/uploads/ remain served by the legacy handler until
-// PHASE-15 migration removes them.
+// All files are served under this prefix with signed URLs.
 const URLPathPrefix = "/api/files"
 
 // ErrInvalidSegment is returned when a scopeID or filename fails segment

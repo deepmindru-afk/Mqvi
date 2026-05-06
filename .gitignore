@@ -101,6 +101,14 @@ server/static/dist/
 !server/static/dist/.gitkeep
 
 # ========================
+# One-time migration tools
+# ========================
+server/cmd/
+server/migrate-uploads.exe
+deploy/migrate-uploads
+deploy/migrate-uploads.ps1
+
+# ========================
 # Misc
 # ========================
 *.log

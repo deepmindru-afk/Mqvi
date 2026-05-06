@@ -9,7 +9,6 @@
 
 import { apiClient } from "./client";
 import type { Message, MessagePage } from "../types";
-import { API_BASE_URL } from "../utils/constants";
 
 export async function getMessages(
   serverId: string,
@@ -136,12 +135,4 @@ export async function deleteMessage(serverId: string, messageId: string) {
   return apiClient<{ message: string }>(`/servers/${serverId}/messages/${messageId}`, {
     method: "DELETE",
   });
-}
-
-/** Returns the full upload URL for an attachment. */
-export function getUploadUrl(fileUrl: string): string {
-  if (fileUrl.startsWith("/api/")) {
-    return fileUrl;
-  }
-  return `${API_BASE_URL}/uploads/${fileUrl}`;
 }

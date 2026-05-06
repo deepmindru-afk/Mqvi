@@ -16,7 +16,7 @@ function StorageUsageBar() {
   const [usage, setUsage] = useState<StorageUsage | null>(null);
 
   useEffect(() => {
-    getStorageUsage().then(setUsage).catch(() => {});
+    getStorageUsage().then((res) => setUsage(res.data ?? null)).catch(() => {});
   }, []);
 
   if (!usage) return null;
