@@ -33,6 +33,10 @@ type MockUserRepo struct {
 	DeleteAllMessagesByUserFn func(ctx context.Context, userID string) error
 	HardDeleteUserFn          func(ctx context.Context, userID string) error
 	SetPlatformAdminFn        func(ctx context.Context, userID string, isAdmin bool) error
+	InsertPlatformBanFn         func(ctx context.Context, email, username, userID, reason, bannedBy string) error
+	DeletePlatformBanFn         func(ctx context.Context, userID string) error
+	IsUsernamePlatformBannedFn  func(ctx context.Context, username string) (bool, error)
+	IsPlatformBannedByUserIDFn  func(ctx context.Context, userID string) (bool, error)
 }
 
 func (m *MockUserRepo) Create(ctx context.Context, user *models.User) error {
@@ -154,6 +158,30 @@ func (m *MockUserRepo) SetDownloadPromptSeen(_ context.Context, _ string) error 
 }
 func (m *MockUserRepo) SetWelcomeSeen(_ context.Context, _ string) error {
 	return nil
+}
+func (m *MockUserRepo) InsertPlatformBan(ctx context.Context, email, username, userID, reason, bannedBy string) error {
+	if m.InsertPlatformBanFn != nil {
+		return m.InsertPlatformBanFn(ctx, email, username, userID, reason, bannedBy)
+	}
+	return nil
+}
+func (m *MockUserRepo) DeletePlatformBan(ctx context.Context, userID string) error {
+	if m.DeletePlatformBanFn != nil {
+		return m.DeletePlatformBanFn(ctx, userID)
+	}
+	return nil
+}
+func (m *MockUserRepo) IsUsernamePlatformBanned(ctx context.Context, username string) (bool, error) {
+	if m.IsUsernamePlatformBannedFn != nil {
+		return m.IsUsernamePlatformBannedFn(ctx, username)
+	}
+	return false, nil
+}
+func (m *MockUserRepo) IsPlatformBannedByUserID(ctx context.Context, userID string) (bool, error) {
+	if m.IsPlatformBannedByUserIDFn != nil {
+		return m.IsPlatformBannedByUserIDFn(ctx, userID)
+	}
+	return false, nil
 }
 
 // ─── SessionRepository mock ───
@@ -859,3 +887,6 @@ func (m *MockStorageService) SetQuota(ctx context.Context, userID string, quotaB
 	}
 	return nil
 }
+
+// MockFileCleanupService: defined inline in test files that need it
+// (not here — *services.CleanupPlan return type would create an import cycle).

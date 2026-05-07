@@ -36,8 +36,16 @@ type UserRepository interface {
 	// PlatformBan blocks login, WS connect, and re-registration with the same email.
 	PlatformBan(ctx context.Context, userID, reason, bannedBy string) error
 	PlatformUnban(ctx context.Context, userID string) error
-	// IsEmailPlatformBanned checks if an email belongs to a platform-banned user.
+	// IsEmailPlatformBanned checks the platform_bans table for a banned email.
 	IsEmailPlatformBanned(ctx context.Context, email string) (bool, error)
+	// IsUsernamePlatformBanned checks the platform_bans table for a banned username.
+	IsUsernamePlatformBanned(ctx context.Context, username string) (bool, error)
+	// IsPlatformBannedByUserID checks if a platform_bans record exists for a user ID (works after hard-delete).
+	IsPlatformBannedByUserID(ctx context.Context, userID string) (bool, error)
+	// InsertPlatformBan adds a persistent ban record that survives user hard-delete.
+	InsertPlatformBan(ctx context.Context, email, username, userID, reason, bannedBy string) error
+	// DeletePlatformBan removes the persistent ban record for a user.
+	DeletePlatformBan(ctx context.Context, userID string) error
 	// DeleteAllMessagesByUser removes all messages (server + DM) and attachments for a user.
 	DeleteAllMessagesByUser(ctx context.Context, userID string) error
 	// HardDeleteUser permanently deletes a user and all cascaded data.

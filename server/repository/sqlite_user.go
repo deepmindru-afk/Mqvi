@@ -9,6 +9,7 @@ import (
 	"github.com/akinalp/mqvi/database"
 	"github.com/akinalp/mqvi/models"
 	"github.com/akinalp/mqvi/pkg"
+	"github.com/google/uuid"
 )
 
 type sqliteUserRepo struct {
@@ -443,18 +444,53 @@ func (r *sqliteUserRepo) PlatformUnban(ctx context.Context, userID string) error
 	return nil
 }
 
-// IsEmailPlatformBanned checks if the email belongs to a banned user.
-// Used during registration to prevent new accounts with banned emails.
+// IsEmailPlatformBanned checks the platform_bans table for a banned email.
+// Persists even after user hard-delete.
 func (r *sqliteUserRepo) IsEmailPlatformBanned(ctx context.Context, email string) (bool, error) {
-	query := `SELECT COUNT(*) FROM users WHERE email = ? AND is_platform_banned = 1`
-
 	var count int
-	err := r.db.QueryRowContext(ctx, query, email).Scan(&count)
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM platform_bans WHERE email = ? COLLATE NOCASE`, email).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("failed to check email platform ban: %w", err)
 	}
-
 	return count > 0, nil
+}
+
+func (r *sqliteUserRepo) IsUsernamePlatformBanned(ctx context.Context, username string) (bool, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM platform_bans WHERE username = ? COLLATE NOCASE`, username).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to check username platform ban: %w", err)
+	}
+	return count > 0, nil
+}
+
+func (r *sqliteUserRepo) IsPlatformBannedByUserID(ctx context.Context, userID string) (bool, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM platform_bans WHERE user_id = ?`, userID).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to check platform ban by user ID: %w", err)
+	}
+	return count > 0, nil
+}
+
+func (r *sqliteUserRepo) InsertPlatformBan(ctx context.Context, email, username, userID, reason, bannedBy string) error {
+	id := uuid.New().String()
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO platform_bans (id, email, username, user_id, reason, banned_by) VALUES (?, ?, ?, ?, ?, ?)`,
+		id, email, username, userID, reason, bannedBy,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert platform ban: %w", err)
+	}
+	return nil
+}
+
+func (r *sqliteUserRepo) DeletePlatformBan(ctx context.Context, userID string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM platform_bans WHERE user_id = ?`, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete platform ban: %w", err)
+	}
+	return nil
 }
 
 // DeleteAllMessagesByUser deletes all server messages and DM messages for a user.
@@ -474,42 +510,77 @@ func (r *sqliteUserRepo) DeleteAllMessagesByUser(ctx context.Context, userID str
 }
 
 // HardDeleteUser permanently deletes the user and all CASCADE-linked data.
+// Runs in a transaction so partial deletes cannot occur.
 //
 // CASCADE covers: user_roles, messages, sessions, dm_channels, dm_messages,
 // message_mentions, reactions, friendships, server_members, channel_reads,
-// password_reset_tokens, server_mutes.
+// password_reset_tokens, server_mutes, user_badges.user_id, user_storage.
 //
-// Manual cleanup needed:
+// ON DELETE SET NULL covers: badges.created_by, user_badges.assigned_by.
+//
+// Manual cleanup (non-CASCADE FK or no FK):
 // - bans: no FK, username stored as text — orphans are harmless
 // - servers.owner_id: no CASCADE — caller must clean up owned servers first
+// - reports: no CASCADE on reporter_id/reported_user_id/resolved_by
+// - feedback_tickets/feedback_replies: no CASCADE on user_id
+// - user_dm_settings: no CASCADE on user_id
 func (r *sqliteUserRepo) HardDeleteUser(ctx context.Context, userID string) error {
-	// bans has no FK — manual cleanup
-	_, err := r.db.ExecContext(ctx, `DELETE FROM bans WHERE user_id = ?`, userID)
-	if err != nil {
-		return fmt.Errorf("failed to clean up bans for user: %w", err)
+	db, ok := r.db.(*sql.DB)
+	if !ok {
+		return fmt.Errorf("hard delete requires *sql.DB (got nested tx)")
 	}
 
-	// servers.owner_id has no CASCADE — delete owned servers first
-	_, err = r.db.ExecContext(ctx, `DELETE FROM servers WHERE owner_id = ?`, userID)
-	if err != nil {
-		return fmt.Errorf("failed to delete owned servers: %w", err)
-	}
+	return database.WithTx(ctx, db, func(tx *sql.Tx) error {
+		// bans: no FK — manual cleanup
+		if _, err := tx.ExecContext(ctx, `DELETE FROM bans WHERE user_id = ?`, userID); err != nil {
+			return fmt.Errorf("failed to clean up bans: %w", err)
+		}
 
-	// Main delete — CASCADE handles all related data
-	result, err := r.db.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, userID)
-	if err != nil {
-		return fmt.Errorf("failed to hard delete user: %w", err)
-	}
+		// servers.owner_id: no CASCADE — delete owned servers
+		if _, err := tx.ExecContext(ctx, `DELETE FROM servers WHERE owner_id = ?`, userID); err != nil {
+			return fmt.Errorf("failed to delete owned servers: %w", err)
+		}
 
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to check rows affected: %w", err)
-	}
-	if affected == 0 {
-		return pkg.ErrNotFound
-	}
+		// reports: no CASCADE on reporter_id/reported_user_id
+		if _, err := tx.ExecContext(ctx, `DELETE FROM reports WHERE reporter_id = ? OR reported_user_id = ?`, userID, userID); err != nil {
+			return fmt.Errorf("failed to delete user reports: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE reports SET resolved_by = NULL WHERE resolved_by = ?`, userID); err != nil {
+			return fmt.Errorf("failed to clear report resolved_by: %w", err)
+		}
 
-	return nil
+		// feedback_replies: no CASCADE on user_id — delete before tickets
+		if _, err := tx.ExecContext(ctx, `DELETE FROM feedback_replies WHERE user_id = ?`, userID); err != nil {
+			return fmt.Errorf("failed to delete user feedback replies: %w", err)
+		}
+
+		// feedback_tickets: no CASCADE on user_id
+		if _, err := tx.ExecContext(ctx, `DELETE FROM feedback_tickets WHERE user_id = ?`, userID); err != nil {
+			return fmt.Errorf("failed to delete user feedback tickets: %w", err)
+		}
+
+		// user_dm_settings: no CASCADE on user_id
+		if _, err := tx.ExecContext(ctx, `DELETE FROM user_dm_settings WHERE user_id = ?`, userID); err != nil {
+			return fmt.Errorf("failed to delete user dm settings: %w", err)
+		}
+
+		// Main delete — CASCADE handles remaining related data,
+		// ON DELETE SET NULL handles badges.created_by and user_badges.assigned_by
+		result, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, userID)
+		if err != nil {
+			return fmt.Errorf("failed to hard delete user: %w", err)
+		}
+
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to check rows affected: %w", err)
+		}
+		if affected == 0 {
+			return pkg.ErrNotFound
+		}
+
+		return nil
+	})
 }
 
 func (r *sqliteUserRepo) SetDownloadPromptSeen(ctx context.Context, userID string) error {

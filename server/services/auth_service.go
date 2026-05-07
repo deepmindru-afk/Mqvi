@@ -127,6 +127,15 @@ func (s *authService) Register(ctx context.Context, req *models.CreateUserReques
 		}
 	}
 
+	// Prevent banned users from re-registering with the same username
+	usernameBanned, ubErr := s.userRepo.IsUsernamePlatformBanned(ctx, req.Username)
+	if ubErr != nil {
+		return nil, fmt.Errorf("failed to check username ban: %w", ubErr)
+	}
+	if usernameBanned {
+		return nil, fmt.Errorf("%w: this username is not allowed", pkg.ErrForbidden)
+	}
+
 	user := &models.User{
 		Username:     req.Username,
 		DisplayName:  displayName,
@@ -304,6 +313,14 @@ func (s *authService) ChangeEmail(ctx context.Context, userID, password, newEmai
 
 	if user.Email != nil && *user.Email == newEmail {
 		return fmt.Errorf("%w: new email is the same as current email", pkg.ErrBadRequest)
+	}
+
+	banned, banErr := s.userRepo.IsEmailPlatformBanned(ctx, newEmail)
+	if banErr != nil {
+		return fmt.Errorf("failed to check email ban: %w", banErr)
+	}
+	if banned {
+		return fmt.Errorf("%w: this email is not allowed", pkg.ErrForbidden)
 	}
 
 	return s.userRepo.UpdateEmail(ctx, userID, &newEmail)

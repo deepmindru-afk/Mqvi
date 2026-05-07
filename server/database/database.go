@@ -140,14 +140,10 @@ func (db *DB) runMigrations(migrationsFS fs.FS) error {
 			return fmt.Errorf("failed to read migration %s: %w", file, err)
 		}
 
-		if err := db.execStatements(file, string(content)); err != nil {
+		// Run each migration in a transaction so partial application is impossible.
+		// If any statement fails, the entire migration is rolled back.
+		if err := db.execMigrationInTx(file, string(content)); err != nil {
 			return err
-		}
-
-		if _, err := db.Conn.Exec(
-			"INSERT INTO schema_migrations (filename) VALUES (?)", file,
-		); err != nil {
-			return fmt.Errorf("failed to record migration %s: %w", file, err)
 		}
 
 		log.Printf("[database] migration applied: %s", file)
@@ -156,19 +152,44 @@ func (db *DB) runMigrations(migrationsFS fs.FS) error {
 	return nil
 }
 
-// execStatements runs each SQL statement individually, skipping recoverable errors
-// (e.g. "duplicate column name" from a partially applied migration).
-func (db *DB) execStatements(filename, content string) error {
+// execMigrationInTx runs a migration file inside a single transaction.
+// PRAGMA statements are executed outside the transaction (SQLite requires this),
+// all other statements run inside the tx. On success, the migration filename
+// is recorded in schema_migrations within the same tx.
+func (db *DB) execMigrationInTx(filename, content string) (err error) {
 	statements := splitStatements(content)
 
-	for i, stmt := range statements {
+	// Phase 1: execute PRAGMA statements outside the transaction.
+	// SQLite PRAGMAs like journal_mode and foreign_keys cannot run inside a transaction.
+	var nonPragma []string
+	for _, stmt := range statements {
 		stmt = strings.TrimSpace(stmt)
 		if stmt == "" {
 			continue
 		}
+		if isPragma(stmt) {
+			if _, execErr := db.Conn.Exec(stmt); execErr != nil {
+				return fmt.Errorf("failed to execute PRAGMA in %s: %w", filename, execErr)
+			}
+		} else {
+			nonPragma = append(nonPragma, stmt)
+		}
+	}
 
-		if _, err := db.Conn.Exec(stmt); err != nil {
-			errMsg := err.Error()
+	// Phase 2: execute remaining statements in a transaction.
+	tx, err := db.Conn.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin migration tx for %s: %w", filename, err)
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	for i, stmt := range nonPragma {
+		if _, execErr := tx.Exec(stmt); execErr != nil {
+			errMsg := execErr.Error()
 			recoverable := false
 			for _, pattern := range recoverableErrors {
 				if strings.Contains(errMsg, pattern) {
@@ -182,15 +203,25 @@ func (db *DB) execStatements(filename, content string) error {
 				continue
 			}
 
-			return fmt.Errorf("failed to execute migration %s (statement %d): %w", filename, i+1, err)
+			return fmt.Errorf("failed to execute migration %s (statement %d): %w", filename, i+1, execErr)
 		}
 	}
 
-	return nil
+	if _, err = tx.Exec("INSERT INTO schema_migrations (filename) VALUES (?)", filename); err != nil {
+		return fmt.Errorf("failed to record migration %s: %w", filename, err)
+	}
+
+	return tx.Commit()
 }
 
-// splitStatements splits SQL by semicolons, respecting string literals
-// and BEGIN...END blocks (for triggers).
+// isPragma returns true if the statement is a PRAGMA command.
+func isPragma(stmt string) bool {
+	upper := strings.ToUpper(strings.TrimSpace(stmt))
+	return strings.HasPrefix(upper, "PRAGMA ")
+}
+
+// splitStatements splits SQL by semicolons, respecting string literals,
+// BEGIN...END blocks (for triggers), and -- line comments.
 func splitStatements(sql string) []string {
 	var statements []string
 	var current strings.Builder
@@ -199,6 +230,18 @@ func splitStatements(sql string) []string {
 
 	for i := 0; i < len(sql); i++ {
 		ch := sql[i]
+
+		// Skip -- line comments (outside strings): advance to end of line
+		if !inString && ch == '-' && i+1 < len(sql) && sql[i+1] == '-' {
+			for i < len(sql) && sql[i] != '\n' {
+				i++
+			}
+			// Write the newline to preserve line structure
+			if i < len(sql) {
+				current.WriteByte('\n')
+			}
+			continue
+		}
 
 		if ch == '\'' {
 			if inString && i+1 < len(sql) && sql[i+1] == '\'' {

@@ -3,10 +3,10 @@
 // Allows platform admin to delete any server (unlike owner-only ServerService.DeleteServer).
 //
 // Deletion order:
-// 1. LiveKit instance cleanup (platform -> decrement, self-hosted -> delete)
+// 1. Collect file refs (read-only)
 // 2. server_delete broadcast (BEFORE DB delete — member list is needed for broadcast)
 // 3. DB delete (CASCADE removes channels, messages, members, etc.)
-// 4. Optional email notification to server owner
+// 4. Side effects: file cleanup, LiveKit cleanup, email notification
 package services
 
 import (
@@ -30,6 +30,7 @@ type adminServerService struct {
 	livekitRepo repository.LiveKitRepository
 	hub         ws.EventPublisher
 	emailSender email.EmailSender // optional, nil = no emails
+	fileCleanup FileCleanupService
 }
 
 func NewAdminServerService(
@@ -38,6 +39,7 @@ func NewAdminServerService(
 	livekitRepo repository.LiveKitRepository,
 	hub ws.EventPublisher,
 	emailSender email.EmailSender,
+	fileCleanup FileCleanupService,
 ) AdminServerService {
 	return &adminServerService{
 		serverRepo:  serverRepo,
@@ -45,6 +47,7 @@ func NewAdminServerService(
 		livekitRepo: livekitRepo,
 		hub:         hub,
 		emailSender: emailSender,
+		fileCleanup: fileCleanup,
 	}
 }
 
@@ -54,20 +57,10 @@ func (s *adminServerService) DeleteServer(ctx context.Context, adminUserID, serv
 		return fmt.Errorf("server not found: %w", err)
 	}
 
-	// LiveKit instance cleanup
-	if server.LiveKitInstanceID != nil {
-		instance, lkErr := s.livekitRepo.GetByID(ctx, *server.LiveKitInstanceID)
-		if lkErr == nil {
-			if instance.IsPlatformManaged {
-				if decErr := s.livekitRepo.DecrementServerCount(ctx, instance.ID); decErr != nil {
-					log.Printf("[admin-server] failed to decrement livekit server count instance=%s: %v", instance.ID, decErr)
-				}
-			} else {
-				if delErr := s.livekitRepo.Delete(ctx, instance.ID); delErr != nil {
-					log.Printf("[admin-server] failed to delete self-hosted livekit instance=%s: %v", instance.ID, delErr)
-				}
-			}
-		}
+	// Phase 1: collect file refs (read-only, no side effects)
+	plan, collectErr := s.fileCleanup.CollectServerFiles(ctx, serverID)
+	if collectErr != nil {
+		return fmt.Errorf("failed to collect server files: %w", collectErr)
 	}
 
 	// Broadcast BEFORE delete (member list is lost after)
@@ -76,9 +69,13 @@ func (s *adminServerService) DeleteServer(ctx context.Context, adminUserID, serv
 		Data: map[string]string{"id": serverID},
 	})
 
+	// Phase 2: DB delete (CASCADE removes channels, messages, etc.)
 	if err := s.serverRepo.Delete(ctx, serverID); err != nil {
 		return fmt.Errorf("failed to delete server: %w", err)
 	}
+
+	// Phase 3: side effects AFTER successful DB delete (files, quota, LiveKit)
+	s.fileCleanup.Execute(plan)
 
 	// Best-effort email to server owner
 	if reason != "" && s.emailSender != nil {

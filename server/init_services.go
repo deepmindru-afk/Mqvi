@@ -75,6 +75,9 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 	// Storage quota service
 	storageService := services.NewStorageService(repos.Storage, cfg.Upload.DefaultQuotaBytes)
 
+	// File cleanup service (bulk file deletion + quota release for cascading deletes)
+	fileCleanupService := services.NewFileCleanupService(db, fileLocator, storageService, repos.LiveKit)
+
 	// Order-sensitive services
 	channelPermService := services.NewChannelPermissionService(
 		repos.ChannelPermission, repos.Role, repos.Channel, hub,
@@ -99,7 +102,7 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 		repos.User, repos.Session, repos.ResetToken, hub, emailSender,
 		cfg.JWT.Secret, cfg.JWT.AccessTokenExpiry, cfg.JWT.RefreshTokenExpiry,
 	)
-	channelService := services.NewChannelService(repos.Channel, repos.Category, hub, channelPermService, voiceService)
+	channelService := services.NewChannelService(repos.Channel, repos.Category, hub, channelPermService, voiceService, fileCleanupService)
 	categoryService := services.NewCategoryService(repos.Category, hub)
 	messageService := services.NewMessageService(
 		repos.Message, repos.Attachment, repos.Channel, repos.User,
@@ -111,7 +114,7 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 	roleService := services.NewRoleService(repos.Role, repos.User, hub)
 	serverService := services.NewServerService(
 		db, repos.Server, repos.LiveKit, repos.Role, repos.Channel,
-		repos.Category, repos.User, inviteService, hub, encryptionKey, urlSigner,
+		repos.Category, repos.User, inviteService, hub, encryptionKey, urlSigner, fileCleanupService,
 	)
 	livekitAdminService := services.NewLiveKitAdminService(
 		repos.LiveKit, repos.Server, repos.User, repos.Channel,
@@ -141,8 +144,8 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 	deviceService := services.NewDeviceService(repos.Device, hub)
 	e2eeService := services.NewE2EEService(repos.E2EEBackup, repos.GroupSession, hub)
 
-	adminUserService := services.NewAdminUserService(repos.User, hub, voiceService, emailSender)
-	adminServerService := services.NewAdminServerService(repos.Server, repos.User, repos.LiveKit, hub, emailSender)
+	adminUserService := services.NewAdminUserService(db, repos.User, hub, voiceService, emailSender, fileCleanupService)
+	adminServerService := services.NewAdminServerService(repos.Server, repos.User, repos.LiveKit, hub, emailSender, fileCleanupService)
 
 	linkPreviewService := services.NewLinkPreviewService(repos.LinkPreview)
 	badgeService := services.NewBadgeService(repos.Badge, hub)

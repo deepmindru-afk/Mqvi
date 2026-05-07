@@ -49,6 +49,7 @@ type serverService struct {
 	hub           ws.BroadcastAndManage
 	encryptionKey []byte // AES-256-GCM for LiveKit credentials
 	urlSigner     FileURLSigner
+	fileCleanup   FileCleanupService
 }
 
 func NewServerService(
@@ -63,6 +64,7 @@ func NewServerService(
 	hub ws.BroadcastAndManage,
 	encryptionKey []byte,
 	urlSigner FileURLSigner,
+	fileCleanup FileCleanupService,
 ) ServerService {
 	return &serverService{
 		db:            db,
@@ -76,6 +78,7 @@ func NewServerService(
 		hub:           hub,
 		encryptionKey: encryptionKey,
 		urlSigner:     urlSigner,
+		fileCleanup:   fileCleanup,
 	}
 }
 
@@ -399,20 +402,10 @@ func (s *serverService) DeleteServer(ctx context.Context, serverID, userID strin
 		return fmt.Errorf("%w: only the server owner can delete the server", pkg.ErrForbidden)
 	}
 
-	// LiveKit cleanup: delete self-hosted instance, decrement platform instance
-	if server.LiveKitInstanceID != nil {
-		instance, err := s.livekitRepo.GetByID(ctx, *server.LiveKitInstanceID)
-		if err == nil {
-			if instance.IsPlatformManaged {
-				if decErr := s.livekitRepo.DecrementServerCount(ctx, instance.ID); decErr != nil {
-					log.Printf("[server] failed to decrement livekit server count instance=%s: %v", instance.ID, decErr)
-				}
-			} else {
-				if delErr := s.livekitRepo.Delete(ctx, instance.ID); delErr != nil {
-					log.Printf("[server] failed to delete self-hosted livekit instance=%s: %v", instance.ID, delErr)
-				}
-			}
-		}
+	// Phase 1: collect file refs (read-only, no side effects)
+	plan, err := s.fileCleanup.CollectServerFiles(ctx, serverID)
+	if err != nil {
+		return fmt.Errorf("failed to collect server files: %w", err)
 	}
 
 	// Broadcast before delete (server_members are needed for BroadcastToServer)
@@ -421,9 +414,13 @@ func (s *serverService) DeleteServer(ctx context.Context, serverID, userID strin
 		Data: map[string]string{"id": serverID},
 	})
 
+	// Phase 2: DB delete (CASCADE removes channels, messages, attachments, etc.)
 	if err := s.serverRepo.Delete(ctx, serverID); err != nil {
 		return fmt.Errorf("failed to delete server: %w", err)
 	}
+
+	// Phase 3: side effects AFTER successful DB delete (files, quota, LiveKit)
+	s.fileCleanup.Execute(plan)
 
 	log.Printf("[server] deleted server %s by user %s", serverID, userID)
 	return nil

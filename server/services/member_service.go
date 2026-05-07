@@ -124,6 +124,13 @@ func (s *memberService) UpdateProfile(ctx context.Context, userID string, req *m
 		if existErr != nil && !errors.Is(existErr, pkg.ErrNotFound) {
 			return nil, fmt.Errorf("failed to check username availability: %w", existErr)
 		}
+		banned, banErr := s.userRepo.IsUsernamePlatformBanned(ctx, *req.Username)
+		if banErr != nil {
+			return nil, fmt.Errorf("failed to check username ban: %w", banErr)
+		}
+		if banned {
+			return nil, fmt.Errorf("%w: this username is not allowed", pkg.ErrForbidden)
+		}
 		user.Username = *req.Username
 	}
 	if req.DisplayName != nil {

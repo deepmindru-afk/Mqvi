@@ -56,6 +56,7 @@ type channelService struct {
 	hub           ws.Broadcaster
 	visChecker    ChannelVisibilityChecker
 	voiceProvider UserVoiceChannelProvider
+	fileCleanup   FileCleanupService
 }
 
 func NewChannelService(
@@ -64,6 +65,7 @@ func NewChannelService(
 	hub ws.Broadcaster,
 	visChecker ChannelVisibilityChecker,
 	voiceProvider UserVoiceChannelProvider,
+	fileCleanup FileCleanupService,
 ) ChannelService {
 	return &channelService{
 		channelRepo:   channelRepo,
@@ -71,6 +73,7 @@ func NewChannelService(
 		hub:           hub,
 		visChecker:    visChecker,
 		voiceProvider: voiceProvider,
+		fileCleanup:   fileCleanup,
 	}
 }
 
@@ -225,9 +228,19 @@ func (s *channelService) Update(ctx context.Context, id string, req *models.Upda
 }
 
 func (s *channelService) Delete(ctx context.Context, id string) error {
+	// Phase 1: collect file refs BEFORE cascade delete
+	plan, err := s.fileCleanup.CollectChannelFiles(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to collect channel files: %w", err)
+	}
+
+	// Phase 2: DB delete (CASCADE removes attachment rows)
 	if err := s.channelRepo.Delete(ctx, id); err != nil {
 		return err
 	}
+
+	// Phase 3: delete files from disk + release quota (safe — DB rows already gone)
+	s.fileCleanup.Execute(plan)
 
 	s.hub.BroadcastToAll(ws.Event{
 		Op:   ws.OpChannelDelete,
