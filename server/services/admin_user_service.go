@@ -11,8 +11,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/akinalp/mqvi/database"
+	"github.com/akinalp/mqvi/models"
 	"github.com/akinalp/mqvi/pkg"
 	"github.com/akinalp/mqvi/pkg/email"
 	"github.com/akinalp/mqvi/repository"
@@ -30,6 +32,13 @@ type AdminUserService interface {
 	// RestoreUser un-soft-deletes a user (admin override).
 	RestoreUser(ctx context.Context, adminUserID, targetUserID string) error
 	SetPlatformAdmin(ctx context.Context, adminUserID, targetUserID string, isAdmin bool) error
+	// ExpireSoftDeletedUser tombstones a user whose 30-day soft-delete window has elapsed.
+	// Called only by the embedded cleanup worker — no admin actor, no email
+	// notification (the user already received one when they soft-deleted), no
+	// platform-admin guard (cleanup target is by definition a soft-deleted user,
+	// not a live admin). Must verify deleted_at + TTL defensively in case the
+	// caller passes a stale ID.
+	ExpireSoftDeletedUser(ctx context.Context, targetUserID string) error
 }
 
 type adminUserService struct {
@@ -306,6 +315,57 @@ func (s *adminUserService) HardDeleteUser(ctx context.Context, adminUserID, targ
 	// Phase 3: delete files from disk + release other users' quota
 	s.fileCleanup.Execute(plan)
 
+	return nil
+}
+
+// ExpireSoftDeletedUser is the worker-driven path. Reuses the same collect →
+// broadcast → repo.HardDeleteUser → execute sequence as the admin variant but
+// skips admin actor checks, email notification (already sent at soft-delete),
+// and the platform-admin guard (a platform admin cannot reach this path because
+// they cannot soft-delete themselves). Defensive TTL check ensures the caller
+// did not race a restore.
+func (s *adminUserService) ExpireSoftDeletedUser(ctx context.Context, targetUserID string) error {
+	target, err := s.userRepo.GetByID(ctx, targetUserID)
+	if err != nil {
+		return fmt.Errorf("expire target user: %w", err)
+	}
+	if target.DeletedAt == nil {
+		return fmt.Errorf("%w: user is not soft-deleted", pkg.ErrBadRequest)
+	}
+	if target.IsHardDeleted {
+		return fmt.Errorf("%w: user is already a tombstone", pkg.ErrBadRequest)
+	}
+	cutoff := time.Now().UTC().AddDate(0, 0, -models.SoftDeleteTTLDays)
+	if target.DeletedAt.After(cutoff) {
+		return fmt.Errorf("%w: soft-delete TTL not yet elapsed (deleted_at=%s)", pkg.ErrBadRequest, target.DeletedAt.Format(time.RFC3339))
+	}
+
+	plan, collectErr := s.fileCleanup.CollectUserFiles(ctx, targetUserID)
+	if collectErr != nil {
+		return fmt.Errorf("collect user files: %w", collectErr)
+	}
+
+	ownedServerIDs, ownedErr := s.serverRepo.ListActiveServerIDsByOwner(ctx, targetUserID)
+	if ownedErr != nil {
+		return fmt.Errorf("list owned servers: %w", ownedErr)
+	}
+	for _, sid := range ownedServerIDs {
+		s.hub.BroadcastToServer(sid, ws.Event{
+			Op:   ws.OpServerDelete,
+			Data: map[string]string{"id": sid},
+		})
+	}
+
+	// Defensive: a soft-deleted user is offline by definition, but disconnect
+	// keeps the contract identical to the admin path.
+	s.voiceKit.DisconnectUser(targetUserID)
+	s.hub.DisconnectUser(targetUserID)
+
+	if err := s.userRepo.HardDeleteUser(ctx, targetUserID, target.DeletedByAdmin); err != nil {
+		return fmt.Errorf("tombstone user: %w", err)
+	}
+
+	s.fileCleanup.Execute(plan)
 	return nil
 }
 

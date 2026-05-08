@@ -605,7 +605,7 @@ export type FeedbackReply = {
 
 // ──────────────────────────────────
 export type AppLogLevel = "error" | "warn" | "info";
-export type AppLogCategory = "voice" | "video" | "screen_share" | "ws" | "auth" | "general" | "feedback" | "livekit";
+export type AppLogCategory = "voice" | "video" | "screen_share" | "ws" | "auth" | "general" | "feedback" | "livekit" | "cleaner";
 
 export type AppLog = {
   id: string;

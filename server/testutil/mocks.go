@@ -886,13 +886,24 @@ func (m *MockFileURLSigner) SignURLPtr(p *string) *string     { return p }
 // ─── FileDeleter mock (no-op) ───
 
 type MockFileDeleter struct {
-	DeleteFromURLFn func(storedURL string)
+	DeleteFromURLFn        func(storedURL string)
+	DeleteFromURLCheckedFn func(storedURL string) error
 }
 
 func (m *MockFileDeleter) DeleteFromURL(storedURL string) {
 	if m.DeleteFromURLFn != nil {
 		m.DeleteFromURLFn(storedURL)
 	}
+}
+
+func (m *MockFileDeleter) DeleteFromURLChecked(storedURL string) error {
+	if m.DeleteFromURLCheckedFn != nil {
+		return m.DeleteFromURLCheckedFn(storedURL)
+	}
+	if m.DeleteFromURLFn != nil {
+		m.DeleteFromURLFn(storedURL)
+	}
+	return nil
 }
 
 // ─── StorageService mock (no-op, always succeeds) ───

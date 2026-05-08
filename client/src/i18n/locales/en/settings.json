@@ -581,6 +581,7 @@
   "platformLogsCategoryGeneral": "General",
   "platformLogsCategoryFeedback": "Feedback",
   "platformLogsCategoryLiveKit": "LiveKit",
+  "platformLogsCategoryCleaner": "Cleaner",
   "platformLogsPage": "Page {{current}} of {{total}}",
 
   "feedback": "Feedback",

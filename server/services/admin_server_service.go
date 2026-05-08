@@ -13,7 +13,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
+	"github.com/akinalp/mqvi/models"
 	"github.com/akinalp/mqvi/pkg"
 	"github.com/akinalp/mqvi/pkg/email"
 	"github.com/akinalp/mqvi/repository"
@@ -31,6 +33,10 @@ type AdminServerService interface {
 	// RestoreServer un-soft-deletes a server (admin override). Works regardless
 	// of who soft-deleted it.
 	RestoreServer(ctx context.Context, adminUserID, serverID string) error
+	// ExpireSoftDeletedServer hard-deletes a server whose 30-day soft-delete
+	// window has elapsed. Called only by the embedded cleanup worker — no admin
+	// actor, no email notification (owner already knows). Defensive TTL check.
+	ExpireSoftDeletedServer(ctx context.Context, serverID string) error
 }
 
 type adminServerService struct {
@@ -132,6 +138,36 @@ func (s *adminServerService) HardDeleteServer(ctx context.Context, adminUserID, 
 	}
 
 	log.Printf("[admin-server] admin %s hard-deleted server %s (%s)", adminUserID, serverID, server.Name)
+	return nil
+}
+
+// ExpireSoftDeletedServer is the worker-driven path. The server has already been
+// soft-deleted (so members got their server_delete broadcast) — we only need to
+// run file cleanup and remove the DB row. Defensive TTL check guards against a
+// stale ID (admin restore racing the worker).
+func (s *adminServerService) ExpireSoftDeletedServer(ctx context.Context, serverID string) error {
+	server, err := s.serverRepo.GetByID(ctx, serverID)
+	if err != nil {
+		return fmt.Errorf("expire target server: %w", err)
+	}
+	if server.DeletedAt == nil {
+		return fmt.Errorf("%w: server is not soft-deleted", pkg.ErrBadRequest)
+	}
+	cutoff := time.Now().UTC().AddDate(0, 0, -models.SoftDeleteTTLDays)
+	if server.DeletedAt.After(cutoff) {
+		return fmt.Errorf("%w: soft-delete TTL not yet elapsed (deleted_at=%s)", pkg.ErrBadRequest, server.DeletedAt.Format(time.RFC3339))
+	}
+
+	plan, collectErr := s.fileCleanup.CollectServerFiles(ctx, serverID)
+	if collectErr != nil {
+		return fmt.Errorf("collect server files: %w", collectErr)
+	}
+
+	if err := s.serverRepo.Delete(ctx, serverID); err != nil {
+		return fmt.Errorf("delete server: %w", err)
+	}
+
+	s.fileCleanup.Execute(plan)
 	return nil
 }
 

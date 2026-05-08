@@ -125,6 +125,9 @@ func main() {
 	// 10c. App log service — async writer + auto-purge (30 days)
 	svcs.AppLog.Start()
 
+	// 10d. Cleanup worker — daily soft-delete TTL processing, orphan walk, retry queue
+	svcs.Cleanup.Start()
+
 	// 12. Handler layer
 	h := initHandlers(svcs, repos, limiters, hub, cfg, encryptionKey, urlSigner)
 
@@ -227,6 +230,7 @@ func main() {
 	<-done
 	log.Println("[main] shutting down...")
 
+	svcs.Cleanup.Stop()
 	svcs.AppLog.Stop()
 	metricsCollector.Stop()
 	hub.Shutdown()

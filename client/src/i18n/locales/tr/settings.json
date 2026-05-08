@@ -581,6 +581,7 @@
   "platformLogsCategoryGeneral": "Genel",
   "platformLogsCategoryFeedback": "Geri Bildirim",
   "platformLogsCategoryLiveKit": "LiveKit",
+  "platformLogsCategoryCleaner": "Temizleyici",
   "platformLogsPage": "Sayfa {{current}} / {{total}}",
 
   "feedback": "Geri Bildirim",

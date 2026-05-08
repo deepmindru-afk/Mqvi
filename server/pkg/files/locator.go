@@ -296,16 +296,27 @@ func (l *Locator) ResolveServePath(rawPath string) (string, error) {
 // — including the photo..png case that the old substring check let through to
 // SaveFile but blocked from serve/delete, leaving orphans.
 func (l *Locator) DeleteFromURL(storedURL string) {
+	_ = l.DeleteFromURLChecked(storedURL)
+}
+
+// DeleteFromURLChecked is the error-returning variant used by the cleanup retry
+// queue. Empty/legacy/invalid URLs and missing files all return nil so callers
+// only see real disk errors (permissions, IO failure). Other validation failures
+// are also nil — there is nothing to retry if the URL doesn't map to a path.
+func (l *Locator) DeleteFromURLChecked(storedURL string) error {
 	switch {
 	case storedURL == "":
-		return
+		return nil
 	case strings.HasPrefix(storedURL, URLPathPrefix+"/"):
 		raw := strings.TrimPrefix(storedURL, URLPathPrefix+"/")
 		disk, err := l.ResolveServePath(raw)
 		if err != nil {
-			return
+			return nil
 		}
-		os.Remove(disk)
+		if err := os.Remove(disk); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
 	case strings.HasPrefix(storedURL, "/api/uploads/"):
 		raw := strings.TrimPrefix(storedURL, "/api/uploads/")
 		// Legacy layout permits one optional subdirectory (e.g. "soundboard/")
@@ -316,19 +327,23 @@ func (l *Locator) DeleteFromURL(storedURL string) {
 		// and fail validation, leaving an orphan file.
 		parts := strings.Split(raw, "/")
 		if len(parts) == 0 || len(parts) > 2 {
-			return
+			return nil
 		}
 		for _, p := range parts {
 			if err := validateSegment(p); err != nil {
-				return
+				return nil
 			}
 		}
 		disk, err := l.safeJoin(parts...)
 		if err != nil {
-			return
+			return nil
 		}
-		os.Remove(disk)
+		if err := os.Remove(disk); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
 	}
+	return nil
 }
 
 // SanitizeFilename strips path components and dangerous characters and

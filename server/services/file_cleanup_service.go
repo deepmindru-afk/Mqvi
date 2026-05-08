@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/akinalp/mqvi/pkg"
 	"github.com/akinalp/mqvi/repository"
@@ -58,10 +59,11 @@ type fileCleanupService struct {
 	fileDeleter FileDeleter
 	storage     StorageService
 	livekitRepo repository.LiveKitRepository
+	cleanupRepo repository.CleanupRepository // optional: when set, failed deletes are enqueued for retry
 }
 
-func NewFileCleanupService(db *sql.DB, fileDeleter FileDeleter, storage StorageService, livekitRepo repository.LiveKitRepository) FileCleanupService {
-	return &fileCleanupService{db: db, fileDeleter: fileDeleter, storage: storage, livekitRepo: livekitRepo}
+func NewFileCleanupService(db *sql.DB, fileDeleter FileDeleter, storage StorageService, livekitRepo repository.LiveKitRepository, cleanupRepo repository.CleanupRepository) FileCleanupService {
+	return &fileCleanupService{db: db, fileDeleter: fileDeleter, storage: storage, livekitRepo: livekitRepo, cleanupRepo: cleanupRepo}
 }
 
 func (s *fileCleanupService) CollectChannelFiles(ctx context.Context, channelID string) (*CleanupPlan, error) {
@@ -283,6 +285,11 @@ func (s *fileCleanupService) CollectUserMessageFiles(ctx context.Context, userID
 // Execute deletes files from disk and releases per-user quota.
 // Uses context.Background() for quota release — the DB delete already succeeded,
 // so cleanup must complete regardless of the original request lifecycle.
+//
+// Failed disk deletes are enqueued to the cleanup retry queue (when wired) so
+// the daily worker can drain transient IO/permissions errors with backoff.
+// Quota is released regardless — quota tracks bytes the user owes, not disk
+// reality, and orphan bytes will be reclaimed when the retry succeeds.
 func (s *fileCleanupService) Execute(plan *CleanupPlan) {
 	if plan == nil {
 		return
@@ -293,7 +300,7 @@ func (s *fileCleanupService) Execute(plan *CleanupPlan) {
 	// Delete quota-tracked files and aggregate per-user bytes
 	quotaByUser := make(map[string]int64)
 	for _, ref := range plan.refs {
-		s.fileDeleter.DeleteFromURL(ref.URL)
+		s.deleteOrEnqueue(ctx, ref.URL)
 		if ref.Size > 0 && ref.UserID != "" && ref.UserID != plan.skipUser {
 			quotaByUser[ref.UserID] += ref.Size
 		}
@@ -301,7 +308,7 @@ func (s *fileCleanupService) Execute(plan *CleanupPlan) {
 
 	// Delete standalone URLs (no quota tracking)
 	for _, u := range plan.urls {
-		s.fileDeleter.DeleteFromURL(u)
+		s.deleteOrEnqueue(ctx, u)
 	}
 
 	// Release quota per user
@@ -329,6 +336,26 @@ func (s *fileCleanupService) Execute(plan *CleanupPlan) {
 		log.Printf("[cleanup] executed: %d files deleted, %d users' quota released, %d livekit instances cleaned", totalFiles, len(quotaByUser), len(plan.livekit))
 	}
 }
+
+// deleteOrEnqueue tries the disk delete and enqueues the URL into the cleanup
+// retry queue if it fails. Schedules first retry one minute from now (2^0 = 1).
+// If no retry queue is wired, falls back to the swallow-errors variant.
+func (s *fileCleanupService) deleteOrEnqueue(ctx context.Context, url string) {
+	if s.cleanupRepo == nil {
+		s.fileDeleter.DeleteFromURL(url)
+		return
+	}
+	if err := s.fileDeleter.DeleteFromURLChecked(url); err != nil {
+		log.Printf("[cleanup] disk delete failed url=%s err=%v — queued for retry", url, err)
+		nextRetry := timeNow().Add(time.Minute)
+		if enqErr := s.cleanupRepo.EnqueueFailedFile(ctx, url, err.Error(), nextRetry); enqErr != nil {
+			log.Printf("[cleanup] enqueue retry failed url=%s err=%v", url, enqErr)
+		}
+	}
+}
+
+// timeNow is a function variable so tests can stub clock behavior.
+var timeNow = func() time.Time { return time.Now().UTC() }
 
 // ─── query helpers ───
 

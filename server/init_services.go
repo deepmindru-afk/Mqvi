@@ -54,6 +54,7 @@ type Services struct {
 	FeedbackUpload    services.FeedbackUploadService
 	Soundboard        services.SoundboardService
 	Storage           services.StorageService
+	Cleanup           services.CleanupService
 }
 
 type RateLimiters struct {
@@ -75,8 +76,10 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 	// Storage quota service
 	storageService := services.NewStorageService(repos.Storage, cfg.Upload.DefaultQuotaBytes)
 
-	// File cleanup service (bulk file deletion + quota release for cascading deletes)
-	fileCleanupService := services.NewFileCleanupService(db, fileLocator, storageService, repos.LiveKit)
+	// File cleanup service (bulk file deletion + quota release for cascading deletes).
+	// Cleanup repo enables the retry queue so failed disk deletes get re-attempted
+	// daily by the embedded cleanup worker (Phase 16 P3).
+	fileCleanupService := services.NewFileCleanupService(db, fileLocator, storageService, repos.LiveKit, repos.Cleanup)
 
 	// Order-sensitive services
 	channelPermService := services.NewChannelPermissionService(
@@ -165,6 +168,13 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 		cfg.HetznerAPIToken,
 		voiceService,
 	)
+	cleanupService := services.NewCleanupService(
+		db, repos.Cleanup,
+		repos.User, repos.Server,
+		adminUserService, adminServerService,
+		fileLocator, appLogService,
+		cfg.Upload.Dir,
+	)
 
 	// Rate limiters
 	loginLimiter := ratelimit.NewLoginRateLimiter(5, 2*time.Minute)
@@ -214,6 +224,7 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 		FeedbackUpload:    feedbackUploadService,
 		Soundboard:        soundboardService,
 		Storage:           storageService,
+		Cleanup:           cleanupService,
 	}
 
 	limiters := &RateLimiters{
