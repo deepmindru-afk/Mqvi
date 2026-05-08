@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -92,6 +93,24 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	tokens, err := h.authService.Login(r.Context(), &req)
 	if err != nil {
+		// Soft-deleted account: 403 with structured payload so the frontend can
+		// show the recovery UI ("Restore your account?"). Custom envelope:
+		//   { success: false, error: "account_deleted", data: { username, ... } }
+		var deletedErr *services.AccountDeletedError
+		if errors.As(err, &deletedErr) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": false,
+				"error":   "account_deleted",
+				"data": map[string]string{
+					"username":            deletedErr.Username,
+					"deleted_at":          deletedErr.DeletedAt,
+					"permanent_delete_at": deletedErr.PermanentDeleteAt,
+				},
+			})
+			return
+		}
 		pkg.Error(w, err)
 		return
 	}
@@ -314,6 +333,79 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	pkg.JSON(w, http.StatusOK, map[string]string{
 		"message": "password has been reset successfully",
 	})
+}
+
+// SoftDeleteSelf — DELETE /api/users/me
+// Body: { "password": "..." }
+// Soft-deletes the current user (recoverable via login). Disconnects sessions/WS.
+func (h *AuthHandler) SoftDeleteSelf(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(UserContextKey).(*models.User)
+	if !ok {
+		pkg.ErrorWithMessage(w, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		pkg.ErrorWithMessage(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Password == "" {
+		pkg.ErrorWithMessage(w, http.StatusBadRequest, "password is required")
+		return
+	}
+
+	if err := h.authService.SoftDeleteSelf(r.Context(), user.ID, req.Password); err != nil {
+		pkg.Error(w, err)
+		return
+	}
+
+	pkg.JSON(w, http.StatusOK, map[string]string{"message": "account soft-deleted"})
+}
+
+// RestoreAccount — POST /api/auth/restore
+// Body: { "username": "...", "password": "..." }
+// Restores a soft-deleted account and returns auth tokens.
+// Rate-limited identically to /auth/login: an attacker who hits the login
+// limiter cannot pivot to /auth/restore for the same brute-force budget.
+func (h *AuthHandler) RestoreAccount(w http.ResponseWriter, r *http.Request) {
+	ip := ratelimit.ExtractIP(r)
+	if h.loginLimiter != nil && !h.loginLimiter.Allow(ip) {
+		retryAfter := h.loginLimiter.RetryAfterSeconds(ip)
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+		pkg.ErrorWithMessage(w, http.StatusTooManyRequests,
+			fmt.Sprintf("too many attempts, please try again in %s",
+				ratelimit.FormatRetryMessage(retryAfter)))
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		pkg.ErrorWithMessage(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Username == "" || req.Password == "" {
+		pkg.ErrorWithMessage(w, http.StatusBadRequest, "username and password are required")
+		return
+	}
+
+	tokens, err := h.authService.RestoreAccount(r.Context(), req.Username, req.Password)
+	if err != nil {
+		pkg.Error(w, err)
+		return
+	}
+
+	if h.loginLimiter != nil {
+		h.loginLimiter.Reset(ip)
+	}
+
+	h.signTokenURLs(tokens)
+	pkg.JSON(w, http.StatusOK, tokens)
 }
 
 // contextKey is a typed key for context values to avoid collisions.

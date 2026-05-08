@@ -51,9 +51,9 @@ func (r *sqliteMessageRepo) GetByID(ctx context.Context, id string) (*models.Mes
 	query := `
 		SELECT m.id, m.channel_id, m.user_id, m.content, m.edited_at, m.created_at, m.reply_to_id,
 		       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata,
-		       u.id, u.username, u.display_name, u.avatar_url, u.status,
+		       u.id, u.username, u.display_name, u.avatar_url, u.status, u.deleted_at, u.is_hard_deleted,
 		       rm.id, rm.content,
-		       ru.id, ru.username, ru.display_name, ru.avatar_url
+		       ru.id, ru.username, ru.display_name, ru.avatar_url, ru.deleted_at, ru.is_hard_deleted
 		FROM messages m
 		LEFT JOIN users u ON m.user_id = u.id
 		LEFT JOIN messages rm ON m.reply_to_id = rm.id
@@ -66,13 +66,15 @@ func (r *sqliteMessageRepo) GetByID(ctx context.Context, id string) (*models.Mes
 
 	var refMsgID, refMsgContent sql.NullString
 	var refAuthorID, refAuthorUsername, refAuthorDisplayName, refAuthorAvatarURL sql.NullString
+	var refAuthorDeletedAt sql.NullTime
+	var refAuthorIsHardDeleted sql.NullBool
 
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&msg.ID, &msg.ChannelID, &msg.UserID, &msg.Content, &msg.EditedAt, &msg.CreatedAt, &msg.ReplyToID,
 		&msg.EncryptionVersion, &msg.Ciphertext, &msg.SenderDeviceID, &msg.E2EEMetadata,
-		&authorID, &author.Username, &author.DisplayName, &author.AvatarURL, &author.Status,
+		&authorID, &author.Username, &author.DisplayName, &author.AvatarURL, &author.Status, &author.DeletedAt, &author.IsHardDeleted,
 		&refMsgID, &refMsgContent,
-		&refAuthorID, &refAuthorUsername, &refAuthorDisplayName, &refAuthorAvatarURL,
+		&refAuthorID, &refAuthorUsername, &refAuthorDisplayName, &refAuthorAvatarURL, &refAuthorDeletedAt, &refAuthorIsHardDeleted,
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {
@@ -88,7 +90,7 @@ func (r *sqliteMessageRepo) GetByID(ctx context.Context, id string) (*models.Mes
 		msg.Author = &author
 	}
 
-	msg.ReferencedMessage = buildMessageReference(msg.ReplyToID, refMsgID, refMsgContent, refAuthorID, refAuthorUsername, refAuthorDisplayName, refAuthorAvatarURL)
+	msg.ReferencedMessage = buildMessageReference(msg.ReplyToID, refMsgID, refMsgContent, refAuthorID, refAuthorUsername, refAuthorDisplayName, refAuthorAvatarURL, refAuthorDeletedAt, refAuthorIsHardDeleted)
 
 	return msg, nil
 }
@@ -104,9 +106,9 @@ func (r *sqliteMessageRepo) GetByChannelID(ctx context.Context, channelID string
 		query = `
 			SELECT m.id, m.channel_id, m.user_id, m.content, m.edited_at, m.created_at, m.reply_to_id,
 			       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata,
-			       u.id, u.username, u.display_name, u.avatar_url, u.status,
+			       u.id, u.username, u.display_name, u.avatar_url, u.status, u.deleted_at, u.is_hard_deleted,
 			       rm.id, rm.content,
-			       ru.id, ru.username, ru.display_name, ru.avatar_url
+			       ru.id, ru.username, ru.display_name, ru.avatar_url, ru.deleted_at, ru.is_hard_deleted
 			FROM messages m
 			LEFT JOIN users u ON m.user_id = u.id
 			LEFT JOIN messages rm ON m.reply_to_id = rm.id
@@ -120,9 +122,9 @@ func (r *sqliteMessageRepo) GetByChannelID(ctx context.Context, channelID string
 		query = `
 			SELECT m.id, m.channel_id, m.user_id, m.content, m.edited_at, m.created_at, m.reply_to_id,
 			       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata,
-			       u.id, u.username, u.display_name, u.avatar_url, u.status,
+			       u.id, u.username, u.display_name, u.avatar_url, u.status, u.deleted_at, u.is_hard_deleted,
 			       rm.id, rm.content,
-			       ru.id, ru.username, ru.display_name, ru.avatar_url
+			       ru.id, ru.username, ru.display_name, ru.avatar_url, ru.deleted_at, ru.is_hard_deleted
 			FROM messages m
 			LEFT JOIN users u ON m.user_id = u.id
 			LEFT JOIN messages rm ON m.reply_to_id = rm.id
@@ -148,13 +150,15 @@ func (r *sqliteMessageRepo) GetByChannelID(ctx context.Context, channelID string
 
 		var refMsgID, refMsgContent sql.NullString
 		var refAuthorID, refAuthorUsername, refAuthorDisplayName, refAuthorAvatarURL sql.NullString
+		var refAuthorDeletedAt sql.NullTime
+		var refAuthorIsHardDeleted sql.NullBool
 
 		if err := rows.Scan(
 			&msg.ID, &msg.ChannelID, &msg.UserID, &msg.Content, &msg.EditedAt, &msg.CreatedAt, &msg.ReplyToID,
 			&msg.EncryptionVersion, &msg.Ciphertext, &msg.SenderDeviceID, &msg.E2EEMetadata,
-			&authorID, &author.Username, &author.DisplayName, &author.AvatarURL, &author.Status,
+			&authorID, &author.Username, &author.DisplayName, &author.AvatarURL, &author.Status, &author.DeletedAt, &author.IsHardDeleted,
 			&refMsgID, &refMsgContent,
-			&refAuthorID, &refAuthorUsername, &refAuthorDisplayName, &refAuthorAvatarURL,
+			&refAuthorID, &refAuthorUsername, &refAuthorDisplayName, &refAuthorAvatarURL, &refAuthorDeletedAt, &refAuthorIsHardDeleted,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan message row: %w", err)
 		}
@@ -165,7 +169,7 @@ func (r *sqliteMessageRepo) GetByChannelID(ctx context.Context, channelID string
 			msg.Author = &author
 		}
 
-		msg.ReferencedMessage = buildMessageReference(msg.ReplyToID, refMsgID, refMsgContent, refAuthorID, refAuthorUsername, refAuthorDisplayName, refAuthorAvatarURL)
+		msg.ReferencedMessage = buildMessageReference(msg.ReplyToID, refMsgID, refMsgContent, refAuthorID, refAuthorUsername, refAuthorDisplayName, refAuthorAvatarURL, refAuthorDeletedAt, refAuthorIsHardDeleted)
 
 		messages = append(messages, msg)
 	}
@@ -227,6 +231,8 @@ func buildMessageReference(
 	replyToID *string,
 	refMsgID, refMsgContent sql.NullString,
 	refAuthorID, refAuthorUsername, refAuthorDisplayName, refAuthorAvatarURL sql.NullString,
+	refAuthorDeletedAt sql.NullTime,
+	refAuthorIsHardDeleted sql.NullBool,
 ) *models.MessageReference {
 	if replyToID == nil {
 		return nil
@@ -251,6 +257,13 @@ func buildMessageReference(
 			}
 			if refAuthorAvatarURL.Valid {
 				refAuthor.AvatarURL = &refAuthorAvatarURL.String
+			}
+			if refAuthorDeletedAt.Valid {
+				t := refAuthorDeletedAt.Time
+				refAuthor.DeletedAt = &t
+			}
+			if refAuthorIsHardDeleted.Valid {
+				refAuthor.IsHardDeleted = refAuthorIsHardDeleted.Bool
 			}
 			ref.Author = refAuthor
 		}

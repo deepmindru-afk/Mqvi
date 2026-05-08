@@ -5,6 +5,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/akinalp/mqvi/models"
@@ -17,9 +18,13 @@ func (s *dmService) GetOrCreateChannel(ctx context.Context, userID, otherUserID 
 		return nil, fmt.Errorf("%w: cannot create DM with yourself", pkg.ErrBadRequest)
 	}
 
-	otherUser, err := s.userRepo.GetByID(ctx, otherUserID)
+	// Active user only — DM cannot be created with a deleted/tombstone user.
+	otherUser, err := s.userRepo.GetActiveByID(ctx, otherUserID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: user not found", pkg.ErrNotFound)
+		if errors.Is(err, pkg.ErrNotFound) {
+			return nil, fmt.Errorf("%w: user not found", pkg.ErrNotFound)
+		}
+		return nil, fmt.Errorf("failed to look up user: %w", err)
 	}
 
 	user1, user2 := sortUserIDs(userID, otherUserID)

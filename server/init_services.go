@@ -144,7 +144,7 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 	deviceService := services.NewDeviceService(repos.Device, hub)
 	e2eeService := services.NewE2EEService(repos.E2EEBackup, repos.GroupSession, hub)
 
-	adminUserService := services.NewAdminUserService(db, repos.User, hub, voiceService, emailSender, fileCleanupService)
+	adminUserService := services.NewAdminUserService(db, repos.User, repos.Session, repos.Server, hub, voiceService, emailSender, fileCleanupService)
 	adminServerService := services.NewAdminServerService(repos.Server, repos.User, repos.LiveKit, hub, emailSender, fileCleanupService)
 
 	linkPreviewService := services.NewLinkPreviewService(repos.LinkPreview)

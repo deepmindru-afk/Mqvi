@@ -24,6 +24,9 @@ type FriendChecker interface {
 // UserInfoGetter retrieves user info by ID.
 type UserInfoGetter interface {
 	GetByID(ctx context.Context, id string) (*models.User, error)
+	// GetActiveByID returns the user only if not soft-deleted/tombstone — used to
+	// reject new actions targeting deleted users (e.g. P2P call initiation).
+	GetActiveByID(ctx context.Context, id string) (*models.User, error)
 }
 
 // P2PAppLogger writes structured logs. ISP to avoid circular dependency.
@@ -87,6 +90,18 @@ func (s *p2pCallService) InitiateCall(callerID, receiverID string, callType mode
 	}
 
 	ctx := context.Background()
+
+	// Both parties must be active. WS handler already rejects deleted users on
+	// connect, but a crafted/in-flight WS call from a now-soft-deleted caller
+	// or to a deleted receiver shouldn't create call state, mark anyone busy,
+	// or emit a no-op broadcast to a deleted recipient.
+	if _, err := s.userGetter.GetActiveByID(ctx, callerID); err != nil {
+		return fmt.Errorf("%w: caller not available", pkg.ErrForbidden)
+	}
+	if _, err := s.userGetter.GetActiveByID(ctx, receiverID); err != nil {
+		return fmt.Errorf("%w: receiver is no longer available", pkg.ErrNotFound)
+	}
+
 	friendship, err := s.friendChecker.GetByPair(ctx, callerID, receiverID)
 	if err != nil {
 		return fmt.Errorf("%w: not friends", pkg.ErrForbidden)

@@ -105,10 +105,15 @@ export async function platformUnbanUser(userId: string) {
   });
 }
 
-/** Permanently deletes user and all their data. Optional reason triggers email notification. */
+/**
+ * Deletes a user.
+ * - hardDelete=false (default): soft-delete (recoverable, 30-day TTL).
+ * - hardDelete=true: tombstone (anonymize, irreversible).
+ * Optional reason triggers email notification.
+ */
 export async function hardDeleteUser(
   userId: string,
-  data?: { reason: string }
+  data?: { reason?: string; hard_delete?: boolean }
 ) {
   return apiClient<{ message: string }>(`/admin/users/${userId}`, {
     method: "DELETE",
@@ -116,14 +121,33 @@ export async function hardDeleteUser(
   });
 }
 
-/** Permanently deletes server with platform admin authority. Optional reason triggers owner notification. */
+/** Restores a soft-deleted user (admin override). Tombstones not restorable. */
+export async function adminRestoreUser(userId: string) {
+  return apiClient<{ message: string }>(`/admin/users/${userId}/restore`, {
+    method: "POST",
+  });
+}
+
+/**
+ * Deletes a server with platform admin authority.
+ * - hard_delete=false (default): soft-delete with deleted_by_admin=1 (owner cannot restore).
+ * - hard_delete=true: permanent delete (skip TTL).
+ * Optional reason triggers owner email notification.
+ */
 export async function adminDeleteServer(
   serverId: string,
-  data?: { reason: string }
+  data?: { reason?: string; hard_delete?: boolean }
 ) {
   return apiClient<{ message: string }>(`/admin/servers/${serverId}`, {
     method: "DELETE",
     body: data,
+  });
+}
+
+/** Restores a soft-deleted server (admin override, works regardless of who soft-deleted). */
+export async function adminRestoreServer(serverId: string) {
+  return apiClient<{ message: string }>(`/admin/servers/${serverId}/restore`, {
+    method: "POST",
   });
 }
 

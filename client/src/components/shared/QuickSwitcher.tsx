@@ -7,6 +7,7 @@ import { useChannelStore } from "../../stores/channelStore";
 import { useServerStore } from "../../stores/serverStore";
 import { useDMStore } from "../../stores/dmStore";
 import type { Channel, DMChannelWithUser } from "../../types";
+import { authorDisplayName } from "../../utils/deletedUser";
 
 type SwitcherItem = {
   id: string;
@@ -57,7 +58,7 @@ function QuickSwitcher() {
 
     const dmItems: SwitcherItem[] = dmChannels.map((dm: DMChannelWithUser) => ({
       id: dm.id,
-      label: dm.other_user?.display_name ?? dm.other_user?.username ?? "DM",
+      label: authorDisplayName(dm.other_user, "DM"),
       type: "dm" as const,
     }));
 

@@ -31,12 +31,17 @@ type MockUserRepo struct {
 	PlatformUnbanFn           func(ctx context.Context, userID string) error
 	IsEmailPlatformBannedFn   func(ctx context.Context, email string) (bool, error)
 	DeleteAllMessagesByUserFn func(ctx context.Context, userID string) error
-	HardDeleteUserFn          func(ctx context.Context, userID string) error
+	HardDeleteUserFn          func(ctx context.Context, userID string, byAdmin bool) error
+	SoftDeleteFn              func(ctx context.Context, userID string, byAdmin bool) error
+	RestoreFn                 func(ctx context.Context, userID string) error
+	ListSoftDeletedExpiredFn  func(ctx context.Context, ttlDays int) ([]models.User, error)
 	SetPlatformAdminFn        func(ctx context.Context, userID string, isAdmin bool) error
 	InsertPlatformBanFn         func(ctx context.Context, email, username, userID, reason, bannedBy string) error
 	DeletePlatformBanFn         func(ctx context.Context, userID string) error
 	IsUsernamePlatformBannedFn  func(ctx context.Context, username string) (bool, error)
 	IsPlatformBannedByUserIDFn  func(ctx context.Context, userID string) (bool, error)
+	GetActiveByIDFn             func(ctx context.Context, id string) (*models.User, error)
+	GetActiveByUsernameFn       func(ctx context.Context, username string) (*models.User, error)
 }
 
 func (m *MockUserRepo) Create(ctx context.Context, user *models.User) error {
@@ -138,11 +143,29 @@ func (m *MockUserRepo) DeleteAllMessagesByUser(ctx context.Context, userID strin
 	}
 	return nil
 }
-func (m *MockUserRepo) HardDeleteUser(ctx context.Context, userID string) error {
+func (m *MockUserRepo) HardDeleteUser(ctx context.Context, userID string, byAdmin bool) error {
 	if m.HardDeleteUserFn != nil {
-		return m.HardDeleteUserFn(ctx, userID)
+		return m.HardDeleteUserFn(ctx, userID, byAdmin)
 	}
 	return nil
+}
+func (m *MockUserRepo) SoftDelete(ctx context.Context, userID string, byAdmin bool) error {
+	if m.SoftDeleteFn != nil {
+		return m.SoftDeleteFn(ctx, userID, byAdmin)
+	}
+	return nil
+}
+func (m *MockUserRepo) Restore(ctx context.Context, userID string) error {
+	if m.RestoreFn != nil {
+		return m.RestoreFn(ctx, userID)
+	}
+	return nil
+}
+func (m *MockUserRepo) ListSoftDeletedExpired(ctx context.Context, ttlDays int) ([]models.User, error) {
+	if m.ListSoftDeletedExpiredFn != nil {
+		return m.ListSoftDeletedExpiredFn(ctx, ttlDays)
+	}
+	return nil, nil
 }
 func (m *MockUserRepo) SetPlatformAdmin(ctx context.Context, userID string, isAdmin bool) error {
 	if m.SetPlatformAdminFn != nil {
@@ -176,6 +199,24 @@ func (m *MockUserRepo) IsUsernamePlatformBanned(ctx context.Context, username st
 		return m.IsUsernamePlatformBannedFn(ctx, username)
 	}
 	return false, nil
+}
+func (m *MockUserRepo) GetActiveByID(ctx context.Context, id string) (*models.User, error) {
+	if m.GetActiveByIDFn != nil {
+		return m.GetActiveByIDFn(ctx, id)
+	}
+	if m.GetByIDFn != nil {
+		return m.GetByIDFn(ctx, id)
+	}
+	return nil, nil
+}
+func (m *MockUserRepo) GetActiveByUsername(ctx context.Context, username string) (*models.User, error) {
+	if m.GetActiveByUsernameFn != nil {
+		return m.GetActiveByUsernameFn(ctx, username)
+	}
+	if m.GetByUsernameFn != nil {
+		return m.GetByUsernameFn(ctx, username)
+	}
+	return nil, nil
 }
 func (m *MockUserRepo) IsPlatformBannedByUserID(ctx context.Context, userID string) (bool, error) {
 	if m.IsPlatformBannedByUserIDFn != nil {

@@ -128,7 +128,7 @@ func (h *ServerHandler) UpdateServer(w http.ResponseWriter, r *http.Request) {
 	pkg.JSON(w, http.StatusOK, server)
 }
 
-// DeleteServer deletes a server. Owner only.
+// DeleteServer soft-deletes a server. Owner only. Restorable for 30 days.
 // DELETE /api/servers/{serverId}
 func (h *ServerHandler) DeleteServer(w http.ResponseWriter, r *http.Request) {
 	user, ok := r.Context().Value(UserContextKey).(*models.User)
@@ -148,7 +148,71 @@ func (h *ServerHandler) DeleteServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pkg.JSON(w, http.StatusOK, map[string]string{"message": "server deleted"})
+	pkg.JSON(w, http.StatusOK, map[string]string{"message": "server soft-deleted"})
+}
+
+// RestoreServer un-soft-deletes a server. Owner only.
+// POST /api/servers/{serverId}/restore
+func (h *ServerHandler) RestoreServer(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(UserContextKey).(*models.User)
+	if !ok {
+		pkg.ErrorWithMessage(w, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+
+	serverID, ok := r.Context().Value(ServerIDContextKey).(string)
+	if !ok || serverID == "" {
+		pkg.ErrorWithMessage(w, http.StatusBadRequest, "server context required")
+		return
+	}
+
+	if err := h.serverService.RestoreServer(r.Context(), serverID, user.ID); err != nil {
+		pkg.Error(w, err)
+		return
+	}
+
+	pkg.JSON(w, http.StatusOK, map[string]string{"message": "server restored"})
+}
+
+// HardDeleteServer permanently deletes a soft-deleted server (skip 30-day TTL). Owner only.
+// DELETE /api/servers/{serverId}/permanent
+func (h *ServerHandler) HardDeleteServer(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(UserContextKey).(*models.User)
+	if !ok {
+		pkg.ErrorWithMessage(w, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+
+	serverID, ok := r.Context().Value(ServerIDContextKey).(string)
+	if !ok || serverID == "" {
+		pkg.ErrorWithMessage(w, http.StatusBadRequest, "server context required")
+		return
+	}
+
+	if err := h.serverService.HardDeleteServer(r.Context(), serverID, user.ID); err != nil {
+		pkg.Error(w, err)
+		return
+	}
+
+	pkg.JSON(w, http.StatusOK, map[string]string{"message": "server permanently deleted"})
+}
+
+// GetDeletedServers lists soft-deleted servers owned by the current user (for restore UI).
+// GET /api/users/me/deleted-servers
+func (h *ServerHandler) GetDeletedServers(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(UserContextKey).(*models.User)
+	if !ok {
+		pkg.ErrorWithMessage(w, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+
+	servers, err := h.serverService.GetDeletedServers(r.Context(), user.ID)
+	if err != nil {
+		pkg.Error(w, err)
+		return
+	}
+
+	pkg.JSON(w, http.StatusOK, servers)
 }
 
 // LeaveServer leaves a server. Owner cannot leave -- must transfer ownership first.

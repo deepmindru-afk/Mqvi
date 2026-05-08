@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useDMStore } from "../../stores/dmStore";
 import Avatar from "../shared/Avatar";
+import { authorDisplayName, authorAvatarURL } from "../../utils/deletedUser";
 import type { DMMessage } from "../../types";
 
 type DMPinnedMessagesProps = {
@@ -77,14 +78,15 @@ function DMPinnedMessages({ channelId, onClose }: DMPinnedMessagesProps) {
         ) : (
           pins.map((msg) => {
             const author = msg.author;
-            const displayName = author?.display_name ?? author?.username ?? "Unknown";
+            const displayName = authorDisplayName(author);
+            const avatarUrl = authorAvatarURL(author);
 
             return (
               <div key={msg.id} className="pinned-item">
                 <div className="pinned-item-header">
                   <Avatar
                     name={displayName}
-                    avatarUrl={author?.avatar_url ?? undefined}
+                    avatarUrl={avatarUrl}
                     size={20}
                   />
                   <span className="pinned-item-author">{displayName}</span>

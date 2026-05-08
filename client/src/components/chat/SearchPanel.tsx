@@ -9,6 +9,7 @@ import { useE2EEStore } from "../../stores/e2eeStore";
 import type { SearchResult } from "../../api/search";
 import type { Message } from "../../types";
 import Avatar from "../shared/Avatar";
+import { authorDisplayName, authorAvatarURL } from "../../utils/deletedUser";
 
 /** Debounce delay (ms) */
 const DEBOUNCE_MS = 300;
@@ -194,7 +195,8 @@ function SearchPanel({ channelId, onClose, initialQuery = "", onSelectResult }: 
               {t("searchResultCount", { count: results.total_count })}
             </p>
             {results.messages.map((msg) => {
-              const displayName = msg.author?.display_name ?? msg.author?.username ?? "Unknown";
+              const displayName = authorDisplayName(msg.author);
+              const avatarUrl = authorAvatarURL(msg.author);
 
               return (
                 <div
@@ -205,7 +207,7 @@ function SearchPanel({ channelId, onClose, initialQuery = "", onSelectResult }: 
                   <div className="search-result-header">
                     <Avatar
                       name={displayName}
-                      avatarUrl={msg.author?.avatar_url ?? undefined}
+                      avatarUrl={avatarUrl}
                       size={18}
                     />
                     <span className="search-result-author">{displayName}</span>

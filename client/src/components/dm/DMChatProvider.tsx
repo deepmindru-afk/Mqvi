@@ -137,6 +137,10 @@ function DMChatProvider({
           status: otherUser.status,
           custom_status: otherUser.custom_status,
           created_at: otherUser.created_at,
+          // Carry deleted state so downstream consumers (mention autocomplete,
+          // message author lookup) render "[deleted user]" instead of raw username.
+          deleted_at: otherUser.deleted_at,
+          is_hard_deleted: otherUser.is_hard_deleted,
           roles: [],
           effective_permissions: 0,
         }]

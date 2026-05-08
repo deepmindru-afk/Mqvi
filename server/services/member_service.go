@@ -70,6 +70,13 @@ func (s *memberService) GetAll(ctx context.Context, serverID string) ([]models.M
 
 	members := make([]models.MemberWithRoles, 0)
 	for i := range users {
+		// Skip soft-deleted/tombstone users — they shouldn't appear in active member lists.
+		// Their messages stay (tombstone preserves messages.user_id), but they themselves
+		// are no longer "members" of the server in the UI sense.
+		if users[i].DeletedAt != nil {
+			continue
+		}
+
 		isMember, err := s.serverRepo.IsMember(ctx, serverID, users[i].ID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check membership: %w", err)
@@ -91,7 +98,8 @@ func (s *memberService) GetAll(ctx context.Context, serverID string) ([]models.M
 }
 
 func (s *memberService) GetByID(ctx context.Context, serverID, userID string) (*models.MemberWithRoles, error) {
-	user, err := s.userRepo.GetByID(ctx, userID)
+	// Active member only — deleted users return 404 (they're not part of the server's active roster).
+	user, err := s.userRepo.GetActiveByID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}

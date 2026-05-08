@@ -25,8 +25,8 @@ func (r *sqlitePinRepo) GetByChannelID(ctx context.Context, channelID string) ([
 	query := `
 		SELECT p.id, p.message_id, p.channel_id, p.pinned_by, p.created_at,
 		       m.id, m.channel_id, m.user_id, m.content, m.edited_at, m.created_at,
-		       u.id, u.username, u.display_name, u.avatar_url, u.status,
-		       pb.id, pb.username, pb.display_name, pb.avatar_url
+		       u.id, u.username, u.display_name, u.avatar_url, u.status, u.deleted_at, u.is_hard_deleted,
+		       pb.id, pb.username, pb.display_name, pb.avatar_url, pb.deleted_at, pb.is_hard_deleted
 		FROM pinned_messages p
 		LEFT JOIN messages m ON p.message_id = m.id
 		LEFT JOIN users u ON m.user_id = u.id
@@ -52,8 +52,8 @@ func (r *sqlitePinRepo) GetByChannelID(ctx context.Context, channelID string) ([
 		if err := rows.Scan(
 			&pin.ID, &pin.MessageID, &pin.ChannelID, &pin.PinnedBy, &pin.CreatedAt,
 			&msg.ID, &msg.ChannelID, &msg.UserID, &msg.Content, &msg.EditedAt, &msg.CreatedAt,
-			&authorID, &author.Username, &author.DisplayName, &author.AvatarURL, &author.Status,
-			&pinnedByID, &pinnedByUser.Username, &pinnedByUser.DisplayName, &pinnedByUser.AvatarURL,
+			&authorID, &author.Username, &author.DisplayName, &author.AvatarURL, &author.Status, &author.DeletedAt, &author.IsHardDeleted,
+			&pinnedByID, &pinnedByUser.Username, &pinnedByUser.DisplayName, &pinnedByUser.AvatarURL, &pinnedByUser.DeletedAt, &pinnedByUser.IsHardDeleted,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan pinned message row: %w", err)
 		}

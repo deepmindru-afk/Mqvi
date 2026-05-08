@@ -73,12 +73,15 @@ func (r *sqliteFriendshipRepo) GetByPair(ctx context.Context, userID, friendID s
 // ListFriends returns accepted friends with user info.
 // UNION covers both directions (I sent + they accepted, they sent + I accepted).
 func (r *sqliteFriendshipRepo) ListFriends(ctx context.Context, userID string) ([]models.FriendshipWithUser, error) {
+	// Soft-deleted/tombstone users are excluded — friendship row stays in DB
+	// (so a recovered user reappears in the list automatically), but they
+	// must not show up in the active social graph.
 	query := `
 		SELECT f.id, f.status, f.created_at AS created_at,
 		       u.id, u.username, COALESCE(u.display_name, ''), u.avatar_url, u.status, u.custom_status
 		FROM friendships f
 		JOIN users u ON u.id = f.friend_id
-		WHERE f.user_id = ? AND f.status = 'accepted'
+		WHERE f.user_id = ? AND f.status = 'accepted' AND u.deleted_at IS NULL
 
 		UNION
 
@@ -86,7 +89,7 @@ func (r *sqliteFriendshipRepo) ListFriends(ctx context.Context, userID string) (
 		       u.id, u.username, COALESCE(u.display_name, ''), u.avatar_url, u.status, u.custom_status
 		FROM friendships f
 		JOIN users u ON u.id = f.user_id
-		WHERE f.friend_id = ? AND f.status = 'accepted'
+		WHERE f.friend_id = ? AND f.status = 'accepted' AND u.deleted_at IS NULL
 
 		ORDER BY created_at DESC
 	`
@@ -127,12 +130,13 @@ func (r *sqliteFriendshipRepo) ListFriends(ctx context.Context, userID string) (
 }
 
 func (r *sqliteFriendshipRepo) ListIncoming(ctx context.Context, userID string) ([]models.FriendshipWithUser, error) {
+	// Sender must be active — pending requests from deleted senders are hidden.
 	query := `
 		SELECT f.id, f.status, f.created_at,
 		       u.id, u.username, COALESCE(u.display_name, ''), u.avatar_url, u.status, u.custom_status
 		FROM friendships f
 		JOIN users u ON u.id = f.user_id
-		WHERE f.friend_id = ? AND f.status = 'pending'
+		WHERE f.friend_id = ? AND f.status = 'pending' AND u.deleted_at IS NULL
 		ORDER BY f.created_at DESC
 	`
 
@@ -140,12 +144,13 @@ func (r *sqliteFriendshipRepo) ListIncoming(ctx context.Context, userID string) 
 }
 
 func (r *sqliteFriendshipRepo) ListOutgoing(ctx context.Context, userID string) ([]models.FriendshipWithUser, error) {
+	// Target must be active — outgoing requests to deleted targets are hidden.
 	query := `
 		SELECT f.id, f.status, f.created_at,
 		       u.id, u.username, COALESCE(u.display_name, ''), u.avatar_url, u.status, u.custom_status
 		FROM friendships f
 		JOIN users u ON u.id = f.friend_id
-		WHERE f.user_id = ? AND f.status = 'pending'
+		WHERE f.user_id = ? AND f.status = 'pending' AND u.deleted_at IS NULL
 		ORDER BY f.created_at DESC
 	`
 
@@ -212,12 +217,15 @@ func (r *sqliteFriendshipRepo) DeleteByPair(ctx context.Context, userID, friendI
 }
 
 func (r *sqliteFriendshipRepo) ListBlocked(ctx context.Context, userID string) ([]models.FriendshipWithUser, error) {
+	// Block row stays in DB — IsBlocked still returns true server-side — but the
+	// blocked target isn't listed in the UI while they're deleted. They reappear
+	// in the list if restored. Block enforcement (DM/friend/etc.) is unaffected.
 	query := `
 		SELECT f.id, f.status, f.created_at,
 		       u.id, u.username, COALESCE(u.display_name, ''), u.avatar_url, u.status, u.custom_status
 		FROM friendships f
 		JOIN users u ON u.id = f.friend_id
-		WHERE f.user_id = ? AND f.status = 'blocked'
+		WHERE f.user_id = ? AND f.status = 'blocked' AND u.deleted_at IS NULL
 		ORDER BY f.created_at DESC
 	`
 

@@ -79,7 +79,7 @@ func (s *badgeService) CreateBadge(ctx context.Context, adminID string, req *mod
 		IconType:  req.IconType,
 		Color1:    req.Color1,
 		Color2:    req.Color2,
-		CreatedBy: adminID,
+		CreatedBy: &adminID,
 		CreatedAt: time.Now().UTC(),
 	}
 
@@ -170,7 +170,7 @@ func (s *badgeService) AssignBadge(ctx context.Context, adminID, userID, badgeID
 		ID:         generateID(),
 		UserID:     userID,
 		BadgeID:    badgeID,
-		AssignedBy: adminID,
+		AssignedBy: &adminID,
 		AssignedAt: time.Now().UTC(),
 		Badge:      badge,
 	}

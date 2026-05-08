@@ -40,9 +40,10 @@ const (
 	OpRoleUpdate    = "role_update"
 	OpRoleDelete    = "role_delete"
 	OpRolesReorder  = "roles_reorder"
-	OpServerUpdate = "server_update"
-	OpServerCreate = "server_create"
-	OpServerDelete = "server_delete"
+	OpServerUpdate  = "server_update"
+	OpServerCreate  = "server_create"
+	OpServerDelete  = "server_delete"
+	OpServerRestore = "server_restore"
 
 	OpMessagePin   = "message_pin"
 	OpMessageUnpin = "message_unpin"

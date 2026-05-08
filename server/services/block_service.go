@@ -62,8 +62,12 @@ func (s *blockService) BlockUser(ctx context.Context, blockerID, targetID string
 		return fmt.Errorf("%w: cannot block yourself", pkg.ErrBadRequest)
 	}
 
-	if _, err := s.userRepo.GetByID(ctx, targetID); err != nil {
-		return fmt.Errorf("%w: user not found", pkg.ErrNotFound)
+	// Cannot block deleted/tombstone users — they're already inaccessible.
+	if _, err := s.userRepo.GetActiveByID(ctx, targetID); err != nil {
+		if errors.Is(err, pkg.ErrNotFound) {
+			return fmt.Errorf("%w: user not found", pkg.ErrNotFound)
+		}
+		return fmt.Errorf("failed to look up user: %w", err)
 	}
 
 	existing, err := s.friendRepo.GetByPair(ctx, blockerID, targetID)

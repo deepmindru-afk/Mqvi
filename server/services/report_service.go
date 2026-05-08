@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/akinalp/mqvi/models"
@@ -45,8 +46,13 @@ func (s *reportService) CreateReport(ctx context.Context, reporterID, targetID s
 		return nil, fmt.Errorf("%w: cannot report yourself", pkg.ErrBadRequest)
 	}
 
-	if _, err := s.userRepo.GetByID(ctx, targetID); err != nil {
-		return nil, fmt.Errorf("%w: user not found", pkg.ErrNotFound)
+	// Reports target active users only — deleted users can't be re-reported
+	// (existing reports on now-deleted users still exist for audit).
+	if _, err := s.userRepo.GetActiveByID(ctx, targetID); err != nil {
+		if errors.Is(err, pkg.ErrNotFound) {
+			return nil, fmt.Errorf("%w: user not found", pkg.ErrNotFound)
+		}
+		return nil, fmt.Errorf("failed to look up user: %w", err)
 	}
 
 	// Duplicate check — prevent multiple pending reports for the same pair

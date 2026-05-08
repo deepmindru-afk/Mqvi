@@ -4,6 +4,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -341,7 +342,9 @@ func (h *AdminHandler) PlatformUnbanUser(w http.ResponseWriter, r *http.Request)
 }
 
 // HardDeleteUser -- DELETE /api/admin/users/{id}
-// Optional body: { "reason": "..." }
+// Body: { "reason": "...", "hard_delete": false }
+// hard_delete=false (default) → soft-delete (recoverable, 30-day TTL).
+// hard_delete=true → tombstone (anonymize, irreversible).
 func (h *AdminHandler) HardDeleteUser(w http.ResponseWriter, r *http.Request) {
 	admin, ok := r.Context().Value(UserContextKey).(*models.User)
 	if !ok {
@@ -355,16 +358,52 @@ func (h *AdminHandler) HardDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Optional reason body -- DELETE body may be empty
 	var req models.HardDeleteUserRequest
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		// Empty body is acceptable (defaults: soft delete, no reason).
+		// Malformed JSON is a hard 400 — silent fallback hid bugs before.
+		pkg.ErrorWithMessage(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
 
-	if err := h.adminUserService.HardDeleteUser(r.Context(), admin.ID, targetID, req.Reason); err != nil {
+	if req.HardDelete {
+		if err := h.adminUserService.HardDeleteUser(r.Context(), admin.ID, targetID, req.Reason); err != nil {
+			pkg.Error(w, err)
+			return
+		}
+		pkg.JSON(w, http.StatusOK, map[string]string{"message": "user permanently deleted"})
+		return
+	}
+
+	if err := h.adminUserService.SoftDeleteUser(r.Context(), admin.ID, targetID, req.Reason); err != nil {
 		pkg.Error(w, err)
 		return
 	}
 
-	pkg.JSON(w, http.StatusOK, map[string]string{"message": "user deleted"})
+	pkg.JSON(w, http.StatusOK, map[string]string{"message": "user soft-deleted"})
+}
+
+// AdminRestoreUser -- POST /api/admin/users/{id}/restore
+// Restores a soft-deleted user (admin override). Tombstones cannot be restored.
+func (h *AdminHandler) AdminRestoreUser(w http.ResponseWriter, r *http.Request) {
+	admin, ok := r.Context().Value(UserContextKey).(*models.User)
+	if !ok {
+		pkg.ErrorWithMessage(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	targetID := r.PathValue("id")
+	if targetID == "" {
+		pkg.ErrorWithMessage(w, http.StatusBadRequest, "user id is required")
+		return
+	}
+
+	if err := h.adminUserService.RestoreUser(r.Context(), admin.ID, targetID); err != nil {
+		pkg.Error(w, err)
+		return
+	}
+
+	pkg.JSON(w, http.StatusOK, map[string]string{"message": "user restored"})
 }
 
 // SetUserPlatformAdmin -- PATCH /api/admin/users/{id}/platform-admin
@@ -397,7 +436,9 @@ func (h *AdminHandler) SetUserPlatformAdmin(w http.ResponseWriter, r *http.Reque
 }
 
 // AdminDeleteServer -- DELETE /api/admin/servers/{serverId}
-// Optional body: { "reason": "..." }
+// Body: { "reason": "...", "hard_delete": false }
+// hard_delete=false (default) → soft delete (restorable, 30-day TTL).
+// hard_delete=true → permanent delete (skip TTL).
 func (h *AdminHandler) AdminDeleteServer(w http.ResponseWriter, r *http.Request) {
 	admin, ok := r.Context().Value(UserContextKey).(*models.User)
 	if !ok {
@@ -411,16 +452,52 @@ func (h *AdminHandler) AdminDeleteServer(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Optional reason body -- DELETE body may be empty
 	var req models.AdminDeleteServerRequest
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		// Empty body is acceptable (defaults: soft delete, no reason).
+		// Malformed JSON is a hard 400 — silent fallback hid bugs before.
+		pkg.ErrorWithMessage(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.HardDelete {
+		if err := h.adminServerService.HardDeleteServer(r.Context(), admin.ID, serverID, req.Reason); err != nil {
+			pkg.Error(w, err)
+			return
+		}
+		pkg.JSON(w, http.StatusOK, map[string]string{"message": "server permanently deleted"})
+		return
+	}
 
 	if err := h.adminServerService.DeleteServer(r.Context(), admin.ID, serverID, req.Reason); err != nil {
 		pkg.Error(w, err)
 		return
 	}
 
-	pkg.JSON(w, http.StatusOK, map[string]string{"message": "server deleted"})
+	pkg.JSON(w, http.StatusOK, map[string]string{"message": "server soft-deleted"})
+}
+
+// AdminRestoreServer -- POST /api/admin/servers/{serverId}/restore
+// Restores any soft-deleted server (admin override — works regardless of deleted_by_admin).
+func (h *AdminHandler) AdminRestoreServer(w http.ResponseWriter, r *http.Request) {
+	admin, ok := r.Context().Value(UserContextKey).(*models.User)
+	if !ok {
+		pkg.ErrorWithMessage(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	serverID := r.PathValue("serverId")
+	if serverID == "" {
+		pkg.ErrorWithMessage(w, http.StatusBadRequest, "server id is required")
+		return
+	}
+
+	if err := h.adminServerService.RestoreServer(r.Context(), admin.ID, serverID); err != nil {
+		pkg.Error(w, err)
+		return
+	}
+
+	pkg.JSON(w, http.StatusOK, map[string]string{"message": "server restored"})
 }
 
 // ── Reports ──

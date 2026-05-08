@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useDMStore } from "../../stores/dmStore";
+import { authorDisplayName, authorAvatarURL, isAuthorDeleted } from "../../utils/deletedUser";
 import { useE2EEStore } from "../../stores/e2eeStore";
 import { useToastStore } from "../../stores/toastStore";
 import { useBlockStore } from "../../stores/blockStore";
@@ -37,7 +38,7 @@ function DMChat({
 }: DMChatProps) {
   const channels = useDMStore((s) => s.channels);
   const otherUser = channels.find((ch) => ch.id === channelId)?.other_user;
-  const channelName = otherUser?.display_name ?? otherUser?.username ?? "DM";
+  const channelName = authorDisplayName(otherUser, "DM");
 
   return (
     <DMChatProvider
@@ -89,6 +90,9 @@ function DMChatContent({
   const isPending = dmChannel?.status === "pending";
   const isInitiator = isPending && dmChannel?.initiated_by === currentUserId;
   const isRecipient = isPending && !isInitiator;
+  // Other party deleted/tombstoned: history is browsable, but no calls/E2EE
+  // negotiation/new messages — backend would reject these anyway.
+  const otherUserDeleted = isAuthorDeleted(otherUser);
 
   const [showPins, setShowPins] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -130,7 +134,7 @@ function DMChatContent({
 
   // Check recipient's key status when E2EE is active (for warning banner)
   useEffect(() => {
-    if (!dmE2EEEnabled || !otherUser) {
+    if (!dmE2EEEnabled || !otherUser || otherUserDeleted) {
       setRecipientHasKeys(true);
       return;
     }
@@ -142,7 +146,7 @@ function DMChatContent({
       if (!cancelled) setRecipientHasKeys(true); // don't show banner on error
     });
     return () => { cancelled = true; };
-  }, [dmE2EEEnabled, otherUser]);
+  }, [dmE2EEEnabled, otherUser, otherUserDeleted]);
 
   /** Toggle pin panel */
   const handleTogglePins = useCallback(() => {
@@ -172,68 +176,73 @@ function DMChatContent({
       <div className="dm-header">
         <Avatar
           name={channelName}
-          avatarUrl={otherUser?.avatar_url ?? undefined}
+          avatarUrl={authorAvatarURL(otherUser)}
           size={24}
         />
         <span className="dm-header-name">{channelName}</span>
 
         {/* Header actions — e2ee, pin, search */}
         <div className="ch-actions">
-          {/* E2EE toggle */}
-          <button
-            className={dmE2EEEnabled ? "active" : ""}
-            onClick={async () => {
-              const newState = !dmE2EEEnabled;
-              const confirmed = await confirm({
-                title: newState ? tE2EE("enableE2EE") : tE2EE("disableE2EE"),
-                message: newState ? tE2EE("enableE2EEConfirmDM") : tE2EE("disableE2EEConfirmDM"),
-                confirmLabel: newState ? tE2EE("enableE2EE") : tE2EE("disableE2EE"),
-                danger: !newState,
-              });
-              if (!confirmed) return;
-              const ok = await toggleE2EE(channelId, newState);
-              if (ok) {
-                addToast("success", newState ? tE2EE("e2eeEnabled") : tE2EE("e2eeDisabled"));
-              } else {
-                addToast("error", tE2EE("e2eeToggleFailed"));
-              }
-            }}
-            title={dmE2EEEnabled ? tE2EE("disableE2EE") : tE2EE("enableE2EE")}
-          >
-            {dmE2EEEnabled ? (
-              <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0110 0v4" />
-              </svg>
-            ) : (
-              <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 019.9-1" />
-              </svg>
-            )}
-          </button>
-          {/* Voice call */}
-          <button
-            onClick={() => {
-              if (otherUser) useP2PCallStore.getState().initiateCall(otherUser.id, "voice");
-            }}
-            title={tCommon("voiceCall")}
-          >
-            <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
-            </svg>
-          </button>
-          {/* Video call */}
-          <button
-            onClick={() => {
-              if (otherUser) useP2PCallStore.getState().initiateCall(otherUser.id, "video");
-            }}
-            title={tCommon("videoCall")}
-          >
-            <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9.75a2.25 2.25 0 002.25-2.25V7.5a2.25 2.25 0 00-2.25-2.25H4.5A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
-            </svg>
-          </button>
+          {/* E2EE toggle — hidden when recipient is deleted (no negotiation possible). */}
+          {!otherUserDeleted && (
+            <button
+              className={dmE2EEEnabled ? "active" : ""}
+              onClick={async () => {
+                const newState = !dmE2EEEnabled;
+                const confirmed = await confirm({
+                  title: newState ? tE2EE("enableE2EE") : tE2EE("disableE2EE"),
+                  message: newState ? tE2EE("enableE2EEConfirmDM") : tE2EE("disableE2EEConfirmDM"),
+                  confirmLabel: newState ? tE2EE("enableE2EE") : tE2EE("disableE2EE"),
+                  danger: !newState,
+                });
+                if (!confirmed) return;
+                const ok = await toggleE2EE(channelId, newState);
+                if (ok) {
+                  addToast("success", newState ? tE2EE("e2eeEnabled") : tE2EE("e2eeDisabled"));
+                } else {
+                  addToast("error", tE2EE("e2eeToggleFailed"));
+                }
+              }}
+              title={dmE2EEEnabled ? tE2EE("disableE2EE") : tE2EE("enableE2EE")}
+            >
+              {dmE2EEEnabled ? (
+                <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0110 0v4" />
+                </svg>
+              ) : (
+                <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 019.9-1" />
+                </svg>
+              )}
+            </button>
+          )}
+          {/* Voice + video call — hidden if other party is deleted (cannot be reached). */}
+          {!otherUserDeleted && (
+            <>
+              <button
+                onClick={() => {
+                  if (otherUser) useP2PCallStore.getState().initiateCall(otherUser.id, "voice");
+                }}
+                title={tCommon("voiceCall")}
+              >
+                <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => {
+                  if (otherUser) useP2PCallStore.getState().initiateCall(otherUser.id, "video");
+                }}
+                title={tCommon("videoCall")}
+              >
+                <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9.75a2.25 2.25 0 002.25-2.25V7.5a2.25 2.25 0 00-2.25-2.25H4.5A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                </svg>
+              </button>
+            </>
+          )}
           {/* Pin toggle */}
           <button
             className={showPins ? "active" : ""}
@@ -267,8 +276,9 @@ function DMChatContent({
         </div>
       )}
 
-      {/* ─── DM Request Banner ─── */}
-      {isRecipient && (
+      {/* ─── DM Request Banner ─── Skipped if other party is deleted: accept/block
+           on a tombstoned account is meaningless and would just produce errors. */}
+      {isRecipient && !otherUserDeleted && (
         <div className="dm-request-banner">
           <span>{tDM("dmRequestReceived", { name: channelName })}</span>
           <div className="dm-request-actions">
@@ -292,7 +302,8 @@ function DMChatContent({
           </div>
         </div>
       )}
-      {isInitiator && (
+      {/* "Waiting" banner skipped if recipient is deleted — they can't accept. */}
+      {isInitiator && !otherUserDeleted && (
         <div className="dm-request-banner dm-request-banner--waiting">
           <span>{tDM("dmRequestWaiting")}</span>
         </div>
@@ -321,7 +332,8 @@ function DMChatContent({
       <TypingIndicator />
 
       {/* ─── Message Input (shared component) ─── */}
-      {isPending ? null : (
+      {/* Hidden when DM is pending (request flow) or recipient is deleted. */}
+      {isPending || otherUserDeleted ? null : (
         <MessageInput
           openSearch={() => setShowSearch(true)}
         />

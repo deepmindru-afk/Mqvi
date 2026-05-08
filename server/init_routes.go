@@ -42,6 +42,12 @@ func initRoutes(
 	authServer := func(handler http.HandlerFunc) http.Handler {
 		return authMw.Require(serverMw.Require(http.HandlerFunc(handler)))
 	}
+	// authServerNoMemberCheck: extracts serverId without member-or-active check.
+	// Used for owner-only endpoints on soft-deleted servers (restore, permanent delete).
+	// The handler/service is responsible for ownership authorization.
+	authServerNoMemberCheck := func(handler http.HandlerFunc) http.Handler {
+		return authMw.Require(serverMw.RequireServerID(http.HandlerFunc(handler)))
+	}
 	authServerPerm := func(perm models.Permission, handler http.HandlerFunc) http.Handler {
 		return authMw.Require(serverMw.Require(permMw.Require(perm, http.HandlerFunc(handler))))
 	}
@@ -63,6 +69,7 @@ func initRoutes(
 	mux.Handle("POST /api/auth/logout", auth(h.Auth.Logout))
 	mux.HandleFunc("POST /api/auth/forgot-password", h.Auth.ForgotPassword)
 	mux.HandleFunc("POST /api/auth/reset-password", h.Auth.ResetPassword)
+	mux.HandleFunc("POST /api/auth/restore", h.Auth.RestoreAccount)
 
 	// User
 	mux.Handle("GET /api/users/me", auth(h.Auth.Me))
@@ -75,6 +82,8 @@ func initRoutes(
 	mux.Handle("GET /api/users/me/preferences", auth(h.Preferences.Get))
 	mux.Handle("POST /api/users/me/dismiss-download-prompt", auth(h.DownloadPrompt.Dismiss))
 	mux.Handle("POST /api/users/me/dismiss-welcome", auth(h.DownloadPrompt.DismissWelcome))
+	mux.Handle("GET /api/users/me/deleted-servers", auth(h.Server.GetDeletedServers))
+	mux.Handle("DELETE /api/users/me", auth(h.Auth.SoftDeleteSelf))
 	mux.Handle("PATCH /api/users/me/preferences", auth(h.Preferences.Update))
 	mux.Handle("GET /api/users/me/storage", auth(h.Storage.GetUsage))
 
@@ -227,6 +236,7 @@ func initRoutes(
 	mux.Handle("GET /api/admin/servers", authAdmin(h.Admin.ListServers))
 	mux.Handle("PATCH /api/admin/servers/{serverId}/instance", authAdmin(h.Admin.MigrateServerInstance))
 	mux.Handle("DELETE /api/admin/servers/{serverId}", authAdmin(h.Admin.AdminDeleteServer))
+	mux.Handle("POST /api/admin/servers/{serverId}/restore", authAdmin(h.Admin.AdminRestoreServer))
 
 	// Platform Admin — Reports
 	mux.Handle("GET /api/admin/reports", authAdmin(h.Admin.ListReports))
@@ -243,6 +253,7 @@ func initRoutes(
 	mux.Handle("POST /api/admin/users/{id}/ban", authAdmin(h.Admin.PlatformBanUser))
 	mux.Handle("DELETE /api/admin/users/{id}/ban", authAdmin(h.Admin.PlatformUnbanUser))
 	mux.Handle("DELETE /api/admin/users/{id}", authAdmin(h.Admin.HardDeleteUser))
+	mux.Handle("POST /api/admin/users/{id}/restore", authAdmin(h.Admin.AdminRestoreUser))
 	mux.Handle("PATCH /api/admin/users/{id}/platform-admin", authAdmin(h.Admin.SetUserPlatformAdmin))
 	mux.Handle("PATCH /api/admin/users/{id}/quota", authAdmin(h.Storage.AdminSetQuota))
 
@@ -267,6 +278,8 @@ func initRoutes(
 	mux.Handle("GET /api/servers/{serverId}", authServer(h.Server.GetServer))
 	mux.Handle("PATCH /api/servers/{serverId}", authServerPerm(models.PermAdmin, h.Server.UpdateServer))
 	mux.Handle("DELETE /api/servers/{serverId}", authServer(h.Server.DeleteServer))
+	mux.Handle("POST /api/servers/{serverId}/restore", authServerNoMemberCheck(h.Server.RestoreServer))
+	mux.Handle("DELETE /api/servers/{serverId}/permanent", authServerNoMemberCheck(h.Server.HardDeleteServer))
 	mux.Handle("POST /api/servers/{serverId}/leave", authServer(h.Server.LeaveServer))
 	mux.Handle("POST /api/servers/{serverId}/icon", authServerPerm(models.PermAdmin, h.Avatar.UploadServerIcon))
 

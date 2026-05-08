@@ -290,12 +290,30 @@ function AdminUserList() {
       });
     }
 
-    if (!isMe) {
+    if (!isMe && !user.deleted_at) {
       items.push({
         label: t("platformUserDelete"),
         danger: true,
         separator: items.length > 0 && !items[items.length - 1]?.separator,
         onClick: () => setDeleteTarget(user),
+      });
+    }
+
+    if (!isMe && user.deleted_at && !user.is_hard_deleted) {
+      items.push({
+        label: t("restore"),
+        separator: items.length > 0 && !items[items.length - 1]?.separator,
+        onClick: () => {
+          void (async () => {
+            const res = await import("../../api/admin").then((m) => m.adminRestoreUser(user.id));
+            if (res.success) {
+              addToast("success", t("restoreServerSuccess")); // reuse restore success key
+              await refetchUsers();
+            } else {
+              addToast("error", res.error ?? t("restoreServerFailed"));
+            }
+          })();
+        },
       });
     }
 
@@ -382,13 +400,17 @@ function AdminUserList() {
     }
   }
 
-  async function handleDeleteConfirm(reason: string) {
+  async function handleDeleteConfirm(reason: string, hardDelete?: boolean) {
     if (!deleteTarget) return;
     const targetId = deleteTarget.id;
     const targetName = deleteTarget.username;
     setDeleteTarget(null);
 
-    const res = await hardDeleteUser(targetId, reason ? { reason } : undefined);
+    const body: { reason?: string; hard_delete?: boolean } = {};
+    if (reason) body.reason = reason;
+    if (hardDelete) body.hard_delete = true;
+
+    const res = await hardDeleteUser(targetId, Object.keys(body).length ? body : undefined);
     if (res.success) {
       addToast("success", t("platformDeleteSuccess", { username: targetName }));
       await refetchUsers();
@@ -530,6 +552,15 @@ function AdminUserList() {
             <span title={user.username}>{user.username}</span>
             {user.is_platform_banned && (
               <span className="admin-user-banned-badge">{t("platformUserBannedBadge")}</span>
+            )}
+            {user.deleted_at && (
+              <span
+                className="admin-user-banned-badge"
+                style={{ background: "var(--color-text-danger, #f87171)" }}
+                title={user.is_hard_deleted ? "Tombstone (irreversible)" : `Deleted at ${user.deleted_at}`}
+              >
+                {t("deletedBadge", { ns: "common" })}
+              </span>
             )}
           </div>
         );
@@ -701,6 +732,9 @@ function AdminUserList() {
           confirmLabel={t("platformDeleteConfirm")}
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteTarget(null)}
+          showHardDeleteToggle
+          hardDeleteLabel={t("permanentDelete")}
+          hardDeleteHint={t("deleteAccountConfirmBody")}
         />
       )}
 

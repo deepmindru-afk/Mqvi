@@ -6,6 +6,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { isElectron, isNativeApp } from "../../utils/constants";
 import { detectOS, shouldShowDownloadPrompt } from "../../utils/detectOS";
+import AccountRecoveryModal from "./AccountRecoveryModal";
 
 function LoginPage() {
   // ─── Hooks ───
@@ -14,6 +15,8 @@ function LoginPage() {
   const isLoading = useAuthStore((s) => s.isLoading);
   const error = useAuthStore((s) => s.error);
   const clearError = useAuthStore((s) => s.clearError);
+  const accountDeleted = useAuthStore((s) => s.accountDeleted);
+  const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -33,6 +36,14 @@ function LoginPage() {
       }
     });
   }, []);
+
+  // Navigate after successful login OR account restore — both populate `user`.
+  useEffect(() => {
+    if (user) {
+      const returnUrl = searchParams.get("returnUrl");
+      navigate(returnUrl ?? "/channels");
+    }
+  }, [user, navigate, searchParams]);
 
   // ─── Handlers ───
   async function handleSubmit(e: React.FormEvent) {
@@ -60,6 +71,7 @@ function LoginPage() {
   // ─── Render ───
   return (
     <div className="auth-page">
+      {accountDeleted && <AccountRecoveryModal />}
       <div className="auth-card">
         {/* Header */}
         <h1 className="auth-title">{t("welcomeBack")}</h1>

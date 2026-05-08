@@ -10,6 +10,9 @@ import (
 
 // MemberWithRoles is the API-facing view of a server member.
 // Intentionally does NOT embed User to avoid leaking PasswordHash.
+// DeletedAt + IsHardDeleted let the frontend render historical references
+// (e.g., a member who appears in a message author lookup but has since been
+// soft-deleted/tombstoned) as "[deleted user]".
 type MemberWithRoles struct {
 	ID                   string     `json:"id"`
 	Username             string     `json:"username"`
@@ -18,6 +21,8 @@ type MemberWithRoles struct {
 	Status               UserStatus `json:"status"`
 	CustomStatus         *string    `json:"custom_status"`
 	CreatedAt            time.Time  `json:"created_at"`
+	DeletedAt            *time.Time `json:"deleted_at,omitempty"`
+	IsHardDeleted        bool       `json:"is_hard_deleted,omitempty"`
 	Roles                []Role     `json:"roles"`
 	EffectivePermissions Permission `json:"effective_permissions"`
 }
@@ -43,6 +48,8 @@ func ToMemberWithRoles(user *User, roles []Role) MemberWithRoles {
 		Status:               user.Status,
 		CustomStatus:         user.CustomStatus,
 		CreatedAt:            user.CreatedAt,
+		DeletedAt:            user.DeletedAt,
+		IsHardDeleted:        user.IsHardDeleted,
 		Roles:                roles,
 		EffectivePermissions: effectivePerms,
 	}

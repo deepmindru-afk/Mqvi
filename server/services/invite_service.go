@@ -59,7 +59,7 @@ func (s *inviteService) Create(ctx context.Context, serverID, createdBy string, 
 	invite := &models.Invite{
 		Code:      code,
 		ServerID:  serverID,
-		CreatedBy: createdBy,
+		CreatedBy: &createdBy,
 		MaxUses:   req.MaxUses,
 	}
 
@@ -115,6 +115,12 @@ func (s *inviteService) ValidateAndUse(ctx context.Context, code string) (*model
 		return nil, fmt.Errorf("%w: invite code has reached max uses", pkg.ErrBadRequest)
 	}
 
+	// Reject invites pointing to soft-deleted servers — must not consume invite use
+	// or dirty membership data for a server pending hard-delete.
+	if _, err := s.serverRepo.GetActiveByID(ctx, invite.ServerID); err != nil {
+		return nil, fmt.Errorf("%w: server is no longer available", pkg.ErrNotFound)
+	}
+
 	if err := s.inviteRepo.IncrementUses(ctx, code); err != nil {
 		return nil, fmt.Errorf("failed to increment invite uses: %w", err)
 	}
@@ -136,9 +142,9 @@ func (s *inviteService) GetPreview(ctx context.Context, code string) (*models.In
 		return nil, fmt.Errorf("%w: invalid invite code", pkg.ErrNotFound)
 	}
 
-	server, err := s.serverRepo.GetByID(ctx, invite.ServerID)
+	server, err := s.serverRepo.GetActiveByID(ctx, invite.ServerID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get server for invite preview: %w", err)
+		return nil, fmt.Errorf("%w: server is no longer available", pkg.ErrNotFound)
 	}
 
 	memberCount, err := s.serverRepo.GetMemberCount(ctx, invite.ServerID)

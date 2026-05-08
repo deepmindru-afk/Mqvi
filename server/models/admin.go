@@ -20,6 +20,8 @@ type AdminServerListItem struct {
 	MessageCount      int     `json:"message_count"`
 	StorageMB         float64 `json:"storage_mb"`
 	LastActivity      *string `json:"last_activity"`
+	DeletedAt         *string `json:"deleted_at"`
+	DeletedByAdmin    bool    `json:"deleted_by_admin"`
 }
 
 // AdminUserListItem — user info for platform admin panel. Aggregated via correlated subqueries.
@@ -40,6 +42,9 @@ type AdminUserListItem struct {
 	MemberServerCount int     `json:"member_server_count"`
 	BanCount          int     `json:"ban_count"`
 	IsPlatformBanned  bool    `json:"is_platform_banned"`
+	DeletedAt         *string `json:"deleted_at"`
+	DeletedByAdmin    bool    `json:"deleted_by_admin"`
+	IsHardDeleted     bool    `json:"is_hard_deleted"`
 }
 
 // PlatformBanRequest — DeleteMessages: if true, all user messages (server + DM) are purged.
@@ -49,13 +54,17 @@ type PlatformBanRequest struct {
 }
 
 // HardDeleteUserRequest — reason is optional; if provided, user is notified via email.
+// HardDelete=false (default) → soft-delete with 30-day TTL. HardDelete=true → tombstone.
 type HardDeleteUserRequest struct {
-	Reason string `json:"reason"`
+	Reason     string `json:"reason"`
+	HardDelete bool   `json:"hard_delete"`
 }
 
 // AdminDeleteServerRequest — reason is optional; if provided, server owner is notified via email.
+// HardDelete=false (default) → soft delete with 30-day TTL. HardDelete=true → permanent delete.
 type AdminDeleteServerRequest struct {
-	Reason string `json:"reason"`
+	Reason     string `json:"reason"`
+	HardDelete bool   `json:"hard_delete"`
 }
 
 type SetPlatformAdminRequest struct {

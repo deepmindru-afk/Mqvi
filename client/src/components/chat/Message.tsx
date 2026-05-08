@@ -317,8 +317,12 @@ function Message({ message, isCompact }: MessageProps) {
     { delay: 500 }
   );
 
-  const displayName =
-    message.author?.display_name ?? message.author?.username ?? "Unknown";
+  // Tombstone/soft-deleted authors render as "[deleted user]" — protects privacy
+  // and makes content provenance clear without breaking message history.
+  const isAuthorDeleted = !!message.author?.deleted_at;
+  const displayName = isAuthorDeleted
+    ? t("deletedUser", { ns: "common" })
+    : message.author?.display_name ?? message.author?.username ?? "Unknown";
 
   /** Invite pattern */
   const INVITE_REGEX = /^https?:\/\/[^\s/]+\/invite\/([a-f0-9]{16})$/i;
@@ -471,7 +475,7 @@ function Message({ message, isCompact }: MessageProps) {
             <Avatar
               name={displayName}
               role={roleType}
-              avatarUrl={message.author?.avatar_url ?? undefined}
+              avatarUrl={isAuthorDeleted ? undefined : message.author?.avatar_url ?? undefined}
               size={30}
             />
           </button>
@@ -507,8 +511,10 @@ function Message({ message, isCompact }: MessageProps) {
               {message.referenced_message?.author ? (
                 <>
                   <span className="msg-reply-author">
-                    {message.referenced_message.author.display_name ??
-                      message.referenced_message.author.username}
+                    {message.referenced_message.author.deleted_at
+                      ? t("deletedUser", { ns: "common" })
+                      : (message.referenced_message.author.display_name ??
+                        message.referenced_message.author.username)}
                   </span>
                   <span className="msg-reply-content">
                     {message.referenced_message.content ?? t("noContent")}

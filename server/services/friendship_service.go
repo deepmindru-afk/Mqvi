@@ -78,7 +78,10 @@ func (s *friendshipService) SendRequest(ctx context.Context, senderID string, re
 		return nil, fmt.Errorf("%w: %s", pkg.ErrBadRequest, err.Error())
 	}
 
-	target, err := s.userRepo.GetByUsername(ctx, req.Username)
+	// GetActiveByUsername — friend requests cannot target deleted/tombstone users.
+	// Tombstone usernames are renamed to deleted_<id>; soft-deleted users keep their
+	// username but should be invisible to social actions during recovery window.
+	target, err := s.userRepo.GetActiveByUsername(ctx, req.Username)
 	if err != nil {
 		if errors.Is(err, pkg.ErrNotFound) {
 			return nil, fmt.Errorf("%w: user %q not found", pkg.ErrNotFound, req.Username)

@@ -16,7 +16,11 @@ type Server struct {
 	E2EEEnabled        bool      `json:"e2ee_enabled"`
 	LiveKitInstanceID  *string   `json:"livekit_instance_id,omitempty"` // nil = no voice
 	AFKTimeoutMinutes  int       `json:"afk_timeout_minutes"`           // 15/30/45/60, default 60
-	CreatedAt          time.Time `json:"created_at"`
+	// Soft-delete state. DeletedByAdmin=1 → owner cannot restore (admin moderation).
+	DeletedAt          *time.Time `json:"deleted_at,omitempty"`
+	DeletedBy          *string    `json:"deleted_by,omitempty"`
+	DeletedByAdmin     bool       `json:"deleted_by_admin,omitempty"`
+	CreatedAt          time.Time  `json:"created_at"`
 }
 
 // ServerListItem is the minimal data needed for the server icon sidebar.
@@ -24,6 +28,19 @@ type ServerListItem struct {
 	ID      string  `json:"id"`
 	Name    string  `json:"name"`
 	IconURL *string `json:"icon_url"`
+}
+
+// SoftDeleteTTLDays is the grace period before a soft-deleted server is hard-deleted by the cleanup worker.
+const SoftDeleteTTLDays = 30
+
+// DeletedServerInfo is shown in the owner's "Deleted Servers" UI.
+type DeletedServerInfo struct {
+	ID                 string    `json:"id"`
+	Name               string    `json:"name"`
+	IconURL            *string   `json:"icon_url"`
+	DeletedAt          time.Time `json:"deleted_at"`
+	DeletedByAdmin     bool      `json:"deleted_by_admin"`
+	PermanentDeleteAt  time.Time `json:"permanent_delete_at"`
 }
 
 // CreateServerRequest — HostType: "mqvi_hosted" uses platform LiveKit,

@@ -15,6 +15,7 @@ import { useP2PCallStore } from "../../stores/p2pCallStore";
 import { useToastStore } from "../../stores/toastStore";
 import { copyToClipboard } from "../../utils/constants";
 import Avatar from "../shared/Avatar";
+import { authorDisplayName, authorAvatarURL, isAuthorDeleted } from "../../utils/deletedUser";
 import ContextMenu from "../shared/ContextMenu";
 import DMMuteDurationPicker from "../dm/DMMuteDurationPicker";
 import ReportModal from "../shared/ReportModal";
@@ -93,12 +94,15 @@ function DMSection({ onShowUserCard }: DMSectionProps) {
 
   function handleDMContextMenu(e: React.MouseEvent, dm: DMChannelWithUser) {
     const user = dm.other_user;
-    const name = user.display_name || user.username;
+    const name = authorDisplayName(user);
     const unread = dmUnreadCounts[dm.id] ?? 0;
     const blocked = isBlocked(user.id);
     const isFriend = friends.some((f) => f.user_id === user.id);
     const outReq = outgoing.find((r) => r.user_id === user.id);
     const inReq = incoming.find((r) => r.user_id === user.id);
+    // Deleted users get a stripped-down menu — no call, no friend, no block/report.
+    // The DM history is still browsable; the deleted party just isn't reachable.
+    const userDeleted = isAuthorDeleted(user);
 
     const items: ContextMenuItem[] = [
       {
@@ -108,22 +112,30 @@ function DMSection({ onShowUserCard }: DMSectionProps) {
           onShowUserCard(user, rect.top, rect.right + 8);
         },
       },
-      {
-        label: tDM("voiceCall"),
-        onClick: () => initiateCall(user.id, "voice"),
-      },
-      {
-        label: tDM("videoCall"),
-        onClick: () => initiateCall(user.id, "video"),
-      },
-      {
-        label: tDM("searchInMessages"),
-        onClick: () => {
-          handleDMClick(dm.id, name);
-          setPendingSearchChannelId(dm.id);
+    ];
+
+    if (!userDeleted) {
+      items.push(
+        {
+          label: tDM("voiceCall"),
+          onClick: () => initiateCall(user.id, "voice"),
         },
-        separator: true,
+        {
+          label: tDM("videoCall"),
+          onClick: () => initiateCall(user.id, "video"),
+        },
+      );
+    }
+
+    items.push({
+      label: tDM("searchInMessages"),
+      onClick: () => {
+        handleDMClick(dm.id, name);
+        setPendingSearchChannelId(dm.id);
       },
+      separator: true,
+    });
+    items.push(
       {
         label: tDM("markAsRead"),
         onClick: () => clearDMUnread(dm.id),
@@ -148,7 +160,22 @@ function DMSection({ onShowUserCard }: DMSectionProps) {
         onClick: () => hideDM(dm.id),
         separator: true,
       },
-    ];
+    );
+
+    // Friend / block / report actions are skipped for deleted users — they
+    // can't be reached or affected anyway.
+    if (userDeleted) {
+      items.push({
+        label: tDM("copyUserId"),
+        onClick: async () => {
+          await copyToClipboard(user.id);
+          addToast("success", tDM("userIdCopied"));
+        },
+        separator: true,
+      });
+      openMenu(e, items);
+      return;
+    }
 
     // Friend status actions
     if (isFriend) {
@@ -249,14 +276,14 @@ function DMSection({ onShowUserCard }: DMSectionProps) {
                 </button>
                 {requestsExpanded && pendingChannels.map((dm) => {
                   const isActive = dm.id === selectedDMId;
-                  const name = dm.other_user.display_name || dm.other_user.username;
+                  const name = authorDisplayName(dm.other_user);
                   return (
                     <button
                       key={dm.id}
                       className={`ch-tree-item ch-tree-dm ch-tree-dm--pending${isActive ? " active" : ""}`}
                       onClick={() => handleDMClick(dm.id, name)}
                     >
-                      <Avatar name={name} avatarUrl={dm.other_user.avatar_url} size={24} isCircle />
+                      <Avatar name={name} avatarUrl={authorAvatarURL(dm.other_user)} size={24} isCircle />
                       <span className="ch-tree-label">{name}</span>
                     </button>
                   );
@@ -272,7 +299,7 @@ function DMSection({ onShowUserCard }: DMSectionProps) {
               [...acceptedChannels, ...pendingOutgoing].map((dm) => {
                 const isActive = dm.id === selectedDMId;
                 const unread = dmUnreadCounts[dm.id] ?? 0;
-                const name = dm.other_user.display_name || dm.other_user.username;
+                const name = authorDisplayName(dm.other_user);
 
                 return (
                   <button
@@ -283,7 +310,7 @@ function DMSection({ onShowUserCard }: DMSectionProps) {
                   >
                     <Avatar
                       name={name}
-                      avatarUrl={dm.other_user.avatar_url}
+                      avatarUrl={authorAvatarURL(dm.other_user)}
                       size={24}
                       isCircle
                     />

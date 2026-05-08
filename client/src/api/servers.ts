@@ -59,11 +59,39 @@ export async function updateServer(
   });
 }
 
-/** Deletes the server (owner only). */
+/** Soft-deletes the server (owner only). Recoverable for 30 days. */
 export async function deleteServer(serverId: string) {
   return apiClient<{ message: string }>(`/servers/${serverId}`, {
     method: "DELETE",
   });
+}
+
+/** Restores a soft-deleted server (owner only). */
+export async function restoreServer(serverId: string) {
+  return apiClient<{ message: string }>(`/servers/${serverId}/restore`, {
+    method: "POST",
+  });
+}
+
+/** Permanently deletes a soft-deleted server (skip 30-day TTL, owner only). */
+export async function hardDeleteServer(serverId: string) {
+  return apiClient<{ message: string }>(`/servers/${serverId}/permanent`, {
+    method: "DELETE",
+  });
+}
+
+export interface DeletedServerInfo {
+  id: string;
+  name: string;
+  icon_url: string | null;
+  deleted_at: string;
+  deleted_by_admin: boolean;
+  permanent_delete_at: string;
+}
+
+/** Lists soft-deleted servers owned by the current user. */
+export async function getDeletedServers() {
+  return apiClient<DeletedServerInfo[]>("/users/me/deleted-servers");
 }
 
 /** Leaves the server (owner cannot leave). */

@@ -210,6 +210,10 @@ export async function handleSystemEvent(
       useServerStore.getState().handleServerDelete(deletedId);
       return true;
     }
+    case "server_restore":
+      // Server was soft-deleted previously and is now restored — re-add to sidebar.
+      useServerStore.getState().handleServerCreate(msg.d as ServerListItem);
+      return true;
 
     // ─── Friends ───
     case "friend_request_create":

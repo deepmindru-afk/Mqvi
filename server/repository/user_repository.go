@@ -9,8 +9,16 @@ import (
 // UserRepository defines data access for users.
 type UserRepository interface {
 	Create(ctx context.Context, user *models.User) error
+	// GetByID returns the user including soft-deleted/tombstone state.
+	// Use GetActiveByID for paths where deleted users must be invisible (login, refresh).
 	GetByID(ctx context.Context, id string) (*models.User, error)
+	// GetActiveByID returns the user only if deleted_at IS NULL (not soft-deleted, not tombstone).
+	GetActiveByID(ctx context.Context, id string) (*models.User, error)
+	// GetByUsername returns the user including soft-deleted/tombstone state.
+	// Tombstones have username=deleted_<id> so their original username is naturally freed.
 	GetByUsername(ctx context.Context, username string) (*models.User, error)
+	// GetActiveByUsername returns the user only if deleted_at IS NULL.
+	GetActiveByUsername(ctx context.Context, username string) (*models.User, error)
 	GetAll(ctx context.Context) ([]models.User, error)
 	Update(ctx context.Context, user *models.User) error
 	UpdateStatus(ctx context.Context, userID string, status models.UserStatus) error
@@ -48,9 +56,17 @@ type UserRepository interface {
 	DeletePlatformBan(ctx context.Context, userID string) error
 	// DeleteAllMessagesByUser removes all messages (server + DM) and attachments for a user.
 	DeleteAllMessagesByUser(ctx context.Context, userID string) error
-	// HardDeleteUser permanently deletes a user and all cascaded data.
-	// Owned servers must be cleaned up beforehand (no CASCADE on servers.owner_id).
-	HardDeleteUser(ctx context.Context, userID string) error
+	// HardDeleteUser anonymizes the user (tombstone) — username renamed to deleted_<id>,
+	// personal data wiped, password cleared, all relationships removed. Messages preserved
+	// via tombstone semantics (user row stays so messages.user_id keeps referential integrity).
+	HardDeleteUser(ctx context.Context, userID string, byAdmin bool) error
+	// SoftDelete marks the user deleted_at = NOW. Recoverable via login flow.
+	SoftDelete(ctx context.Context, userID string, byAdmin bool) error
+	// Restore clears soft-delete fields. Caller verifies authorization (e.g., password).
+	Restore(ctx context.Context, userID string) error
+	// ListSoftDeletedExpired returns soft-deleted users whose deleted_at is older than ttlDays.
+	// Used by the cleanup worker to identify users ready for tombstone hard-delete.
+	ListSoftDeletedExpired(ctx context.Context, ttlDays int) ([]models.User, error)
 
 	// ─── Download Prompt ───
 

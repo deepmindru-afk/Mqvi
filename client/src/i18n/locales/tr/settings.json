@@ -629,5 +629,29 @@
   "adminFeedbackAllTypes": "Tüm Türler",
   "adminFeedbackStatusUpdated": "Durum güncellendi",
   "adminFeedbackStatusError": "Durum güncellenemedi",
-  "storageUsage": "Depolama"
+  "storageUsage": "Depolama",
+
+  "deleteAccount": "Hesabı sil",
+  "deleteAccountSection": "Hesabı sil",
+  "deleteAccountDescription": "Hesabınızı yumuşak siler. Şifrenizle tekrar giriş yaparak 30 gün içinde geri yükleyebilirsiniz.",
+  "deleteAccountConfirmTitle": "Hesap silinsin mi?",
+  "deleteAccountConfirmBody": "Hesabınız yumuşak silinecek. 30 gün içinde şifrenizle giriş yaparak geri yükleyebilirsiniz. 30 gün sonra hesabınız, dosyalarınız ve kişisel verileriniz kalıcı olarak silinir; mesajlarınız \"silinmiş kullanıcı\" olarak görünmeye devam eder.",
+  "deleteAccountPasswordLabel": "Şifrenizle onaylayın",
+  "deleteAccountConfirm": "Hesabımı sil",
+  "deleteAccountSuccess": "Hesap silindi. Çıkış yapılıyor.",
+  "deleteAccountFailed": "Hesap silinemedi",
+
+  "deletedServers": "Silinen sunucular",
+  "deletedServersDescription": "Sahip olduğunuz yumuşak silinmiş sunucular. 30 gün içinde geri yükleyebilir veya beklemeyi atlayarak kalıcı olarak silebilirsiniz.",
+  "deletedServersEmpty": "Silinen sunucunuz yok.",
+  "restore": "Geri yükle",
+  "permanentDelete": "Kalıcı olarak sil",
+  "permanentDeleteIn": "{{days}} gün sonra kalıcı silinecek",
+  "deletedByAdminLabel": "Yönetici tarafından silindi",
+  "deletedByAdminCannotRestore": "Bu sunucu bir yönetici tarafından silindi ve geri yüklenemez. Gerekirse destek ile iletişime geçin.",
+  "restoreServerSuccess": "Sunucu geri yüklendi",
+  "restoreServerFailed": "Sunucu geri yüklenemedi",
+  "permanentDeleteServerConfirm": "\"{{name}}\" kalıcı olarak silinecek. Tüm kanallar, mesajlar ve dosyalar silinir. Bu işlem geri alınamaz.",
+  "permanentDeleteServerSuccess": "Sunucu kalıcı olarak silindi",
+  "permanentDeleteServerFailed": "Sunucu kalıcı olarak silinemedi"
 }

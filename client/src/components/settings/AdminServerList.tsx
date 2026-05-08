@@ -362,12 +362,31 @@ function AdminServerList() {
       onClick: () => handleSendDMOwner(srv),
     });
 
-    items.push({
-      label: t("platformServerDelete"),
-      danger: true,
-      separator: true,
-      onClick: () => setDeleteTarget(srv),
-    });
+    if (!srv.deleted_at) {
+      items.push({
+        label: t("platformServerDelete"),
+        danger: true,
+        separator: true,
+        onClick: () => setDeleteTarget(srv),
+      });
+    } else {
+      items.push({
+        label: t("restore"),
+        separator: true,
+        onClick: () => {
+          void (async () => {
+            const { adminRestoreServer } = await import("../../api/admin");
+            const res = await adminRestoreServer(srv.id);
+            if (res.success) {
+              addToast("success", t("restoreServerSuccess"));
+              await refetchServers();
+            } else {
+              addToast("error", res.error ?? t("restoreServerFailed"));
+            }
+          })();
+        },
+      });
+    }
 
     return items;
   }
@@ -380,13 +399,17 @@ function AdminServerList() {
     }
   }
 
-  async function handleDeleteConfirm(reason: string) {
+  async function handleDeleteConfirm(reason: string, hardDelete?: boolean) {
     if (!deleteTarget) return;
     const targetId = deleteTarget.id;
     const targetName = deleteTarget.name;
     setDeleteTarget(null);
 
-    const res = await adminDeleteServer(targetId, reason ? { reason } : undefined);
+    const body: { reason?: string; hard_delete?: boolean } = {};
+    if (reason) body.reason = reason;
+    if (hardDelete) body.hard_delete = true;
+
+    const res = await adminDeleteServer(targetId, Object.keys(body).length ? body : undefined);
     if (res.success) {
       addToast("success", t("platformServerDeleteSuccess", { serverName: targetName }));
       await refetchServers();
@@ -419,6 +442,15 @@ function AdminServerList() {
               )}
             </div>
             <span title={srv.name}>{srv.name}</span>
+            {srv.deleted_at && (
+              <span
+                className="admin-user-banned-badge"
+                style={{ background: "var(--color-text-danger, #f87171)" }}
+                title={srv.deleted_by_admin ? `Deleted by admin at ${srv.deleted_at}` : `Soft-deleted at ${srv.deleted_at}`}
+              >
+                {t("deletedBadge", { ns: "common" })}
+              </span>
+            )}
           </div>
         );
 
@@ -616,6 +648,8 @@ function AdminServerList() {
           confirmLabel={t("platformServerDeleteConfirm")}
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteTarget(null)}
+          showHardDeleteToggle
+          hardDeleteLabel={t("permanentDelete")}
         />
       )}
     </div>

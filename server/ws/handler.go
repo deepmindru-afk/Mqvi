@@ -168,6 +168,12 @@ func (h *Handler) HandleConnection(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "account suspended", http.StatusForbidden)
 			return
 		}
+		// Reject deleted/tombstone accounts — existing JWTs cannot keep WS open after delete.
+		if user.DeletedAt != nil {
+			h.hub.logEvent(models.LogLevelWarn, models.LogCategoryAuth, &claims.UserID, "WS connect blocked: account deleted", nil)
+			http.Error(w, "account deleted", http.StatusUnauthorized)
+			return
+		}
 		if user.DisplayName != nil {
 			displayName = *user.DisplayName
 		}

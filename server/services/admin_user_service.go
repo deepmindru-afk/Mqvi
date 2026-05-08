@@ -23,14 +23,23 @@ import (
 type AdminUserService interface {
 	PlatformBanUser(ctx context.Context, adminUserID, targetUserID, reason string, deleteMessages bool) error
 	PlatformUnbanUser(ctx context.Context, adminUserID, targetUserID string) error
+	// SoftDeleteUser marks the user soft-deleted (recoverable for 30 days).
+	SoftDeleteUser(ctx context.Context, adminUserID, targetUserID, reason string) error
+	// HardDeleteUser anonymizes the user (tombstone). Files cleaned, quota released.
 	HardDeleteUser(ctx context.Context, adminUserID, targetUserID, reason string) error
+	// RestoreUser un-soft-deletes a user (admin override).
+	RestoreUser(ctx context.Context, adminUserID, targetUserID string) error
 	SetPlatformAdmin(ctx context.Context, adminUserID, targetUserID string, isAdmin bool) error
 }
 
 type adminUserService struct {
 	db          *sql.DB
 	userRepo    repository.UserRepository
-	hub         ws.ClientManager
+	sessionRepo repository.SessionRepository
+	serverRepo  repository.ServerRepository
+	// Broadcaster (not just ClientManager) — needed for BroadcastToServer when
+	// hard-deleting a user with owned servers.
+	hub         ws.BroadcastAndManage
 	voiceKit    VoiceDisconnecter // ISP defined in member_service.go
 	emailSender email.EmailSender // optional, nil = no emails
 	fileCleanup FileCleanupService
@@ -39,7 +48,9 @@ type adminUserService struct {
 func NewAdminUserService(
 	db *sql.DB,
 	userRepo repository.UserRepository,
-	hub ws.ClientManager,
+	sessionRepo repository.SessionRepository,
+	serverRepo repository.ServerRepository,
+	hub ws.BroadcastAndManage,
 	voiceKit VoiceDisconnecter,
 	emailSender email.EmailSender,
 	fileCleanup FileCleanupService,
@@ -47,6 +58,8 @@ func NewAdminUserService(
 	return &adminUserService{
 		db:          db,
 		userRepo:    userRepo,
+		sessionRepo: sessionRepo,
+		serverRepo:  serverRepo,
 		hub:         hub,
 		voiceKit:    voiceKit,
 		emailSender: emailSender,
@@ -125,18 +138,22 @@ func (s *adminUserService) PlatformUnbanUser(ctx context.Context, adminUserID, t
 		return fmt.Errorf("%w: cannot unban yourself", pkg.ErrBadRequest)
 	}
 
-	// User may be hard-deleted — distinguish "not found" from real DB errors
+	// User row may be missing (hard-deleted in old code path) or anonymized
+	// (tombstone, is_hard_deleted=1). Either way the only meaningful artifact
+	// of the ban that survives is the platform_bans table — that's what we clear.
 	target, userErr := s.userRepo.GetByID(ctx, targetUserID)
 	userExists := userErr == nil
 	if userErr != nil && !errors.Is(userErr, pkg.ErrNotFound) {
 		return fmt.Errorf("failed to look up user: %w", userErr)
 	}
 
-	if userExists && !target.IsPlatformBanned {
+	// For a live (non-tombstone) user, require the user-level ban flag to be set.
+	// For tombstones, the flag is residual — only platform_bans existence matters.
+	if userExists && !target.IsHardDeleted && !target.IsPlatformBanned {
 		return fmt.Errorf("%w: user is not banned", pkg.ErrBadRequest)
 	}
 
-	if !userExists {
+	if !userExists || target.IsHardDeleted {
 		// Verify a platform_bans record actually exists for this user ID
 		banned, checkErr := s.userRepo.IsPlatformBannedByUserID(ctx, targetUserID)
 		if checkErr != nil {
@@ -160,6 +177,78 @@ func (s *adminUserService) PlatformUnbanUser(ctx context.Context, adminUserID, t
 		}
 		return nil
 	})
+}
+
+// SoftDeleteUser marks the user soft-deleted (recoverable for 30 days).
+// Disconnects sessions/realtime so the user is logged out immediately.
+func (s *adminUserService) SoftDeleteUser(ctx context.Context, adminUserID, targetUserID, reason string) error {
+	if adminUserID == targetUserID {
+		return fmt.Errorf("%w: cannot delete yourself", pkg.ErrBadRequest)
+	}
+
+	target, err := s.userRepo.GetByID(ctx, targetUserID)
+	if err != nil {
+		return fmt.Errorf("target user not found: %w", err)
+	}
+
+	if target.IsPlatformAdmin {
+		return fmt.Errorf("%w: cannot delete a platform admin", pkg.ErrForbidden)
+	}
+
+	if target.DeletedAt != nil {
+		return fmt.Errorf("%w: user is already deleted", pkg.ErrBadRequest)
+	}
+
+	if err := s.userRepo.SoftDelete(ctx, targetUserID, true); err != nil {
+		return fmt.Errorf("failed to soft delete user: %w", err)
+	}
+
+	// Invalidate refresh tokens — auth middleware now also rejects via GetActiveByID,
+	// but keeping sessions around contradicts the "logged out" guarantee and bloats the
+	// table. Best-effort: log on failure so soft-delete still succeeds.
+	if err := s.sessionRepo.DeleteByUserID(ctx, targetUserID); err != nil {
+		log.Printf("[admin] failed to delete sessions for soft-deleted user %s: %v", targetUserID, err)
+	}
+
+	s.voiceKit.DisconnectUser(targetUserID)
+	s.hub.DisconnectUser(targetUserID)
+
+	if reason != "" && target.Email != nil && s.emailSender != nil {
+		if emailErr := s.emailSender.SendAccountDeleteNotification(ctx, *target.Email, reason); emailErr != nil {
+			log.Printf("[admin] failed to send soft-delete notification email to %s: %v", targetUserID, emailErr)
+		}
+	}
+
+	log.Printf("[admin] admin %s soft-deleted user %s (%s)", adminUserID, targetUserID, target.Username)
+	return nil
+}
+
+// RestoreUser un-soft-deletes a user (admin override). Tombstones (is_hard_deleted=1)
+// are not restorable.
+func (s *adminUserService) RestoreUser(ctx context.Context, adminUserID, targetUserID string) error {
+	if adminUserID == targetUserID {
+		return fmt.Errorf("%w: cannot restore yourself", pkg.ErrBadRequest)
+	}
+
+	target, err := s.userRepo.GetByID(ctx, targetUserID)
+	if err != nil {
+		return fmt.Errorf("target user not found: %w", err)
+	}
+
+	if target.DeletedAt == nil {
+		return fmt.Errorf("%w: user is not deleted", pkg.ErrBadRequest)
+	}
+
+	if target.IsHardDeleted {
+		return fmt.Errorf("%w: tombstone users cannot be restored", pkg.ErrForbidden)
+	}
+
+	if err := s.userRepo.Restore(ctx, targetUserID); err != nil {
+		return fmt.Errorf("failed to restore user: %w", err)
+	}
+
+	log.Printf("[admin] admin %s restored user %s (%s)", adminUserID, targetUserID, target.Username)
+	return nil
 }
 
 // HardDeleteUser permanently deletes a user and all associated data.
@@ -191,12 +280,26 @@ func (s *adminUserService) HardDeleteUser(ctx context.Context, adminUserID, targ
 		return fmt.Errorf("failed to collect user files: %w", collectErr)
 	}
 
+	// Phase 1b: collect owned server IDs so we can broadcast server_delete
+	// to their members before the cascade DELETE wipes server_members rows
+	// (BroadcastToServer needs the membership table to resolve recipients).
+	ownedServerIDs, ownedErr := s.serverRepo.ListActiveServerIDsByOwner(ctx, targetUserID)
+	if ownedErr != nil {
+		return fmt.Errorf("failed to list owned servers: %w", ownedErr)
+	}
+	for _, sid := range ownedServerIDs {
+		s.hub.BroadcastToServer(sid, ws.Event{
+			Op:   ws.OpServerDelete,
+			Data: map[string]string{"id": sid},
+		})
+	}
+
 	// Disconnect realtime connections before DB delete to avoid race conditions
 	s.voiceKit.DisconnectUser(targetUserID)
 	s.hub.DisconnectUser(targetUserID)
 
 	// Phase 2: DB delete (CASCADE removes user data, owned servers, etc.)
-	if err := s.userRepo.HardDeleteUser(ctx, targetUserID); err != nil {
+	if err := s.userRepo.HardDeleteUser(ctx, targetUserID, true); err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
 

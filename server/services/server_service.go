@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/akinalp/mqvi/database"
 	"github.com/akinalp/mqvi/models"
@@ -29,7 +30,17 @@ type ServerService interface {
 	GetUserServers(ctx context.Context, userID string) ([]models.ServerListItem, error)
 	UpdateServer(ctx context.Context, serverID string, req *models.UpdateServerRequest) (*models.Server, error)
 	UpdateIcon(ctx context.Context, serverID, iconURL string) (*models.Server, error)
+	// DeleteServer soft-deletes the server. Files and LiveKit instance are preserved.
+	// Use HardDeleteServer to permanently remove (skip 30-day TTL).
 	DeleteServer(ctx context.Context, serverID, userID string) error
+	// RestoreServer un-soft-deletes the server. Owner can only restore servers they soft-deleted
+	// themselves; admin-deleted servers can only be restored by an admin.
+	RestoreServer(ctx context.Context, serverID, userID string) error
+	// HardDeleteServer permanently deletes a soft-deleted server (skip 30-day TTL).
+	// Files cleaned, LiveKit instance released, DB cascade.
+	HardDeleteServer(ctx context.Context, serverID, userID string) error
+	// GetDeletedServers returns soft-deleted servers owned by this user (for restore UI).
+	GetDeletedServers(ctx context.Context, userID string) ([]models.DeletedServerInfo, error)
 	JoinServer(ctx context.Context, userID, inviteCode string) (*models.Server, error)
 	LeaveServer(ctx context.Context, serverID, userID string) error
 	GetLiveKitSettings(ctx context.Context, serverID string) (*LiveKitSettings, error)
@@ -392,8 +403,10 @@ func (s *serverService) UpdateIcon(ctx context.Context, serverID, iconURL string
 	return server, nil
 }
 
+// DeleteServer soft-deletes the server. Files, LiveKit instance, and member roles
+// are preserved for restore. Worker hard-deletes after 30-day TTL (Phase 16 P3).
 func (s *serverService) DeleteServer(ctx context.Context, serverID, userID string) error {
-	server, err := s.serverRepo.GetByID(ctx, serverID)
+	server, err := s.serverRepo.GetActiveByID(ctx, serverID)
 	if err != nil {
 		return err
 	}
@@ -402,28 +415,141 @@ func (s *serverService) DeleteServer(ctx context.Context, serverID, userID strin
 		return fmt.Errorf("%w: only the server owner can delete the server", pkg.ErrForbidden)
 	}
 
-	// Phase 1: collect file refs (read-only, no side effects)
-	plan, err := s.fileCleanup.CollectServerFiles(ctx, serverID)
-	if err != nil {
-		return fmt.Errorf("failed to collect server files: %w", err)
+	if err := s.serverRepo.SoftDelete(ctx, serverID, userID, false); err != nil {
+		return fmt.Errorf("failed to soft delete server: %w", err)
 	}
 
-	// Broadcast before delete (server_members are needed for BroadcastToServer)
+	// Members hide the server in their UI on this event.
 	s.hub.BroadcastToServer(serverID, ws.Event{
 		Op:   ws.OpServerDelete,
 		Data: map[string]string{"id": serverID},
 	})
+
+	log.Printf("[server] soft-deleted server %s by owner %s", serverID, userID)
+	return nil
+}
+
+// RestoreServer un-soft-deletes a server. Owner can only restore servers they soft-deleted
+// themselves; admin-deleted servers (deleted_by_admin=1) are not restorable by the owner.
+func (s *serverService) RestoreServer(ctx context.Context, serverID, userID string) error {
+	server, err := s.serverRepo.GetByID(ctx, serverID)
+	if err != nil {
+		return err
+	}
+
+	if server.OwnerID != userID {
+		return fmt.Errorf("%w: only the server owner can restore the server", pkg.ErrForbidden)
+	}
+
+	if server.DeletedAt == nil {
+		return fmt.Errorf("%w: server is not deleted", pkg.ErrBadRequest)
+	}
+
+	if server.DeletedByAdmin {
+		return fmt.Errorf("%w: server was deleted by an admin and cannot be restored by the owner", pkg.ErrForbidden)
+	}
+
+	if err := s.serverRepo.Restore(ctx, serverID); err != nil {
+		return fmt.Errorf("failed to restore server: %w", err)
+	}
+
+	s.broadcastServerRestore(ctx, serverID)
+
+	log.Printf("[server] restored server %s by owner %s", serverID, userID)
+	return nil
+}
+
+// broadcastServerRestore notifies all server members that a soft-deleted server
+// is back. We can't use BroadcastToServer alone because members who reconnected
+// while the server was soft-deleted are NOT in hub.serverClients[serverID]
+// (their client.serverIDs filter excluded the deleted server on connect).
+// Approach: re-subscribe each online member via AddClientServerID, then send
+// the event via BroadcastToUser so offline members are silent no-ops.
+func (s *serverService) broadcastServerRestore(ctx context.Context, serverID string) {
+	restored, err := s.serverRepo.GetActiveByID(ctx, serverID)
+	if err != nil || restored == nil {
+		return
+	}
+
+	memberIDs, err := s.serverRepo.GetMemberUserIDs(ctx, serverID)
+	if err != nil {
+		log.Printf("[server] failed to list members for restore broadcast %s: %v", serverID, err)
+		return
+	}
+
+	event := ws.Event{Op: ws.OpServerRestore, Data: restored}
+	for _, uid := range memberIDs {
+		// Re-subscribe online members to this server's broadcast index.
+		// AddClientServerID is a no-op for offline users.
+		s.hub.AddClientServerID(uid, serverID)
+		s.hub.BroadcastToUser(uid, event)
+	}
+}
+
+// HardDeleteServer permanently deletes a soft-deleted server (skip 30-day TTL).
+// Files cleaned, LiveKit instance released, DB cascade removes channels/messages/etc.
+func (s *serverService) HardDeleteServer(ctx context.Context, serverID, userID string) error {
+	// Use GetByID — server must be soft-deleted to be hard-deletable by owner
+	server, err := s.serverRepo.GetByID(ctx, serverID)
+	if err != nil {
+		return err
+	}
+
+	if server.OwnerID != userID {
+		return fmt.Errorf("%w: only the server owner can permanently delete the server", pkg.ErrForbidden)
+	}
+
+	if server.DeletedAt == nil {
+		return fmt.Errorf("%w: server must be soft-deleted before permanent deletion", pkg.ErrBadRequest)
+	}
+
+	if server.DeletedByAdmin {
+		return fmt.Errorf("%w: admin-deleted server cannot be permanently deleted by owner", pkg.ErrForbidden)
+	}
+
+	// Phase 1: collect file refs (also collects LiveKit instance for cleanup)
+	plan, err := s.fileCleanup.CollectServerFiles(ctx, serverID)
+	if err != nil {
+		return fmt.Errorf("failed to collect server files: %w", err)
+	}
 
 	// Phase 2: DB delete (CASCADE removes channels, messages, attachments, etc.)
 	if err := s.serverRepo.Delete(ctx, serverID); err != nil {
 		return fmt.Errorf("failed to delete server: %w", err)
 	}
 
-	// Phase 3: side effects AFTER successful DB delete (files, quota, LiveKit)
+	// Phase 3: file cleanup + LiveKit cleanup (server_delete WS event already
+	// broadcast on the original soft-delete; no need to re-broadcast).
 	s.fileCleanup.Execute(plan)
 
-	log.Printf("[server] deleted server %s by user %s", serverID, userID)
+	log.Printf("[server] hard-deleted server %s by owner %s", serverID, userID)
 	return nil
+}
+
+// GetDeletedServers returns soft-deleted servers owned by this user with countdown info.
+func (s *serverService) GetDeletedServers(ctx context.Context, userID string) ([]models.DeletedServerInfo, error) {
+	servers, err := s.serverRepo.ListDeletedByOwner(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list deleted servers: %w", err)
+	}
+
+	result := make([]models.DeletedServerInfo, 0, len(servers))
+	for _, srv := range servers {
+		iconURL := s.urlSigner.SignURLPtr(srv.IconURL)
+		var deletedAt time.Time
+		if srv.DeletedAt != nil {
+			deletedAt = *srv.DeletedAt
+		}
+		result = append(result, models.DeletedServerInfo{
+			ID:                srv.ID,
+			Name:              srv.Name,
+			IconURL:           iconURL,
+			DeletedAt:         deletedAt,
+			DeletedByAdmin:    srv.DeletedByAdmin,
+			PermanentDeleteAt: deletedAt.AddDate(0, 0, models.SoftDeleteTTLDays),
+		})
+	}
+	return result, nil
 }
 
 // JoinServer joins a server via invite code.
@@ -434,6 +560,12 @@ func (s *serverService) JoinServer(ctx context.Context, userID, inviteCode strin
 	}
 
 	serverID := invite.ServerID
+
+	// Reject join attempts on soft-deleted servers — invite redeem must not
+	// dirty membership/usage counters or restore-time member lists.
+	if _, err := s.serverRepo.GetActiveByID(ctx, serverID); err != nil {
+		return nil, fmt.Errorf("%w: server is no longer available", pkg.ErrNotFound)
+	}
 
 	isMember, err := s.serverRepo.IsMember(ctx, serverID, userID)
 	if err != nil {
@@ -457,7 +589,7 @@ func (s *serverService) JoinServer(ctx context.Context, userID, inviteCode strin
 		}
 	}
 
-	server, err := s.serverRepo.GetByID(ctx, serverID)
+	server, err := s.serverRepo.GetActiveByID(ctx, serverID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get server: %w", err)
 	}

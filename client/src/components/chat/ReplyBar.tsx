@@ -2,6 +2,7 @@
 
 import { useTranslation } from "react-i18next";
 import type { ChatMessage } from "../../hooks/useChatContext";
+import { authorDisplayName } from "../../utils/deletedUser";
 
 type ReplyBarProps = {
   message: ChatMessage;
@@ -11,8 +12,7 @@ type ReplyBarProps = {
 function ReplyBar({ message, onCancel }: ReplyBarProps) {
   const { t } = useTranslation("chat");
 
-  const authorName =
-    message.author?.display_name ?? message.author?.username ?? t("unknownUser");
+  const authorName = authorDisplayName(message.author, t("unknownUser"));
 
   /** Content preview — shows "noContent" for file-only messages */
   const previewText = message.content ?? t("noContent");

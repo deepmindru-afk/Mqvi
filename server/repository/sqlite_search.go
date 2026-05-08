@@ -68,7 +68,7 @@ func (r *sqliteSearchRepo) Search(ctx context.Context, query string, serverID st
 	if channelID != nil {
 		dataQuery = `
 			SELECT m.id, m.channel_id, m.user_id, m.content, m.edited_at, m.created_at,
-			       u.id, u.username, u.display_name, u.avatar_url, u.status
+			       u.id, u.username, u.display_name, u.avatar_url, u.status, u.deleted_at, u.is_hard_deleted
 			FROM messages_fts fts
 			JOIN messages m ON m.rowid = fts.rowid
 			JOIN channels ch ON ch.id = m.channel_id
@@ -80,7 +80,7 @@ func (r *sqliteSearchRepo) Search(ctx context.Context, query string, serverID st
 	} else {
 		dataQuery = `
 			SELECT m.id, m.channel_id, m.user_id, m.content, m.edited_at, m.created_at,
-			       u.id, u.username, u.display_name, u.avatar_url, u.status
+			       u.id, u.username, u.display_name, u.avatar_url, u.status, u.deleted_at, u.is_hard_deleted
 			FROM messages_fts fts
 			JOIN messages m ON m.rowid = fts.rowid
 			JOIN channels ch ON ch.id = m.channel_id
@@ -105,7 +105,7 @@ func (r *sqliteSearchRepo) Search(ctx context.Context, query string, serverID st
 
 		if err := rows.Scan(
 			&msg.ID, &msg.ChannelID, &msg.UserID, &msg.Content, &msg.EditedAt, &msg.CreatedAt,
-			&authorID, &author.Username, &author.DisplayName, &author.AvatarURL, &author.Status,
+			&authorID, &author.Username, &author.DisplayName, &author.AvatarURL, &author.Status, &author.DeletedAt, &author.IsHardDeleted,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan search result row: %w", err)
 		}

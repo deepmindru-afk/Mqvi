@@ -6,6 +6,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 
@@ -66,6 +67,15 @@ func (s *dmService) SendMessage(ctx context.Context, userID, channelID string, r
 	otherUserID := channel.User1ID
 	if channel.User1ID == userID {
 		otherUserID = channel.User2ID
+	}
+
+	// Reject sending to a deleted/tombstone recipient — DM channel may still exist
+	// but the other party is gone.
+	if _, err := s.userRepo.GetActiveByID(ctx, otherUserID); err != nil {
+		if errors.Is(err, pkg.ErrNotFound) {
+			return nil, fmt.Errorf("%w: recipient is no longer available", pkg.ErrNotFound)
+		}
+		return nil, fmt.Errorf("failed to look up recipient: %w", err)
 	}
 
 	sender, _ := s.userRepo.GetByID(ctx, userID)

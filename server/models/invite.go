@@ -8,7 +8,9 @@ import (
 type Invite struct {
 	Code      string     `json:"code"`
 	ServerID  string     `json:"server_id"`
-	CreatedBy string     `json:"created_by"`
+	// CreatedBy is nullable: ON DELETE SET NULL fires when the creating user is deleted
+	// (001_init.sql) — invite stays usable, creator attribution lost.
+	CreatedBy *string    `json:"created_by"`
 	MaxUses   int        `json:"max_uses"`   // 0 = unlimited
 	Uses      int        `json:"uses"`
 	ExpiresAt *time.Time `json:"expires_at"` // nil = never expires

@@ -78,7 +78,7 @@ func (r *sqliteDMRepo) GetChannelByID(ctx context.Context, id string) (*models.D
 func (r *sqliteDMRepo) ListChannels(ctx context.Context, userID string) ([]models.DMChannelWithUser, error) {
 	query := `
 		SELECT dc.id, dc.e2ee_enabled, dc.status, dc.initiated_by, dc.created_at, dc.last_message_at,
-			u.id, u.username, u.display_name, u.avatar_url, u.status,
+			u.id, u.username, u.display_name, u.avatar_url, u.status, u.deleted_at, u.is_hard_deleted,
 			COALESCE(ds.is_pinned, 0),
 			CASE WHEN ds.muted_until IS NOT NULL AND ds.muted_until > datetime('now') THEN 1 ELSE 0 END
 		FROM dm_channels dc
@@ -108,7 +108,7 @@ func (r *sqliteDMRepo) ListChannels(ctx context.Context, userID string) ([]model
 
 		if err := rows.Scan(
 			&ch.ID, &ch.E2EEEnabled, &ch.Status, &initiatedBy, &ch.CreatedAt, &lastMsgAt,
-			&user.ID, &user.Username, &displayName, &avatarURL, &user.Status,
+			&user.ID, &user.Username, &displayName, &avatarURL, &user.Status, &user.DeletedAt, &user.IsHardDeleted,
 			&isPinned, &isMuted,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan DM channel: %w", err)
@@ -236,9 +236,9 @@ func (r *sqliteDMRepo) GetMessages(ctx context.Context, channelID string, before
 			SELECT m.id, m.dm_channel_id, m.user_id, m.content, m.edited_at, m.created_at,
 			       m.reply_to_id, m.is_pinned,
 			       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata,
-			       u.id, u.username, u.display_name, u.avatar_url, u.status,
+			       u.id, u.username, u.display_name, u.avatar_url, u.status, u.deleted_at, u.is_hard_deleted,
 			       rm.id, rm.content,
-			       ru.id, ru.username, ru.display_name, ru.avatar_url
+			       ru.id, ru.username, ru.display_name, ru.avatar_url, ru.deleted_at, ru.is_hard_deleted
 			FROM dm_messages m
 			LEFT JOIN users u ON m.user_id = u.id
 			LEFT JOIN dm_messages rm ON m.reply_to_id = rm.id
@@ -252,9 +252,9 @@ func (r *sqliteDMRepo) GetMessages(ctx context.Context, channelID string, before
 			SELECT m.id, m.dm_channel_id, m.user_id, m.content, m.edited_at, m.created_at,
 			       m.reply_to_id, m.is_pinned,
 			       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata,
-			       u.id, u.username, u.display_name, u.avatar_url, u.status,
+			       u.id, u.username, u.display_name, u.avatar_url, u.status, u.deleted_at, u.is_hard_deleted,
 			       rm.id, rm.content,
-			       ru.id, ru.username, ru.display_name, ru.avatar_url
+			       ru.id, ru.username, ru.display_name, ru.avatar_url, ru.deleted_at, ru.is_hard_deleted
 			FROM dm_messages m
 			LEFT JOIN users u ON m.user_id = u.id
 			LEFT JOIN dm_messages rm ON m.reply_to_id = rm.id
@@ -296,9 +296,9 @@ func (r *sqliteDMRepo) GetMessageByID(ctx context.Context, id string) (*models.D
 		SELECT m.id, m.dm_channel_id, m.user_id, m.content, m.edited_at, m.created_at,
 		       m.reply_to_id, m.is_pinned,
 		       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata,
-		       u.id, u.username, u.display_name, u.avatar_url, u.status,
+		       u.id, u.username, u.display_name, u.avatar_url, u.status, u.deleted_at, u.is_hard_deleted,
 		       rm.id, rm.content,
-		       ru.id, ru.username, ru.display_name, ru.avatar_url
+		       ru.id, ru.username, ru.display_name, ru.avatar_url, ru.deleted_at, ru.is_hard_deleted
 		FROM dm_messages m
 		LEFT JOIN users u ON m.user_id = u.id
 		LEFT JOIN dm_messages rm ON m.reply_to_id = rm.id
@@ -315,14 +315,16 @@ func (r *sqliteDMRepo) GetMessageByID(ctx context.Context, id string) (*models.D
 
 	var refMsgID, refMsgContent sql.NullString
 	var refAuthorID, refAuthorUsername, refAuthorDisplayName, refAuthorAvatarURL sql.NullString
+	var refAuthorDeletedAt sql.NullTime
+	var refAuthorIsHardDeleted sql.NullBool
 
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&msg.ID, &msg.DMChannelID, &msg.UserID, &content, &editedAt, &msg.CreatedAt,
 		&msg.ReplyToID, &isPinned,
 		&msg.EncryptionVersion, &msg.Ciphertext, &msg.SenderDeviceID, &msg.E2EEMetadata,
-		&authorID, &author.Username, &displayName, &avatarURL, &author.Status,
+		&authorID, &author.Username, &displayName, &avatarURL, &author.Status, &author.DeletedAt, &author.IsHardDeleted,
 		&refMsgID, &refMsgContent,
-		&refAuthorID, &refAuthorUsername, &refAuthorDisplayName, &refAuthorAvatarURL,
+		&refAuthorID, &refAuthorUsername, &refAuthorDisplayName, &refAuthorAvatarURL, &refAuthorDeletedAt, &refAuthorIsHardDeleted,
 	)
 
 	if err == sql.ErrNoRows {
@@ -353,6 +355,7 @@ func (r *sqliteDMRepo) GetMessageByID(ctx context.Context, id string) (*models.D
 	msg.ReferencedMessage = buildMessageReference(
 		msg.ReplyToID, refMsgID, refMsgContent,
 		refAuthorID, refAuthorUsername, refAuthorDisplayName, refAuthorAvatarURL,
+		refAuthorDeletedAt, refAuthorIsHardDeleted,
 	)
 
 	return &msg, nil
@@ -573,9 +576,9 @@ func (r *sqliteDMRepo) GetPinnedMessages(ctx context.Context, channelID string) 
 		SELECT m.id, m.dm_channel_id, m.user_id, m.content, m.edited_at, m.created_at,
 		       m.reply_to_id, m.is_pinned,
 		       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata,
-		       u.id, u.username, u.display_name, u.avatar_url, u.status,
+		       u.id, u.username, u.display_name, u.avatar_url, u.status, u.deleted_at, u.is_hard_deleted,
 		       rm.id, rm.content,
-		       ru.id, ru.username, ru.display_name, ru.avatar_url
+		       ru.id, ru.username, ru.display_name, ru.avatar_url, ru.deleted_at, ru.is_hard_deleted
 		FROM dm_messages m
 		LEFT JOIN users u ON m.user_id = u.id
 		LEFT JOIN dm_messages rm ON m.reply_to_id = rm.id
@@ -705,9 +708,9 @@ func (r *sqliteDMRepo) SearchMessages(ctx context.Context, channelID string, sea
 		SELECT m.id, m.dm_channel_id, m.user_id, m.content, m.edited_at, m.created_at,
 		       m.reply_to_id, m.is_pinned,
 		       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata,
-		       u.id, u.username, u.display_name, u.avatar_url, u.status,
+		       u.id, u.username, u.display_name, u.avatar_url, u.status, u.deleted_at, u.is_hard_deleted,
 		       rm.id, rm.content,
-		       ru.id, ru.username, ru.display_name, ru.avatar_url
+		       ru.id, ru.username, ru.display_name, ru.avatar_url, ru.deleted_at, ru.is_hard_deleted
 		FROM dm_messages m
 		JOIN dm_messages_fts fts ON fts.rowid = m.rowid
 		LEFT JOIN users u ON m.user_id = u.id
@@ -756,14 +759,16 @@ func scanDMMessageRow(rows *sql.Rows) (*models.DMMessage, error) {
 
 	var refMsgID, refMsgContent sql.NullString
 	var refAuthorID, refAuthorUsername, refAuthorDisplayName, refAuthorAvatarURL sql.NullString
+	var refAuthorDeletedAt sql.NullTime
+	var refAuthorIsHardDeleted sql.NullBool
 
 	if err := rows.Scan(
 		&msg.ID, &msg.DMChannelID, &msg.UserID, &content, &editedAt, &msg.CreatedAt,
 		&msg.ReplyToID, &isPinned,
 		&msg.EncryptionVersion, &msg.Ciphertext, &msg.SenderDeviceID, &msg.E2EEMetadata,
-		&authorID, &author.Username, &displayName, &avatarURL, &author.Status,
+		&authorID, &author.Username, &displayName, &avatarURL, &author.Status, &author.DeletedAt, &author.IsHardDeleted,
 		&refMsgID, &refMsgContent,
-		&refAuthorID, &refAuthorUsername, &refAuthorDisplayName, &refAuthorAvatarURL,
+		&refAuthorID, &refAuthorUsername, &refAuthorDisplayName, &refAuthorAvatarURL, &refAuthorDeletedAt, &refAuthorIsHardDeleted,
 	); err != nil {
 		return nil, fmt.Errorf("failed to scan DM message: %w", err)
 	}
@@ -789,6 +794,7 @@ func scanDMMessageRow(rows *sql.Rows) (*models.DMMessage, error) {
 	msg.ReferencedMessage = buildMessageReference(
 		msg.ReplyToID, refMsgID, refMsgContent,
 		refAuthorID, refAuthorUsername, refAuthorDisplayName, refAuthorAvatarURL,
+		refAuthorDeletedAt, refAuthorIsHardDeleted,
 	)
 
 	return &msg, nil

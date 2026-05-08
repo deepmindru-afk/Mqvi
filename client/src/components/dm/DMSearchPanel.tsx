@@ -6,6 +6,7 @@ import { useDMStore } from "../../stores/dmStore";
 import { useE2EEStore } from "../../stores/e2eeStore";
 import { searchCachedDMMessages } from "../../crypto/keyStorage";
 import Avatar from "../shared/Avatar";
+import { authorDisplayName, authorAvatarURL } from "../../utils/deletedUser";
 import type { DMMessage } from "../../types";
 
 /** Debounce delay (ms) */
@@ -196,7 +197,8 @@ function DMSearchPanel({ channelId, onClose }: DMSearchPanelProps) {
               {t("searchResultCount", { count: results.totalCount })}
             </p>
             {results.messages.map((msg) => {
-              const displayName = msg.author?.display_name ?? msg.author?.username ?? "Unknown";
+              const displayName = authorDisplayName(msg.author);
+              const avatarUrl = authorAvatarURL(msg.author);
 
               return (
                 <div
@@ -207,7 +209,7 @@ function DMSearchPanel({ channelId, onClose }: DMSearchPanelProps) {
                   <div className="search-result-header">
                     <Avatar
                       name={displayName}
-                      avatarUrl={msg.author?.avatar_url ?? undefined}
+                      avatarUrl={avatarUrl}
                       size={18}
                     />
                     <span className="search-result-author">{displayName}</span>

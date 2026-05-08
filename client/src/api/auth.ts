@@ -93,3 +93,33 @@ export async function changeEmail(password: string, newEmail: string) {
     },
   );
 }
+
+/**
+ * Soft-deletes the current account. Recoverable for 30 days via login + restore.
+ * Server clears sessions and disconnects WS.
+ */
+export async function softDeleteSelf(password: string) {
+  return apiClient<{ message: string }>("/users/me", {
+    method: "DELETE",
+    body: { password },
+  });
+}
+
+/**
+ * Restores a soft-deleted account and returns auth tokens (immediate login).
+ * Tombstones (admin-permanent-deleted) are not recoverable.
+ */
+export async function restoreAccount(username: string, password: string) {
+  return apiClient<AuthTokens>("/auth/restore", {
+    method: "POST",
+    body: { username, password },
+  });
+}
+
+/** Login error payload returned when account is soft-deleted. */
+export interface AccountDeletedResponse {
+  error: "account_deleted";
+  username: string;
+  deleted_at: string;
+  permanent_delete_at: string;
+}

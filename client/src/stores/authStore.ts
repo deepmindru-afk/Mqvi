@@ -21,15 +21,32 @@ function syncLanguageFromUser(user: User): void {
   }
 }
 
+/**
+ * AccountDeletedInfo — populated when login is attempted on a soft-deleted account.
+ * Frontend reads this to show the recovery modal.
+ */
+export type AccountDeletedInfo = {
+  username: string;
+  deletedAt: string;
+  permanentDeleteAt: string;
+  /** The password the user just typed in the login form, reused for restore. */
+  password: string;
+};
+
 type AuthState = {
   user: User | null;
   isLoading: boolean;
   error: string | null;
   isInitialized: boolean;
+  accountDeleted: AccountDeletedInfo | null;
 
   // ─── Actions ───
   register: (username: string, password: string, displayName?: string, email?: string) => Promise<boolean>;
   login: (username: string, password: string) => Promise<boolean>;
+  /** Restore a soft-deleted account using captured username + password. Returns true on success. */
+  restoreAccount: () => Promise<boolean>;
+  /** Dismiss the account-deleted recovery prompt without restoring. */
+  cancelAccountDeleted: () => void;
   logout: () => Promise<void>;
   initialize: () => Promise<void>;
   clearError: () => void;
@@ -45,11 +62,12 @@ type AuthState = {
   setManualStatus: (status: UserStatus) => void;
 };
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isLoading: false,
   error: null,
   isInitialized: false,
+  accountDeleted: null,
   manualStatus: (localStorage.getItem(MANUAL_STATUS_KEY) as UserStatus) || "online",
 
   register: async (username, password, displayName, email) => {
@@ -75,7 +93,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   login: async (username, password) => {
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, accountDeleted: null });
 
     const res = await authApi.login({ username, password });
 
@@ -88,9 +106,51 @@ export const useAuthStore = create<AuthState>((set) => ({
       return true;
     }
 
+    // Soft-deleted account: backend returns { success: false, error: "account_deleted",
+    // data: { username, deleted_at, permanent_delete_at } } with HTTP 403.
+    if (res.error === "account_deleted" && res.data) {
+      const info = res.data as unknown as {
+        username: string;
+        deleted_at: string;
+        permanent_delete_at: string;
+      };
+      set({
+        accountDeleted: {
+          username: info.username,
+          deletedAt: info.deleted_at,
+          permanentDeleteAt: info.permanent_delete_at,
+          password,
+        },
+        isLoading: false,
+        error: null,
+      });
+      return false;
+    }
+
     set({ error: res.error ?? "Login failed", isLoading: false });
     return false;
   },
+
+  restoreAccount: async () => {
+    const info = get().accountDeleted;
+    if (!info) return false;
+
+    set({ isLoading: true, error: null });
+    const res = await authApi.restoreAccount(info.username, info.password);
+
+    if (res.success && res.data) {
+      setTokens(res.data.access_token, res.data.refresh_token);
+      syncLanguageFromUser(res.data.user);
+      set({ user: res.data.user, isLoading: false, accountDeleted: null });
+      usePreferencesStore.getState().fetchAndApply();
+      return true;
+    }
+
+    set({ error: res.error ?? "Restore failed", isLoading: false });
+    return false;
+  },
+
+  cancelAccountDeleted: () => set({ accountDeleted: null }),
 
   logout: async () => {
     // Leave voice channel first

@@ -43,13 +43,16 @@ func (r *sqliteServerRepo) Create(ctx context.Context, server *models.Server) er
 
 func (r *sqliteServerRepo) GetByID(ctx context.Context, serverID string) (*models.Server, error) {
 	query := `
-		SELECT id, name, icon_url, owner_id, invite_required, e2ee_enabled, livekit_instance_id, afk_timeout_minutes, created_at
+		SELECT id, name, icon_url, owner_id, invite_required, e2ee_enabled, livekit_instance_id, afk_timeout_minutes,
+			deleted_at, deleted_by, deleted_by_admin, created_at
 		FROM servers WHERE id = ?`
 
 	s := &models.Server{}
 	err := r.db.QueryRowContext(ctx, query, serverID).Scan(
 		&s.ID, &s.Name, &s.IconURL, &s.OwnerID,
-		&s.InviteRequired, &s.E2EEEnabled, &s.LiveKitInstanceID, &s.AFKTimeoutMinutes, &s.CreatedAt,
+		&s.InviteRequired, &s.E2EEEnabled, &s.LiveKitInstanceID, &s.AFKTimeoutMinutes,
+		&s.DeletedAt, &s.DeletedBy, &s.DeletedByAdmin,
+		&s.CreatedAt,
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {
@@ -103,15 +106,158 @@ func (r *sqliteServerRepo) Delete(ctx context.Context, serverID string) error {
 	return nil
 }
 
+func (r *sqliteServerRepo) GetActiveByID(ctx context.Context, serverID string) (*models.Server, error) {
+	query := `
+		SELECT id, name, icon_url, owner_id, invite_required, e2ee_enabled, livekit_instance_id, afk_timeout_minutes,
+			deleted_at, deleted_by, deleted_by_admin, created_at
+		FROM servers WHERE id = ? AND deleted_at IS NULL`
+
+	s := &models.Server{}
+	err := r.db.QueryRowContext(ctx, query, serverID).Scan(
+		&s.ID, &s.Name, &s.IconURL, &s.OwnerID,
+		&s.InviteRequired, &s.E2EEEnabled, &s.LiveKitInstanceID, &s.AFKTimeoutMinutes,
+		&s.DeletedAt, &s.DeletedBy, &s.DeletedByAdmin,
+		&s.CreatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, pkg.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active server: %w", err)
+	}
+	return s, nil
+}
+
+func (r *sqliteServerRepo) SoftDelete(ctx context.Context, serverID, deletedBy string, byAdmin bool) error {
+	byAdminInt := 0
+	if byAdmin {
+		byAdminInt = 1
+	}
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE servers SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ?, deleted_by_admin = ?
+		 WHERE id = ? AND deleted_at IS NULL`,
+		deletedBy, byAdminInt, serverID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to soft delete server: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if affected == 0 {
+		return pkg.ErrNotFound
+	}
+	return nil
+}
+
+func (r *sqliteServerRepo) Restore(ctx context.Context, serverID string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE servers SET deleted_at = NULL, deleted_by = NULL, deleted_by_admin = 0
+		 WHERE id = ? AND deleted_at IS NOT NULL`,
+		serverID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to restore server: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if affected == 0 {
+		return pkg.ErrNotFound
+	}
+	return nil
+}
+
+func (r *sqliteServerRepo) ListDeletedByOwner(ctx context.Context, ownerID string) ([]models.Server, error) {
+	query := `
+		SELECT id, name, icon_url, owner_id, invite_required, e2ee_enabled, livekit_instance_id, afk_timeout_minutes,
+			deleted_at, deleted_by, deleted_by_admin, created_at
+		FROM servers WHERE owner_id = ? AND deleted_at IS NOT NULL
+		ORDER BY deleted_at DESC`
+	rows, err := r.db.QueryContext(ctx, query, ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list deleted servers: %w", err)
+	}
+	defer rows.Close()
+
+	var servers []models.Server
+	for rows.Next() {
+		var s models.Server
+		if err := rows.Scan(
+			&s.ID, &s.Name, &s.IconURL, &s.OwnerID,
+			&s.InviteRequired, &s.E2EEEnabled, &s.LiveKitInstanceID, &s.AFKTimeoutMinutes,
+			&s.DeletedAt, &s.DeletedBy, &s.DeletedByAdmin,
+			&s.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan deleted server: %w", err)
+		}
+		servers = append(servers, s)
+	}
+	return servers, rows.Err()
+}
+
+func (r *sqliteServerRepo) ListActiveServerIDsByOwner(ctx context.Context, ownerID string) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id FROM servers WHERE owner_id = ? AND deleted_at IS NULL`, ownerID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list owned server ids: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan owned server id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (r *sqliteServerRepo) ListSoftDeletedExpired(ctx context.Context, ttlDays int) ([]models.Server, error) {
+	query := `
+		SELECT id, name, icon_url, owner_id, invite_required, e2ee_enabled, livekit_instance_id, afk_timeout_minutes,
+			deleted_at, deleted_by, deleted_by_admin, created_at
+		FROM servers
+		WHERE deleted_at IS NOT NULL
+		  AND deleted_at < datetime('now', ?)
+		ORDER BY deleted_at ASC`
+	rows, err := r.db.QueryContext(ctx, query, fmt.Sprintf("-%d days", ttlDays))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list expired soft-deleted servers: %w", err)
+	}
+	defer rows.Close()
+
+	var servers []models.Server
+	for rows.Next() {
+		var s models.Server
+		if err := rows.Scan(
+			&s.ID, &s.Name, &s.IconURL, &s.OwnerID,
+			&s.InviteRequired, &s.E2EEEnabled, &s.LiveKitInstanceID, &s.AFKTimeoutMinutes,
+			&s.DeletedAt, &s.DeletedBy, &s.DeletedByAdmin,
+			&s.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan expired server: %w", err)
+		}
+		servers = append(servers, s)
+	}
+	return servers, rows.Err()
+}
+
 // ─── Membership ───
 
 func (r *sqliteServerRepo) GetUserServers(ctx context.Context, userID string) ([]models.ServerListItem, error) {
 	// Sorted by user's custom position, with joined_at as tiebreaker.
+	// Soft-deleted servers excluded — members must not see them.
 	query := `
 		SELECT s.id, s.name, s.icon_url
 		FROM servers s
 		INNER JOIN server_members sm ON s.id = sm.server_id
-		WHERE sm.user_id = ?
+		WHERE sm.user_id = ? AND s.deleted_at IS NULL
 		ORDER BY sm.position ASC, sm.joined_at ASC`
 
 	rows, err := r.db.QueryContext(ctx, query, userID)
@@ -206,6 +352,26 @@ func (r *sqliteServerRepo) GetMemberCount(ctx context.Context, serverID string) 
 	return count, nil
 }
 
+func (r *sqliteServerRepo) GetMemberUserIDs(ctx context.Context, serverID string) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT user_id FROM server_members WHERE server_id = ?`, serverID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query server member ids: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan server member id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (r *sqliteServerRepo) UpdateMemberPositions(ctx context.Context, userID string, items []models.PositionUpdate) error {
 	sqlDB, ok := r.db.(*sql.DB)
 	if !ok {
@@ -281,7 +447,9 @@ func (r *sqliteServerRepo) ListAllWithStats(ctx context.Context) ([]models.Admin
 				 INNER JOIN channels c4 ON m3.channel_id = c4.id
 				 WHERE c4.server_id = s.id), ''),
 				COALESCE(s.last_voice_activity, '')
-			)
+			),
+			s.deleted_at,
+			s.deleted_by_admin
 		FROM servers s
 		LEFT JOIN users u ON s.owner_id = u.id
 		LEFT JOIN livekit_instances li ON s.livekit_instance_id = li.id
@@ -301,6 +469,7 @@ func (r *sqliteServerRepo) ListAllWithStats(ctx context.Context) ([]models.Admin
 			&s.CreatedAt, &s.IsPlatformManaged, &s.LiveKitInstanceID,
 			&s.MemberCount, &s.ChannelCount, &s.MessageCount,
 			&s.StorageMB, &s.LastActivity,
+			&s.DeletedAt, &s.DeletedByAdmin,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan admin server row: %w", err)
 		}
@@ -324,7 +493,11 @@ func (r *sqliteServerRepo) UpdateLastVoiceActivity(ctx context.Context, serverID
 }
 
 func (r *sqliteServerRepo) GetMemberServerIDs(ctx context.Context, userID string) ([]string, error) {
-	query := `SELECT server_id FROM server_members WHERE user_id = ?`
+	// Soft-deleted servers excluded — members must not be subscribed to them.
+	query := `
+		SELECT sm.server_id FROM server_members sm
+		INNER JOIN servers s ON sm.server_id = s.id
+		WHERE sm.user_id = ? AND s.deleted_at IS NULL`
 
 	rows, err := r.db.QueryContext(ctx, query, userID)
 	if err != nil {

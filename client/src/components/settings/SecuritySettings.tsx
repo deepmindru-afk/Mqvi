@@ -1,16 +1,64 @@
-/** SecuritySettings — Email change/remove (with password verification) and password change. */
+/** SecuritySettings — Email change/remove (with password verification), password change,
+ *  deleted servers list, and self-account-delete. */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { useToastStore } from "../../stores/toastStore";
 import { useAuthStore } from "../../stores/authStore";
 import * as authApi from "../../api/auth";
+import * as serversApi from "../../api/servers";
+import type { DeletedServerInfo } from "../../api/servers";
+
+function formatDate(iso: string, locale: string): string {
+  try {
+    return new Date(iso).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
+  } catch {
+    return iso;
+  }
+}
+
+function daysUntil(iso: string): number {
+  try {
+    const ms = new Date(iso).getTime() - Date.now();
+    return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+  } catch {
+    return 0;
+  }
+}
 
 function SecuritySettings() {
-  const { t } = useTranslation("settings");
+  const { t, i18n } = useTranslation("settings");
   const addToast = useToastStore((s) => s.addToast);
   const user = useAuthStore((s) => s.user);
   const updateUser = useAuthStore((s) => s.updateUser);
+  const logout = useAuthStore((s) => s.logout);
+  const navigate = useNavigate();
+
+  // ─── Deleted Servers State ───
+  const [deletedServers, setDeletedServers] = useState<DeletedServerInfo[]>([]);
+  const [isLoadingDeleted, setIsLoadingDeleted] = useState(true);
+  const [actioningServer, setActioningServer] = useState<string | null>(null);
+
+  // ─── Delete Account State ───
+  const [deletePassword, setDeletePassword] = useState("");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await serversApi.getDeletedServers();
+      if (cancelled) return;
+      if (res.success && res.data) {
+        setDeletedServers(res.data);
+      }
+      setIsLoadingDeleted(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ─── Email State ───
   const [newEmail, setNewEmail] = useState("");
@@ -255,6 +303,185 @@ function SecuritySettings() {
           {isSaving ? t("changePassword") + "..." : t("changePassword")}
         </button>
       </div>
+
+      {/* ═══ Separator ═══ */}
+      <div className="settings-divider" />
+
+      {/* ═══ Deleted Servers Section ═══ */}
+      <h3 className="settings-section-subtitle">{t("deletedServers")}</h3>
+      <p className="settings-hint">{t("deletedServersDescription")}</p>
+
+      {isLoadingDeleted ? (
+        <p className="settings-value">…</p>
+      ) : deletedServers.length === 0 ? (
+        <p className="settings-value">{t("deletedServersEmpty")}</p>
+      ) : (
+        <ul className="deleted-server-list" style={{ listStyle: "none", padding: 0, margin: 0 }}>
+          {deletedServers.map((srv) => {
+            const remaining = daysUntil(srv.permanent_delete_at);
+            const isAdminDeleted = srv.deleted_by_admin;
+            const busy = actioningServer === srv.id;
+            return (
+              <li
+                key={srv.id}
+                className="settings-field"
+                style={{ display: "flex", alignItems: "center", gap: 12 }}
+              >
+                {srv.icon_url ? (
+                  <img
+                    src={srv.icon_url}
+                    alt=""
+                    style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 8,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: "var(--color-background-tertiary)",
+                    }}
+                    aria-hidden
+                  >
+                    {srv.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600 }}>{srv.name}</div>
+                  <div className="settings-hint" style={{ marginTop: 2 }}>
+                    {isAdminDeleted ? (
+                      <span>{t("deletedByAdminLabel")} · {formatDate(srv.deleted_at, i18n.language)}</span>
+                    ) : (
+                      <span>
+                        {t("permanentDeleteIn", { days: remaining })} · {formatDate(srv.deleted_at, i18n.language)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {!isAdminDeleted && (
+                    <button
+                      className="settings-btn"
+                      disabled={busy}
+                      onClick={async () => {
+                        setActioningServer(srv.id);
+                        const res = await serversApi.restoreServer(srv.id);
+                        setActioningServer(null);
+                        if (res.success) {
+                          setDeletedServers((prev) => prev.filter((s) => s.id !== srv.id));
+                          addToast("success", t("restoreServerSuccess"));
+                        } else {
+                          addToast("error", res.error ?? t("restoreServerFailed"));
+                        }
+                      }}
+                    >
+                      {t("restore")}
+                    </button>
+                  )}
+                  {isAdminDeleted && (
+                    <span
+                      className="settings-hint"
+                      style={{ alignSelf: "center", maxWidth: 240, textAlign: "right" }}
+                    >
+                      {t("deletedByAdminCannotRestore")}
+                    </span>
+                  )}
+                  <button
+                    className="settings-btn settings-btn-danger"
+                    disabled={busy || isAdminDeleted}
+                    onClick={async () => {
+                      if (!window.confirm(t("permanentDeleteServerConfirm", { name: srv.name }))) return;
+                      setActioningServer(srv.id);
+                      const res = await serversApi.hardDeleteServer(srv.id);
+                      setActioningServer(null);
+                      if (res.success) {
+                        setDeletedServers((prev) => prev.filter((s) => s.id !== srv.id));
+                        addToast("success", t("permanentDeleteServerSuccess"));
+                      } else {
+                        addToast("error", res.error ?? t("permanentDeleteServerFailed"));
+                      }
+                    }}
+                  >
+                    {t("permanentDelete")}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {/* ═══ Separator ═══ */}
+      <div className="settings-divider" />
+
+      {/* ═══ Delete Account Section ═══ */}
+      <h3 className="settings-section-subtitle">{t("deleteAccountSection")}</h3>
+      <p className="settings-hint">{t("deleteAccountDescription")}</p>
+
+      {!confirmingDelete ? (
+        <div style={{ marginTop: 16 }}>
+          <button
+            className="settings-btn settings-btn-danger"
+            onClick={() => setConfirmingDelete(true)}
+          >
+            {t("deleteAccount")}
+          </button>
+        </div>
+      ) : (
+        <div style={{ marginTop: 16 }}>
+          <p className="settings-value" style={{ marginBottom: 12 }}>
+            {t("deleteAccountConfirmBody")}
+          </p>
+          <div className="settings-field">
+            <label htmlFor="deleteAccountPassword" className="settings-label">
+              {t("deleteAccountPasswordLabel")}
+            </label>
+            <input
+              id="deleteAccountPassword"
+              type="password"
+              value={deletePassword}
+              onChange={(e) => setDeletePassword(e.target.value)}
+              className="settings-input"
+              autoComplete="off"
+              data-1p-ignore
+              data-lpignore="true"
+            />
+          </div>
+          <div className="settings-btn-row">
+            <button
+              className="settings-btn"
+              onClick={() => {
+                setConfirmingDelete(false);
+                setDeletePassword("");
+              }}
+              disabled={isDeletingAccount}
+            >
+              {t("cancel", { ns: "common", defaultValue: "Cancel" })}
+            </button>
+            <button
+              className="settings-btn settings-btn-danger"
+              disabled={isDeletingAccount || deletePassword.length === 0}
+              onClick={async () => {
+                setIsDeletingAccount(true);
+                const res = await authApi.softDeleteSelf(deletePassword);
+                setIsDeletingAccount(false);
+                if (res.success) {
+                  addToast("success", t("deleteAccountSuccess"));
+                  await logout();
+                  navigate("/login");
+                } else {
+                  addToast("error", res.error ?? t("deleteAccountFailed"));
+                }
+              }}
+            >
+              {t("deleteAccountConfirm")}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -42,7 +42,30 @@ type AuthService interface {
 	// ResetPassword validates token, updates password, and deletes token (one-time use).
 	ResetPassword(ctx context.Context, token, newPassword string) error
 
+	// SoftDeleteSelf marks the user soft-deleted after password verification.
+	// Sessions/realtime connections are disconnected by the caller (handler).
+	// Recoverable for SoftDeleteTTLDays via login flow.
+	SoftDeleteSelf(ctx context.Context, userID, password string) error
+
+	// RestoreAccount un-soft-deletes the user after password verification.
+	// Returns auth tokens like a regular login. Tombstone (is_hard_deleted=1) is not recoverable.
+	RestoreAccount(ctx context.Context, username, password string) (*AuthTokens, error)
+
 	SetAppLogger(logger AuthAppLogger)
+}
+
+// AccountDeletedError signals that login was attempted on a soft-deleted account.
+// The handler returns 403 with the deletion timestamp so the frontend can show
+// the recovery UI.
+type AccountDeletedError struct {
+	UserID            string
+	Username          string
+	DeletedAt         string
+	PermanentDeleteAt string
+}
+
+func (e *AccountDeletedError) Error() string {
+	return "account is soft-deleted; recovery available"
 }
 
 type AuthTokens struct {
@@ -170,6 +193,12 @@ func (s *authService) Login(ctx context.Context, req *models.LoginRequest) (*Aut
 		return nil, err
 	}
 
+	// Tombstone (is_hard_deleted) users have empty password_hash so bcrypt rejects.
+	// Belt-and-suspenders: also reject if hash is empty.
+	if user.PasswordHash == "" {
+		return nil, fmt.Errorf("%w: invalid username or password", pkg.ErrUnauthorized)
+	}
+
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		s.logWarn(&user.ID, "Login failed: invalid password", map[string]string{
 			"username": req.Username,
@@ -182,6 +211,20 @@ func (s *authService) Login(ctx context.Context, req *models.LoginRequest) (*Aut
 			"username": req.Username,
 		})
 		return nil, fmt.Errorf("%w: account suspended", pkg.ErrForbidden)
+	}
+
+	// Soft-deleted (recoverable) account — surface a recovery offer to the frontend.
+	if user.DeletedAt != nil && !user.IsHardDeleted {
+		s.logWarn(&user.ID, "Login attempt on soft-deleted account", map[string]string{
+			"username": req.Username,
+		})
+		permanentDeleteAt := user.DeletedAt.AddDate(0, 0, models.SoftDeleteTTLDays)
+		return nil, &AccountDeletedError{
+			UserID:            user.ID,
+			Username:          user.Username,
+			DeletedAt:         user.DeletedAt.UTC().Format("2006-01-02T15:04:05Z"),
+			PermanentDeleteAt: permanentDeleteAt.UTC().Format("2006-01-02T15:04:05Z"),
+		}
 	}
 
 	if err := s.userRepo.UpdateStatus(ctx, user.ID, models.UserStatusOnline); err != nil {
@@ -222,6 +265,11 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken string) (*A
 			"username": user.Username,
 		})
 		return nil, fmt.Errorf("%w: account suspended", pkg.ErrForbidden)
+	}
+
+	// Soft-deleted/tombstone accounts cannot refresh — must go through login + recovery.
+	if user.DeletedAt != nil {
+		return nil, fmt.Errorf("%w: account deleted", pkg.ErrUnauthorized)
 	}
 
 	return s.generateTokens(ctx, user)
@@ -324,6 +372,93 @@ func (s *authService) ChangeEmail(ctx context.Context, userID, password, newEmai
 	}
 
 	return s.userRepo.UpdateEmail(ctx, userID, &newEmail)
+}
+
+// SoftDeleteSelf marks the current user soft-deleted after password verification.
+// Recoverable via login flow within SoftDeleteTTLDays. Caller is responsible for
+// disconnecting realtime sessions and invalidating refresh tokens.
+func (s *authService) SoftDeleteSelf(ctx context.Context, userID, password string) error {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	if user.PasswordHash == "" {
+		return fmt.Errorf("%w: account not eligible for self-delete", pkg.ErrForbidden)
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return fmt.Errorf("%w: password is incorrect", pkg.ErrUnauthorized)
+	}
+
+	if user.DeletedAt != nil {
+		return fmt.Errorf("%w: account is already deleted", pkg.ErrBadRequest)
+	}
+
+	if err := s.userRepo.SoftDelete(ctx, userID, false); err != nil {
+		return fmt.Errorf("failed to soft delete account: %w", err)
+	}
+
+	// Invalidate all sessions so existing refresh tokens cannot be used.
+	if err := s.sessionRepo.DeleteByUserID(ctx, userID); err != nil {
+		log.Printf("[auth] failed to delete sessions for soft-deleted user %s: %v", userID, err)
+	}
+
+	// Disconnect realtime WS connections.
+	if s.hub != nil {
+		s.hub.DisconnectUser(userID)
+	}
+
+	return nil
+}
+
+// RestoreAccount un-soft-deletes the user after username + password verification
+// and returns auth tokens (so the user is logged in immediately).
+// Tombstone (is_hard_deleted=1) is not recoverable.
+func (s *authService) RestoreAccount(ctx context.Context, username, password string) (*AuthTokens, error) {
+	user, err := s.userRepo.GetByUsername(ctx, username)
+	if err != nil {
+		if errors.Is(err, pkg.ErrNotFound) {
+			return nil, fmt.Errorf("%w: invalid username or password", pkg.ErrUnauthorized)
+		}
+		return nil, err
+	}
+
+	if user.PasswordHash == "" || user.IsHardDeleted {
+		return nil, fmt.Errorf("%w: invalid username or password", pkg.ErrUnauthorized)
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return nil, fmt.Errorf("%w: invalid username or password", pkg.ErrUnauthorized)
+	}
+
+	if user.IsPlatformBanned {
+		return nil, fmt.Errorf("%w: account suspended", pkg.ErrForbidden)
+	}
+
+	if user.DeletedAt == nil {
+		return nil, fmt.Errorf("%w: account is not deleted", pkg.ErrBadRequest)
+	}
+
+	// Admin-initiated soft-delete is moderation: only admin can restore.
+	// Otherwise users could undo admin actions through the recovery flow.
+	if user.DeletedByAdmin {
+		return nil, fmt.Errorf("%w: account was deleted by an admin and cannot be restored via login", pkg.ErrForbidden)
+	}
+
+	if err := s.userRepo.Restore(ctx, user.ID); err != nil {
+		return nil, fmt.Errorf("failed to restore account: %w", err)
+	}
+
+	user.DeletedAt = nil
+	user.DeletedByAdmin = false
+
+	if err := s.userRepo.UpdateStatus(ctx, user.ID, models.UserStatusOnline); err != nil {
+		return nil, fmt.Errorf("failed to update status: %w", err)
+	}
+	user.Status = models.UserStatusOnline
+
+	return s.generateTokens(ctx, user)
 }
 
 // ─── Password Reset ───

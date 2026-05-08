@@ -7,6 +7,7 @@ import { useActiveMembers } from "../../stores/memberStore";
 import { hasPermission, Permissions } from "../../utils/permissions";
 import { useAuthStore } from "../../stores/authStore";
 import Avatar from "../shared/Avatar";
+import { authorDisplayName, authorAvatarURL } from "../../utils/deletedUser";
 
 type PinnedMessagesProps = {
   channelId: string;
@@ -74,7 +75,8 @@ function PinnedMessages({ channelId, onClose }: PinnedMessagesProps) {
         ) : (
           pins.map((pin) => {
             const author = pin.message?.author;
-            const displayName = author?.display_name ?? author?.username ?? "Unknown";
+            const displayName = authorDisplayName(author);
+            const avatarUrl = authorAvatarURL(author);
 
             return (
               <div key={pin.id} className="pinned-item">
@@ -82,7 +84,7 @@ function PinnedMessages({ channelId, onClose }: PinnedMessagesProps) {
                 <div className="pinned-item-header">
                   <Avatar
                     name={displayName}
-                    avatarUrl={author?.avatar_url ?? undefined}
+                    avatarUrl={avatarUrl}
                     size={20}
                   />
                   <span className="pinned-item-author">{displayName}</span>

@@ -22,6 +22,10 @@ export type User = {
   is_platform_admin: boolean;
   has_seen_download_prompt: boolean;
   has_seen_welcome: boolean;
+  /** Soft-delete or tombstone marker. Null when active. */
+  deleted_at?: string | null;
+  /** True when the user is a tombstone (anonymized, irreversible). */
+  is_hard_deleted?: boolean;
   created_at: string;
 };
 
@@ -156,7 +160,10 @@ export type Role = {
 // Member (User + Roles)
 // ──────────────────────────────────
 
-/** Member info with roles and computed effective_permissions. */
+/** Member info with roles and computed effective_permissions.
+ *  deleted_at + is_hard_deleted are present when the user is soft-deleted/tombstoned;
+ *  members are filtered out of GetAll, but historical references (e.g. message authors
+ *  fetched via member lookup) carry these fields so the UI can render "[deleted user]". */
 export type MemberWithRoles = {
   id: string;
   username: string;
@@ -165,11 +172,14 @@ export type MemberWithRoles = {
   status: UserStatus;
   custom_status: string | null;
   created_at: string;
+  deleted_at?: string | null;
+  is_hard_deleted?: boolean;
   roles: Role[];
   effective_permissions: number;
 };
 
-/** Badge template created by the badge admin. */
+/** Badge template created by the badge admin. created_by becomes null when the
+ *  creating admin is hard-deleted (ON DELETE SET NULL — migration 060). */
 export type Badge = {
   id: string;
   name: string;
@@ -177,16 +187,17 @@ export type Badge = {
   icon_type: "builtin" | "custom";
   color1: string;
   color2: string | null;
-  created_by: string;
+  created_by: string | null;
   created_at: string;
 };
 
-/** A badge assigned to a specific user. */
+/** A badge assigned to a specific user. assigned_by becomes null when the
+ *  assigning admin is hard-deleted. */
 export type UserBadge = {
   id: string;
   user_id: string;
   badge_id: string;
-  assigned_by: string;
+  assigned_by: string | null;
   assigned_at: string;
   badge?: Badge;
 };
@@ -486,6 +497,10 @@ export type AdminServerListItem = {
   message_count: number;
   storage_mb: number;
   last_activity: string | null;
+  /** Set when the server is soft-deleted. */
+  deleted_at?: string | null;
+  /** True when the server was soft-deleted by admin (owner cannot restore). */
+  deleted_by_admin?: boolean;
 };
 
 /** User info for platform admin panel (correlated subquery pattern). */
@@ -506,6 +521,12 @@ export type AdminUserListItem = {
   member_server_count: number;
   ban_count: number;
   is_platform_banned: boolean;
+  /** Set when the user is soft-deleted or tombstoned. */
+  deleted_at?: string | null;
+  /** True when admin-initiated. */
+  deleted_by_admin?: boolean;
+  /** True when tombstoned (anonymized, not restorable). */
+  is_hard_deleted?: boolean;
 };
 
 // ──────────────────────────────────
@@ -654,6 +675,12 @@ export type Server = {
   livekit_instance_id: string | null;
   afk_timeout_minutes: number;
   member_count: number;
+  /** Soft-delete marker. Null when active. */
+  deleted_at?: string | null;
+  /** User ID who soft-deleted (owner or admin). */
+  deleted_by?: string | null;
+  /** True when the server was soft-deleted by an admin (owner cannot restore). */
+  deleted_by_admin?: boolean;
   created_at: string;
 };
 

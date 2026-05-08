@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import Avatar from "../shared/Avatar";
+import { authorDisplayName, authorAvatarURL, isAuthorDeleted } from "../../utils/deletedUser";
 import BadgePill from "../shared/BadgePill";
 import { useUserBadges } from "../../hooks/useUserBadges";
 import { useDMStore } from "../../stores/dmStore";
@@ -38,8 +39,11 @@ function DMProfileCard({ dm, position, onClose }: DMProfileCardProps) {
   const initiateCall = useP2PCallStore((s) => s.initiateCall);
 
   const user = dm.other_user;
-  const name = user.display_name || user.username;
-  const userBadges = useUserBadges(user.id);
+  const name = authorDisplayName(user);
+  const userDeleted = isAuthorDeleted(user);
+  // Skip the badge fetch entirely for deleted users — their badges are
+  // never rendered anyway (see body block below).
+  const userBadges = useUserBadges(user.id, !userDeleted);
 
   // Friendship state
   const isFriend = friends.some((f) => f.user_id === user.id);
@@ -131,7 +135,7 @@ function DMProfileCard({ dm, position, onClose }: DMProfileCardProps) {
         <div className="dm-profile-avatar">
           <Avatar
             name={name}
-            avatarUrl={user.avatar_url}
+            avatarUrl={authorAvatarURL(user)}
             size={64}
             isCircle
           />
@@ -140,70 +144,80 @@ function DMProfileCard({ dm, position, onClose }: DMProfileCardProps) {
         {/* Body */}
         <div className="dm-profile-body">
           <div className="dm-profile-name">{name}</div>
-          <div className="dm-profile-username">@{user.username}</div>
-          {user.custom_status && (
-            <div className="dm-profile-status">{user.custom_status}</div>
-          )}
-
-          {/* User badges */}
-          {userBadges.length > 0 && (
-            <div className="dm-profile-badges">
-              {userBadges.map((ub) =>
-                ub.badge ? <BadgePill key={ub.id} badge={ub.badge} size="md" /> : null
+          {/* Username + custom status + badges hidden for deleted/tombstone users —
+              tombstone username is `deleted_<id>`, badges/status are stale identity
+              data that shouldn't leak after the account is gone. */}
+          {!userDeleted && (
+            <>
+              <div className="dm-profile-username">@{user.username}</div>
+              {user.custom_status && (
+                <div className="dm-profile-status">{user.custom_status}</div>
               )}
-            </div>
+
+              {userBadges.length > 0 && (
+                <div className="dm-profile-badges">
+                  {userBadges.map((ub) =>
+                    ub.badge ? <BadgePill key={ub.id} badge={ub.badge} size="md" /> : null
+                  )}
+                </div>
+              )}
+            </>
           )}
 
           <div className="dm-profile-divider" />
 
-          {/* Actions */}
-          <div className="dm-profile-actions">
-            <button
-              className="dm-profile-btn dm-profile-btn-primary"
-              onClick={handleSendMessage}
-            >
-              {tCommon("sendMessage")}
-            </button>
-            <button
-              className="dm-profile-btn dm-profile-btn-secondary"
-              onClick={handleVoiceCall}
-            >
-              {t("voiceCall")}
-            </button>
-          </div>
+          {/* Actions — hidden for deleted users (cannot be reached/befriended). */}
+          {!userDeleted && (
+            <>
+              <div className="dm-profile-actions">
+                <button
+                  className="dm-profile-btn dm-profile-btn-primary"
+                  onClick={handleSendMessage}
+                >
+                  {tCommon("sendMessage")}
+                </button>
+                <button
+                  className="dm-profile-btn dm-profile-btn-secondary"
+                  onClick={handleVoiceCall}
+                >
+                  {t("voiceCall")}
+                </button>
+              </div>
 
-          {/* Friend action */}
-          <div className="dm-profile-actions" style={{ marginTop: 8 }}>
-            {isFriend ? (
-              <button
-                className="dm-profile-btn dm-profile-btn-danger"
-                onClick={handleRemoveFriend}
-              >
-                {t("removeFriend")}
-              </button>
-            ) : inReq ? (
-              <button
-                className="dm-profile-btn dm-profile-btn-primary"
-                onClick={handleAcceptRequest}
-              >
-                {t("acceptRequest")}
-              </button>
-            ) : outReq ? (
-              <button
-                className="dm-profile-btn dm-profile-btn-secondary"
-                onClick={handleCancelRequest}
-              >
-                {t("cancelRequest")}
-              </button>
-            ) : (
-              <button
-                className="dm-profile-btn dm-profile-btn-secondary"
-                onClick={handleAddFriend}
-              >
-                {t("addFriend")}
-              </button>
-            )}
-          </div>
+              {/* Friend action */}
+              <div className="dm-profile-actions" style={{ marginTop: 8 }}>
+                {isFriend ? (
+                  <button
+                    className="dm-profile-btn dm-profile-btn-danger"
+                    onClick={handleRemoveFriend}
+                  >
+                    {t("removeFriend")}
+                  </button>
+                ) : inReq ? (
+                  <button
+                    className="dm-profile-btn dm-profile-btn-primary"
+                    onClick={handleAcceptRequest}
+                  >
+                    {t("acceptRequest")}
+                  </button>
+                ) : outReq ? (
+                  <button
+                    className="dm-profile-btn dm-profile-btn-secondary"
+                    onClick={handleCancelRequest}
+                  >
+                    {t("cancelRequest")}
+                  </button>
+                ) : (
+                  <button
+                    className="dm-profile-btn dm-profile-btn-secondary"
+                    onClick={handleAddFriend}
+                  >
+                    {t("addFriend")}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </>
