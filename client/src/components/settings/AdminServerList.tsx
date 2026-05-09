@@ -13,6 +13,7 @@ import {
   adminDeleteServer,
 } from "../../api/admin";
 import { useContextMenu } from "../../hooks/useContextMenu";
+import { useConfirm } from "../../hooks/useConfirm";
 import ContextMenu from "../shared/ContextMenu";
 import PlatformActionDialog from "./PlatformActionDialog";
 import type { LiveKitInstanceAdmin, AdminServerListItem } from "../../types";
@@ -123,6 +124,7 @@ function compareSortValue(
 function AdminServerList() {
   const { t } = useTranslation("settings");
   const addToast = useToastStore((s) => s.addToast);
+  const confirm = useConfirm();
   const { menuState, openMenu, closeMenu } = useContextMenu();
 
   // ─── Data state ───
@@ -382,6 +384,30 @@ function AdminServerList() {
               await refetchServers();
             } else {
               addToast("error", res.error ?? t("restoreServerFailed"));
+            }
+          })();
+        },
+      });
+      // Skip the 30-day TTL for an already soft-deleted server. Admin path goes
+      // through the same delete endpoint with hard_delete=true.
+      items.push({
+        label: t("platformServerHardDeleteNow"),
+        danger: true,
+        onClick: () => {
+          void (async () => {
+            const ok = await confirm({
+              title: t("platformServerHardDeleteNowTitle"),
+              message: t("platformServerHardDeleteNowConfirm", { name: srv.name }),
+              danger: true,
+              confirmLabel: t("platformServerHardDeleteNowButton"),
+            });
+            if (!ok) return;
+            const res = await adminDeleteServer(srv.id, { hard_delete: true });
+            if (res.success) {
+              addToast("success", t("platformServerDeleteSuccess", { serverName: srv.name }));
+              await refetchServers();
+            } else {
+              addToast("error", res.error ?? t("platformServerDeleteError"));
             }
           })();
         },

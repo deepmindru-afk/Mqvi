@@ -1682,6 +1682,12 @@ button.ch-tree-vu-stream svg { width:14px;height:14px; }
 }
 .admin-user-search:focus { border-color:var(--primary); }
 .admin-user-search::placeholder { color:var(--t3); }
+.admin-user-status-filter {
+  height:36px;background:var(--input-bg);border:1px solid var(--input-border);
+  border-radius:8px;padding:0 28px 0 12px;color:var(--t0);font-size:14px;
+  outline:none;transition:border-color .15s;cursor:pointer;
+}
+.admin-user-status-filter:focus { border-color:var(--primary); }
 .admin-user-count { font-size:13px;color:var(--t3);font-family:var(--f-m);white-space:nowrap; }
 
 /* ── Table wrapper (scrollable) ── */
@@ -1781,6 +1787,14 @@ button.ch-tree-vu-stream svg { width:14px;height:14px; }
 .admin-user-banned-badge {
   display:inline-block;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:500;
   background:var(--red-s);color:var(--red);margin-left:6px;
+}
+.admin-user-deleted-badge {
+  display:inline-block;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:500;
+  background:var(--yellow-s);color:var(--yellow);margin-left:6px;
+}
+.admin-user-tombstone-badge {
+  display:inline-block;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:500;
+  background:var(--bg-4);color:var(--t1);margin-left:6px;
 }
 
 /* ═══════════════════════════════════════════════════════════════

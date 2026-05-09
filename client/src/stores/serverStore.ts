@@ -29,7 +29,7 @@ type ServerState = {
   /** Cascade refetch is done by the caller (AppLayout) to avoid circular deps. */
   setActiveServer: (serverId: string) => void;
   fetchActiveServer: () => Promise<void>;
-  createServer: (req: CreateServerRequest) => Promise<Server | null>;
+  createServer: (req: CreateServerRequest) => Promise<{ server: Server | null; error?: string }>;
   joinServer: (inviteCode: string) => Promise<Server | null>;
   leaveServer: (serverId: string) => Promise<boolean>;
   deleteServer: (serverId: string) => Promise<boolean>;
@@ -127,9 +127,9 @@ export const useServerStore = create<ServerState>((set, get) => ({
         };
       });
       localStorage.setItem(LAST_SERVER_KEY, server.id);
-      return server;
+      return { server };
     }
-    return null;
+    return { server: null, error: res.error };
   },
 
   joinServer: async (inviteCode) => {

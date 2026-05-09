@@ -106,15 +106,24 @@ function AddServerModal({ onClose }: AddServerModalProps) {
       req.livekit_secret = livekitSecret.trim();
     }
 
-    const server = await createServer(req);
+    const result = await createServer(req);
     setIsCreating(false);
 
-    if (server) {
+    if (result.server) {
       addToast("success", t("serverCreated"));
       // createServer sets activeServerId + activeServer atomically; AppLayout handles cascade refetch.
       onClose();
     } else {
-      addToast("error", tCommon("somethingWentWrong"));
+      // Backend returns the stable code "max_servers_reached" when the
+      // mqvi-hosted cap is hit (kept in sync with services.MaxMqviHostedServersPerUser=3).
+      const errMsg = result.error ?? "";
+      if (errMsg.includes("max_servers_reached")) {
+        addToast("error", t("serverCapReached", { max: 3 }));
+      } else if (result.error) {
+        addToast("error", result.error);
+      } else {
+        addToast("error", tCommon("somethingWentWrong"));
+      }
     }
   }
 

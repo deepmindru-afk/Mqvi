@@ -48,6 +48,12 @@ type ServerService interface {
 	ReorderServers(ctx context.Context, userID string, req *models.ReorderServersRequest) ([]models.ServerListItem, error)
 }
 
+// MaxMqviHostedServersPerUser caps how many mqvi-hosted servers a single
+// non-admin user can own. Self-hosted servers (user provides own LiveKit) are
+// unlimited. The frontend matches on the "max_servers_reached" error code and
+// hard-codes the same number in the i18n string — keep both in sync.
+const MaxMqviHostedServersPerUser = 3
+
 type serverService struct {
 	db            *sql.DB // for WithTx in CreateServer
 	serverRepo    repository.ServerRepository
@@ -99,7 +105,10 @@ func (s *serverService) CreateServer(ctx context.Context, ownerID string, req *m
 		return nil, fmt.Errorf("%w: %v", pkg.ErrBadRequest, err)
 	}
 
-	// Non-admin users can own at most 1 mqvi-hosted server
+	// Non-admin users can own at most MaxMqviHostedServersPerUser mqvi-hosted servers.
+	// Self-hosted servers are unlimited (the user provides their own LiveKit instance).
+	// Frontend matches on the stable error code "max_servers_reached" to show a
+	// localized message — keep that string stable.
 	if req.HostType == "mqvi_hosted" {
 		user, err := s.userRepo.GetByID(ctx, ownerID)
 		if err != nil {
@@ -110,8 +119,8 @@ func (s *serverService) CreateServer(ctx context.Context, ownerID string, req *m
 			if err != nil {
 				return nil, fmt.Errorf("failed to count owned servers: %w", err)
 			}
-			if count >= 1 {
-				return nil, fmt.Errorf("%w: you can only own 1 mqvi-hosted server, you can create unlimited self-hosted servers", pkg.ErrBadRequest)
+			if count >= MaxMqviHostedServersPerUser {
+				return nil, fmt.Errorf("%w: max_servers_reached", pkg.ErrBadRequest)
 			}
 		}
 	}

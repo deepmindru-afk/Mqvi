@@ -170,6 +170,10 @@ function AdminUserList() {
 
   // ─── Table state ───
   const [searchQuery, setSearchQuery] = useState("");
+  // Deletion-state filter — admin needs to triage banned/soft-deleted/tombstone
+  // separately, not just one giant list. Default "all" preserves prior behaviour.
+  type StatusFilter = "all" | "active" | "banned" | "soft_deleted" | "tombstone";
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("username");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(getDefaultWidths);
@@ -203,6 +207,23 @@ function AdminUserList() {
   const filteredUsers = useMemo(() => {
     let list = users;
 
+    if (statusFilter !== "all") {
+      list = list.filter((u) => {
+        switch (statusFilter) {
+          case "active":
+            return !u.is_platform_banned && !u.deleted_at;
+          case "banned":
+            return u.is_platform_banned;
+          case "soft_deleted":
+            return !!u.deleted_at && !u.is_hard_deleted;
+          case "tombstone":
+            return !!u.is_hard_deleted;
+          default:
+            return true;
+        }
+      });
+    }
+
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       list = list.filter(
@@ -214,7 +235,7 @@ function AdminUserList() {
     }
 
     return [...list].sort((a, b) => compareSortValue(a, b, sortKey, sortDir));
-  }, [users, searchQuery, sortKey, sortDir]);
+  }, [users, searchQuery, statusFilter, sortKey, sortDir]);
 
   // ─── Sort handler ───
   function handleSort(key: SortKey) {
@@ -311,6 +332,31 @@ function AdminUserList() {
               await refetchUsers();
             } else {
               addToast("error", res.error ?? t("restoreServerFailed"));
+            }
+          })();
+        },
+      });
+      // A soft-deleted user is otherwise stuck waiting for the 30-day TTL.
+      // Admins need a way to skip the wait — "delete now" maps to the existing
+      // hard-delete API path with hard_delete=true.
+      items.push({
+        label: t("platformUserHardDeleteNow"),
+        danger: true,
+        onClick: () => {
+          void (async () => {
+            const ok = await confirm({
+              title: t("platformUserHardDeleteNowTitle"),
+              message: t("platformUserHardDeleteNowConfirm", { username: user.username }),
+              danger: true,
+              confirmLabel: t("platformUserHardDeleteNowButton"),
+            });
+            if (!ok) return;
+            const res = await hardDeleteUser(user.id, { hard_delete: true });
+            if (res.success) {
+              addToast("success", t("platformDeleteSuccess", { username: user.username }));
+              await refetchUsers();
+            } else {
+              addToast("error", res.error ?? t("platformDeleteError"));
             }
           })();
         },
@@ -553,13 +599,20 @@ function AdminUserList() {
             {user.is_platform_banned && (
               <span className="admin-user-banned-badge">{t("platformUserBannedBadge")}</span>
             )}
-            {user.deleted_at && (
+            {user.deleted_at && user.is_hard_deleted && (
               <span
-                className="admin-user-banned-badge"
-                style={{ background: "var(--color-text-danger, #f87171)" }}
-                title={user.is_hard_deleted ? "Tombstone (irreversible)" : `Deleted at ${user.deleted_at}`}
+                className="admin-user-tombstone-badge"
+                title={t("platformUserTombstoneTitle")}
               >
-                {t("deletedBadge", { ns: "common" })}
+                {t("platformUserTombstoneBadge")}
+              </span>
+            )}
+            {user.deleted_at && !user.is_hard_deleted && (
+              <span
+                className="admin-user-deleted-badge"
+                title={t("platformUserSoftDeletedTitle", { date: user.deleted_at })}
+              >
+                {t("platformUserSoftDeletedBadge")}
               </span>
             )}
           </div>
@@ -636,7 +689,7 @@ function AdminUserList() {
 
   return (
     <div className="admin-user-list">
-      {/* ── Toolbar: Search + Count ── */}
+      {/* ── Toolbar: Search + Status filter + Count ── */}
       <div className="admin-user-toolbar">
         <input
           className="admin-user-search"
@@ -645,6 +698,17 @@ function AdminUserList() {
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder={t("platformUserSearchPlaceholder")}
         />
+        <select
+          className="admin-user-status-filter"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+        >
+          <option value="all">{t("platformUserFilterAll")}</option>
+          <option value="active">{t("platformUserFilterActive")}</option>
+          <option value="banned">{t("platformUserFilterBanned")}</option>
+          <option value="soft_deleted">{t("platformUserFilterSoftDeleted")}</option>
+          <option value="tombstone">{t("platformUserFilterTombstone")}</option>
+        </select>
         <span className="admin-user-count">
           {filteredUsers.length} / {users.length}
         </span>
@@ -734,7 +798,7 @@ function AdminUserList() {
           onCancel={() => setDeleteTarget(null)}
           showHardDeleteToggle
           hardDeleteLabel={t("permanentDelete")}
-          hardDeleteHint={t("deleteAccountConfirmBody")}
+          hardDeleteHint={t("platformDeleteHardHint")}
         />
       )}
 

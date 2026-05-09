@@ -29,11 +29,13 @@ function AccountRecoveryModal() {
   return (
     <div className="modal-backdrop" onClick={cancelAccountDeleted}>
       <div
-        className="modal-card account-recovery-modal"
+        className="modal-card"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="modal-title">{t("accountDeletedTitle")}</h2>
-        <p className="modal-body">
+        <div className="modal-header">
+          <h2 className="modal-title">{t("accountDeletedTitle")}</h2>
+        </div>
+        <p className="modal-text">
           {t("accountDeletedBody", {
             permanentDeleteAt: formatDate(accountDeleted.permanentDeleteAt, i18n.language),
           })}
@@ -41,7 +43,7 @@ function AccountRecoveryModal() {
         <div className="modal-actions">
           <button
             type="button"
-            className="btn btn-secondary"
+            className="settings-btn settings-btn-secondary"
             onClick={cancelAccountDeleted}
             disabled={isLoading}
           >
@@ -49,7 +51,7 @@ function AccountRecoveryModal() {
           </button>
           <button
             type="button"
-            className="btn btn-primary"
+            className="settings-btn"
             onClick={() => void restoreAccount()}
             disabled={isLoading}
           >

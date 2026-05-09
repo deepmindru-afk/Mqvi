@@ -36,6 +36,7 @@
   "noServers": "You're not in any servers yet",
   "noServersDesc": "Join an existing server or create your own",
   "serverCreated": "Server created successfully",
+  "serverCapReached": "You have reached the maximum of {{max}} servers you can own. You can still join other servers.",
   "serverJoined": "Joined server successfully",
   "serverLeft": "Left server",
   "serverDeleted": "Server deleted",
