@@ -184,6 +184,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isInitialized: true });
       return;
     }
+    // Persisted token must be re-pushed to Electron main on every cold start.
+    void window.electronAPI?.setFileAuthToken(token);
 
     const res = await authApi.getMe();
     if (res.success && res.data) {

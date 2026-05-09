@@ -18,11 +18,15 @@ function getRefreshToken(): string | null {
 function setTokens(access: string, refresh: string): void {
   localStorage.setItem("access_token", access);
   localStorage.setItem("refresh_token", refresh);
+  // Electron main injects this as Authorization on /api/files/* (cookie path
+  // doesn't survive the file:// → https cross-site context).
+  void window.electronAPI?.setFileAuthToken(access);
 }
 
 function clearTokens(): void {
   localStorage.removeItem("access_token");
   localStorage.removeItem("refresh_token");
+  void window.electronAPI?.clearFileAuthToken();
 }
 
 /**
@@ -54,6 +58,8 @@ async function doRefresh(): Promise<boolean> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: refreshToken }),
+      // Honor the rotated file-serve cookie that /auth/refresh sets.
+      credentials: "include",
     });
 
     if (!res.ok) {
@@ -120,6 +126,10 @@ export async function apiClient<T>(
   const fetchOptions: RequestInit = {
     method,
     headers,
+    // Send/receive the file-serve session cookie set by /auth/* endpoints.
+    // Same-origin web defaults to "include"; this explicit value is required
+    // for the Electron renderer (file:// origin → API is cross-site).
+    credentials: "include",
   };
 
   if (body) {

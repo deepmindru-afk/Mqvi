@@ -16,6 +16,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   /** Relaunch the app — used by ConnectionSettings */
   relaunch: (): Promise<void> => ipcRenderer.invoke("relaunch"),
 
+  setFileAuthToken: (token: string): Promise<void> =>
+    ipcRenderer.invoke("set-file-auth-token", token),
+
+  clearFileAuthToken: (): Promise<void> =>
+    ipcRenderer.invoke("clear-file-auth-token"),
+
   /** Whether pre-launch update check ran — prevents duplicate checks in renderer */
   wasUpdateChecked: (): Promise<boolean> => ipcRenderer.invoke("was-update-checked"),
 

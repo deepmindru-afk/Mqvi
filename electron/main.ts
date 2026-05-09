@@ -484,6 +484,25 @@ function createTray(): void {
   );
 }
 
+// File-serve bearer injection — the cookie path doesn't survive Electron's
+// file:// → https cross-site context, so we attach the token from main process.
+let fileAuthToken: string | null = null;
+
+function setupFileAuthInjection(): void {
+  const filter = { urls: ["http://*/api/files/*", "https://*/api/files/*"] };
+  session.defaultSession.webRequest.onBeforeSendHeaders(filter, (details, callback) => {
+    if (!fileAuthToken) {
+      callback({});
+      return;
+    }
+    const headers = { ...details.requestHeaders };
+    if (!headers["Authorization"] && !headers["authorization"]) {
+      headers["Authorization"] = `Bearer ${fileAuthToken}`;
+    }
+    callback({ requestHeaders: headers });
+  });
+}
+
 // ─── IPC Handlers ───
 
 /** Renderer → Main process IPC handlers. */
@@ -495,6 +514,15 @@ function setupIPC(): void {
   ipcMain.handle("relaunch", () => {
     app.relaunch();
     app.exit(0);
+  });
+
+  ipcMain.handle("set-file-auth-token", (_event, token: string) => {
+    if (typeof token === "string" && token.length > 0) {
+      fileAuthToken = token;
+    }
+  });
+  ipcMain.handle("clear-file-auth-token", () => {
+    fileAuthToken = null;
   });
 
   // ─── Auto-Updater IPC ───
@@ -999,6 +1027,7 @@ async function checkForUpdateBeforeLaunch(): Promise<boolean> {
 
 app.whenReady().then(async () => {
   setupPermissions();
+  setupFileAuthInjection();
 
   // Pre-launch update check
   const updating = await checkForUpdateBeforeLaunch();

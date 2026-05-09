@@ -149,8 +149,14 @@ func TestSignIfNeeded_RefreshesExpired(t *testing.T) {
 func TestSignIfNeeded_DoesNotLaunderTamperedSig(t *testing.T) {
 	s := NewSigner(testKey(), nil)
 	signed := s.Sign("/api/files/messages/m1/a.png", -time.Second) // expired
-	// Flip last char of sig to corrupt it.
-	tampered := signed[:len(signed)-1] + "X"
+	// Replace the entire signature with a deterministic invalid value. A
+	// single-char flip can occasionally collide with a valid base64 char that
+	// hashes the same for short payloads — using "AAAA..." removes that flake.
+	idx := strings.Index(signed, "&sig=")
+	if idx < 0 {
+		t.Fatalf("expected signed URL to contain &sig=, got %q", signed)
+	}
+	tampered := signed[:idx+len("&sig=")] + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 	out := s.SignIfNeeded(tampered, filePrefix, time.Hour)
 	// MUST be returned unchanged — re-signing would mint a valid credential
 	// for an attacker-supplied URL.

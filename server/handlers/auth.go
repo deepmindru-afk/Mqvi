@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
-	"github.com/akinalp/mqvi/pkg/ratelimit"
 	"github.com/akinalp/mqvi/models"
 	"github.com/akinalp/mqvi/pkg"
+	"github.com/akinalp/mqvi/pkg/authcookie"
+	"github.com/akinalp/mqvi/pkg/ratelimit"
 	"github.com/akinalp/mqvi/services"
 )
 
@@ -19,6 +21,7 @@ type AuthHandler struct {
 	forgotPwdLimiter *ratelimit.LoginRateLimiter
 	resetPwdLimiter  *ratelimit.LoginRateLimiter
 	urlSigner        services.FileURLSigner
+	fileCookieTTL    time.Duration // matches access token TTL
 }
 
 // NewAuthHandler creates a new AuthHandler. All limiters may be nil to disable rate limiting.
@@ -29,6 +32,7 @@ func NewAuthHandler(
 	forgotPwdLimiter *ratelimit.LoginRateLimiter,
 	resetPwdLimiter *ratelimit.LoginRateLimiter,
 	urlSigner services.FileURLSigner,
+	accessTokenTTL time.Duration,
 ) *AuthHandler {
 	return &AuthHandler{
 		authService:      authService,
@@ -37,6 +41,7 @@ func NewAuthHandler(
 		forgotPwdLimiter: forgotPwdLimiter,
 		resetPwdLimiter:  resetPwdLimiter,
 		urlSigner:        urlSigner,
+		fileCookieTTL:    accessTokenTTL,
 	}
 }
 
@@ -67,6 +72,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	authcookie.Set(w, tokens.AccessToken, h.fileCookieTTL)
 	h.signTokenURLs(tokens)
 	pkg.JSON(w, http.StatusCreated, tokens)
 }
@@ -119,6 +125,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		h.loginLimiter.Reset(ip)
 	}
 
+	authcookie.Set(w, tokens.AccessToken, h.fileCookieTTL)
 	h.signTokenURLs(tokens)
 	pkg.JSON(w, http.StatusOK, tokens)
 }
@@ -145,6 +152,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	authcookie.Set(w, tokens.AccessToken, h.fileCookieTTL)
 	h.signTokenURLs(tokens)
 	pkg.JSON(w, http.StatusOK, tokens)
 }
@@ -165,6 +173,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	authcookie.Clear(w)
 	pkg.JSON(w, http.StatusOK, map[string]string{"message": "logged out"})
 }
 
@@ -404,6 +413,7 @@ func (h *AuthHandler) RestoreAccount(w http.ResponseWriter, r *http.Request) {
 		h.loginLimiter.Reset(ip)
 	}
 
+	authcookie.Set(w, tokens.AccessToken, h.fileCookieTTL)
 	h.signTokenURLs(tokens)
 	pkg.JSON(w, http.StatusOK, tokens)
 }

@@ -21,9 +21,11 @@ import (
 	"github.com/akinalp/mqvi/models"
 	"github.com/akinalp/mqvi/pkg/crypto"
 	"github.com/akinalp/mqvi/pkg/files"
+	"github.com/akinalp/mqvi/pkg/authcookie"
 	"github.com/akinalp/mqvi/pkg/fileacl"
 	"github.com/akinalp/mqvi/pkg/i18n"
 	"github.com/akinalp/mqvi/pkg/signedurl"
+	"github.com/akinalp/mqvi/repository"
 	"github.com/akinalp/mqvi/services"
 	"github.com/akinalp/mqvi/static"
 	"github.com/akinalp/mqvi/ws"
@@ -139,7 +141,7 @@ func main() {
 	initRoutes(mux, h, svcs.Auth, repos.User, repos.Role, repos.Server, fileSigner, fileACL)
 
 	// 14. Static file serving
-	registerFileEndpoint(mux, cfg, fileSigner)
+	registerFileEndpoint(mux, cfg, fileSigner, svcs.Auth, repos.User, fileACL)
 
 	// 15. SPA frontend serving
 	frontendFS, hasFrontend := initFrontendFS()
@@ -392,11 +394,16 @@ func runStartupCleanup(db *database.DB, repos *Repositories, cfg *config.Config,
 	}
 }
 
-// registerFileEndpoint sets up the signed file serving endpoint.
-func registerFileEndpoint(mux *http.ServeMux, cfg *config.Config, signer *signedurl.Signer) {
-	// Segregated file endpoint. Path format:
-	//   /api/files/<kind>/<scopeID>/<filename>?exp=<unix>&sig=<base64url>
-	// Signature verified before serving. Path validation in Locator.ResolveServePath.
+// registerFileEndpoint authorizes via signed URL OR session cookie OR
+// Authorization: Bearer (Electron path), with fileACL on the JWT branches.
+func registerFileEndpoint(
+	mux *http.ServeMux,
+	cfg *config.Config,
+	signer *signedurl.Signer,
+	authService services.AuthService,
+	userRepo repository.UserRepository,
+	fileACL *fileacl.Checker,
+) {
 	fileLocator := files.NewLocator(cfg.Upload.Dir, cfg.Upload.PublicURL)
 	filesHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Extract the portion after /api/files/ using the escaped path so
@@ -407,12 +414,17 @@ func registerFileEndpoint(mux *http.ServeMux, cfg *config.Config, signer *signed
 			http.NotFound(w, r)
 			return
 		}
-
-		// Verify HMAC signature against the full escaped path (what was signed).
 		signedPath := files.URLPathPrefix + "/" + after
-		if err := signer.Verify(signedPath, r.URL.Query().Get("exp"), r.URL.Query().Get("sig")); err != nil {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
+
+		// Try signed URL first (cheap stateless check).
+		sigOK := signer.Verify(signedPath, r.URL.Query().Get("exp"), r.URL.Query().Get("sig")) == nil
+
+		if !sigOK {
+			// Fall back to JWT-based auth (cookie or bearer header) + per-file ACL.
+			if !authorizeByJWT(r, signedPath, authService, userRepo, fileACL) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
 		}
 
 		// ResolveServePath expects encoded segments — it does its own decode.
@@ -623,4 +635,48 @@ func serveInviteOG(w http.ResponseWriter, r *http.Request, inviteSvc services.In
 </html>`)
 
 	return true
+}
+
+// authorizeByJWT validates the JWT (cookie or bearer) and runs fileACL.
+func authorizeByJWT(
+	r *http.Request,
+	signedPath string,
+	authService services.AuthService,
+	userRepo repository.UserRepository,
+	fileACL *fileacl.Checker,
+) bool {
+	token := readJWTToken(r)
+	if token == "" {
+		return false
+	}
+	claims, err := authService.ValidateAccessToken(token)
+	if err != nil {
+		return false
+	}
+	user, err := userRepo.GetActiveByID(r.Context(), claims.UserID)
+	if err != nil || user == nil {
+		return false
+	}
+	if user.IsPlatformBanned {
+		return false
+	}
+	user.PasswordHash = ""
+	if err := fileACL.Check(r.Context(), user, signedPath); err != nil {
+		return false
+	}
+	return true
+}
+
+// readJWTToken returns the token from the cookie, falling back to the
+// Authorization: Bearer header.
+func readJWTToken(r *http.Request) string {
+	if t := authcookie.Read(r); t != "" {
+		return t
+	}
+	const prefix = "Bearer "
+	auth := r.Header.Get("Authorization")
+	if strings.HasPrefix(auth, prefix) {
+		return strings.TrimPrefix(auth, prefix)
+	}
+	return ""
 }
