@@ -325,6 +325,7 @@ func initRoutes(
 	// Read State — literal "read-all" and "unread" before {id} wildcard
 	mux.Handle("POST /api/servers/{serverId}/channels/read-all", authServer(h.ReadState.MarkAllRead))
 	mux.Handle("GET /api/servers/{serverId}/channels/unread", authServer(h.ReadState.GetUnreads))
+	mux.Handle("POST /api/servers/{serverId}/channels/{id}/read/mentions", authServer(h.ReadState.MarkMentionSeen))
 	mux.Handle("POST /api/servers/{serverId}/channels/{id}/read", authServer(h.ReadState.MarkRead))
 
 	// Members

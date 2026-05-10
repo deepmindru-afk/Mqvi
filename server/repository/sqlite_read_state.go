@@ -70,26 +70,24 @@ func (r *sqliteReadStateRepo) DecrementUnreadForDeleted(ctx context.Context, cha
 	return nil
 }
 
-// GetUnreadCounts returns per-channel unread counts for a user in a server.
-// Excludes the user's own messages from the count.
-//
-// Hybrid query: reads the denormalized `unread_count` column when a
-// channel_reads row exists (hot path — a single indexed lookup per channel),
-// and falls back to COUNT(*) for channels the user has never opened.
+// GetUnreadCounts returns per-channel unread counts + mention watermarks.
+// Returns rows when unread_count > 0 OR a mention watermark is set (so the watermark survives refresh).
 func (r *sqliteReadStateRepo) GetUnreadCounts(ctx context.Context, userID, serverID string) ([]models.UnreadInfo, error) {
 	query := `
-		SELECT id, unread_count FROM (
+		SELECT id, unread_count, last_mention_seen_at, last_mention_seen_message_id FROM (
 			SELECT c.id,
 			       CASE WHEN cr.user_id IS NOT NULL
 			            THEN cr.unread_count
 			            ELSE (SELECT COUNT(*) FROM messages m
 			                  WHERE m.channel_id = c.id
 			                    AND m.user_id != ?)
-			       END as unread_count
+			       END as unread_count,
+			       cr.last_mention_seen_at as last_mention_seen_at,
+			       cr.last_mention_seen_message_id as last_mention_seen_message_id
 			FROM channels c
 			LEFT JOIN channel_reads cr ON cr.channel_id = c.id AND cr.user_id = ?
 			WHERE c.type = 'text' AND c.server_id = ?
-		) WHERE unread_count > 0`
+		) WHERE unread_count > 0 OR last_mention_seen_at IS NOT NULL`
 
 	rows, err := r.db.QueryContext(ctx, query, userID, userID, serverID)
 	if err != nil {
@@ -100,7 +98,12 @@ func (r *sqliteReadStateRepo) GetUnreadCounts(ctx context.Context, userID, serve
 	var unreads []models.UnreadInfo
 	for rows.Next() {
 		var info models.UnreadInfo
-		if err := rows.Scan(&info.ChannelID, &info.UnreadCount); err != nil {
+		if err := rows.Scan(
+			&info.ChannelID,
+			&info.UnreadCount,
+			&info.LastMentionSeenAt,
+			&info.LastMentionSeenMessageID,
+		); err != nil {
 			return nil, fmt.Errorf("failed to scan unread info: %w", err)
 		}
 		unreads = append(unreads, info)
@@ -115,6 +118,38 @@ func (r *sqliteReadStateRepo) GetUnreadCounts(ctx context.Context, userID, serve
 	}
 
 	return unreads, nil
+}
+
+// SetMentionSeen advances the (created_at, message_id) tuple watermark.
+// Channel-guarded via id+channel_id match in the SELECT; monotonic via lex compare.
+func (r *sqliteReadStateRepo) SetMentionSeen(ctx context.Context, userID, channelID, mentionMessageID string) error {
+	query := `
+		INSERT INTO channel_reads (
+		    user_id, channel_id,
+		    last_mention_seen_at, last_mention_seen_message_id,
+		    unread_count
+		)
+		SELECT ?, ?, m.created_at, m.id,
+		       (SELECT COUNT(*) FROM messages WHERE channel_id = ? AND user_id != ?)
+		FROM messages m
+		WHERE m.id = ? AND m.channel_id = ?
+		ON CONFLICT(user_id, channel_id)
+		DO UPDATE SET last_mention_seen_at = excluded.last_mention_seen_at,
+		              last_mention_seen_message_id = excluded.last_mention_seen_message_id
+		WHERE channel_reads.last_mention_seen_at IS NULL
+		   OR excluded.last_mention_seen_at > channel_reads.last_mention_seen_at
+		   OR (excluded.last_mention_seen_at = channel_reads.last_mention_seen_at
+		       AND excluded.last_mention_seen_message_id > channel_reads.last_mention_seen_message_id)`
+
+	_, err := r.db.ExecContext(ctx, query,
+		userID, channelID,
+		channelID, userID,
+		mentionMessageID, channelID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to set mention seen watermark: %w", err)
+	}
+	return nil
 }
 
 // MarkAllRead marks all text channels in a server as read for the user.

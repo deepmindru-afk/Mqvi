@@ -11,8 +11,11 @@ type ReadState struct {
 	LastReadAt        time.Time `json:"last_read_at"`
 }
 
-// UnreadInfo — unread count for a channel, used for sidebar badges.
+// UnreadInfo — sidebar unread badges. Mention watermark is the tuple
+// (LastMentionSeenAt, LastMentionSeenMessageID) compared lexicographically.
 type UnreadInfo struct {
-	ChannelID   string `json:"channel_id"`
-	UnreadCount int    `json:"unread_count"`
+	ChannelID                string     `json:"channel_id"`
+	UnreadCount              int        `json:"unread_count"`
+	LastMentionSeenAt        *time.Time `json:"last_mention_seen_at"`
+	LastMentionSeenMessageID *string    `json:"last_mention_seen_message_id"`
 }

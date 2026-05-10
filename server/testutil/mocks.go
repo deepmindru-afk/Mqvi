@@ -850,6 +850,7 @@ type MockReadStateRepo struct {
 	MarkAllReadFn              func(ctx context.Context, userID, serverID string) error
 	IncrementUnreadCountsFn    func(ctx context.Context, channelID, excludeUserID string) error
 	DecrementUnreadForDeletedFn func(ctx context.Context, channelID, authorID string, deletedAt time.Time) error
+	SetMentionSeenFn           func(ctx context.Context, userID, channelID, mentionMessageID string) error
 }
 
 func (m *MockReadStateRepo) Upsert(ctx context.Context, userID, channelID, messageID string) error {
@@ -879,6 +880,12 @@ func (m *MockReadStateRepo) IncrementUnreadCounts(ctx context.Context, channelID
 func (m *MockReadStateRepo) DecrementUnreadForDeleted(ctx context.Context, channelID, authorID string, deletedAt time.Time) error {
 	if m.DecrementUnreadForDeletedFn != nil {
 		return m.DecrementUnreadForDeletedFn(ctx, channelID, authorID, deletedAt)
+	}
+	return nil
+}
+func (m *MockReadStateRepo) SetMentionSeen(ctx context.Context, userID, channelID, mentionMessageID string) error {
+	if m.SetMentionSeenFn != nil {
+		return m.SetMentionSeenFn(ctx, userID, channelID, mentionMessageID)
 	}
 	return nil
 }

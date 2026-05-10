@@ -70,6 +70,35 @@ func (h *ReadStateHandler) MarkAllRead(w http.ResponseWriter, r *http.Request) {
 	pkg.JSON(w, http.StatusOK, map[string]string{"message": "all channels marked as read"})
 }
 
+type markMentionSeenRequest struct {
+	MentionMessageID string `json:"mention_message_id"`
+}
+
+// MarkMentionSeen advances the mention-seen watermark for a channel.
+// POST /api/servers/{serverId}/channels/{id}/read/mentions
+func (h *ReadStateHandler) MarkMentionSeen(w http.ResponseWriter, r *http.Request) {
+	channelID := r.PathValue("id")
+
+	user, ok := r.Context().Value(UserContextKey).(*models.User)
+	if !ok {
+		pkg.ErrorWithMessage(w, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+
+	var req markMentionSeenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		pkg.ErrorWithMessage(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := h.readStateService.MarkMentionSeen(r.Context(), user.ID, channelID, req.MentionMessageID); err != nil {
+		pkg.Error(w, err)
+		return
+	}
+
+	pkg.JSON(w, http.StatusOK, map[string]string{"message": "mention seen"})
+}
+
 // GetUnreads returns unread message counts for all channels in the server.
 // GET /api/servers/{serverId}/channels/unread
 func (h *ReadStateHandler) GetUnreads(w http.ResponseWriter, r *http.Request) {

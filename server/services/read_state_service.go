@@ -16,6 +16,7 @@ type ReadStateService interface {
 	MarkRead(ctx context.Context, userID, channelID, messageID string) error
 	GetUnreadCounts(ctx context.Context, userID, serverID string) ([]models.UnreadInfo, error)
 	MarkAllRead(ctx context.Context, userID, serverID string) error
+	MarkMentionSeen(ctx context.Context, userID, channelID, mentionMessageID string) error
 }
 
 type readStateService struct {
@@ -42,6 +43,13 @@ func (s *readStateService) MarkRead(ctx context.Context, userID, channelID, mess
 
 func (s *readStateService) MarkAllRead(ctx context.Context, userID, serverID string) error {
 	return s.readStateRepo.MarkAllRead(ctx, userID, serverID)
+}
+
+func (s *readStateService) MarkMentionSeen(ctx context.Context, userID, channelID, mentionMessageID string) error {
+	if strings.TrimSpace(mentionMessageID) == "" {
+		return fmt.Errorf("%w: mention_message_id is required", pkg.ErrBadRequest)
+	}
+	return s.readStateRepo.SetMentionSeen(ctx, userID, channelID, mentionMessageID)
 }
 
 func (s *readStateService) GetUnreadCounts(ctx context.Context, userID, serverID string) ([]models.UnreadInfo, error) {

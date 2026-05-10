@@ -12,9 +12,9 @@ import (
 	"github.com/akinalp/mqvi/ws"
 )
 
-// Discord-style token patterns: <@userId> for user mentions, <@&roleId> for role mentions
-var userMentionRegex = regexp.MustCompile(`<@([a-f0-9]+)>`)
-var roleMentionRegex = regexp.MustCompile(`<@&([a-f0-9]+)>`)
+// Discord-style: <@userId> user, <@&roleId> role. [a-z0-9] covers hex IDs and legacy seeded role IDs.
+var userMentionRegex = regexp.MustCompile(`<@([a-z0-9]+)>`)
+var roleMentionRegex = regexp.MustCompile(`<@&([a-z0-9]+)>`)
 
 type MessageService interface {
 	GetByChannelID(ctx context.Context, channelID string, userID string, beforeID string, limit int) (*models.MessagePage, error)

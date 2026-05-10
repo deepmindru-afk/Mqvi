@@ -331,7 +331,7 @@ function Message({ message, isCompact }: MessageProps) {
   const KLIPY_REGEX = /^https?:\/\/static\.klipy\.com\/[^\s]+$/;
 
   /** Captures token mentions <@id>/<@&id>, legacy @word mentions, and URLs */
-  const TOKEN_REGEX = /(<@&?[a-f0-9]+>|@\w+|https?:\/\/[^\s<]+)/gi;
+  const TOKEN_REGEX = /(<@&?[a-z0-9]+>|@\w+|https?:\/\/[^\s<]+)/gi;
 
   /** Parse message content: @mentions, invite cards, Klipy GIFs, clickable links. */
   function renderContent(text: string | null): React.ReactNode {
@@ -365,7 +365,7 @@ function Message({ message, isCompact }: MessageProps) {
     const parts = text.split(TOKEN_REGEX);
     return parts.map((part, i) => {
       // Token mention: <@&roleId> or <@userId>
-      const roleTokenMatch = part.match(/^<@&([a-f0-9]+)>$/);
+      const roleTokenMatch = part.match(/^<@&([a-z0-9]+)>$/);
       if (roleTokenMatch) {
         const role = roleById.get(roleTokenMatch[1]);
         if (role) {
@@ -382,7 +382,7 @@ function Message({ message, isCompact }: MessageProps) {
         return <span key={i} className="msg-mention">@unknown-role</span>;
       }
 
-      const userTokenMatch = part.match(/^<@([a-f0-9]+)>$/);
+      const userTokenMatch = part.match(/^<@([a-z0-9]+)>$/);
       if (userTokenMatch) {
         const member = memberById.get(userTokenMatch[1]);
         if (member) {

@@ -39,10 +39,9 @@ function MessageList() {
   const prevMessageCountRef = useRef(0);
 
   // ─── Mention Navigation State ───
-  const seenMentions = useReadStateStore((s) => s.seenMentions[channelId]);
+  const lastMentionSeen = useReadStateStore((s) => s.lastMentionSeen[channelId]);
   const markMentionSeen = useReadStateStore((s) => s.markMentionSeen);
 
-  // Compute unseen mention message IDs (exclude already-seen mentions)
   const mentionMessageIds = useMemo(() => {
     if (!currentUser) return [];
     const myMember = members.find((m) => m.id === currentUser.id);
@@ -52,8 +51,10 @@ function MessageList() {
 
     const ids: string[] = [];
     for (const msg of messages) {
-      // Skip mentions already seen by the user
-      if (seenMentions?.has(msg.id)) continue;
+      if (lastMentionSeen) {
+        if (msg.created_at < lastMentionSeen.at) continue;
+        if (msg.created_at === lastMentionSeen.at && msg.id <= lastMentionSeen.messageId) continue;
+      }
 
       if (msg.mentions?.includes(currentUser.id)) {
         ids.push(msg.id);
@@ -66,16 +67,17 @@ function MessageList() {
       }
     }
     return ids;
-  }, [messages, currentUser, members, seenMentions]);
+  }, [messages, currentUser, members, lastMentionSeen]);
 
   const mentionCount = mentionMessageIds.length;
 
   function handleMentionNavClick() {
     if (mentionCount === 0) return;
     const msgId = mentionMessageIds[0];
+    const msg = messages.find((m) => m.id === msgId);
 
-    // Mark as seen — removes from the list permanently (survives channel switch)
-    markMentionSeen(channelId, msgId);
+    // Advance the watermark — server-persisted, survives hard refresh
+    if (msg) markMentionSeen(channelId, msgId, msg.created_at);
 
     const el = document.getElementById(`msg-${msgId}`);
     if (el) {

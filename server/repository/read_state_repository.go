@@ -22,4 +22,7 @@ type ReadStateRepository interface {
 	// their watermark). Preserves the pre-denormalization behavior where unread
 	// counts reflected the current message set.
 	DecrementUnreadForDeleted(ctx context.Context, channelID, authorID string, deletedAt time.Time) error
+	// SetMentionSeen advances the per-channel mention watermark to the given message's
+	// created_at. Idempotent: never moves the watermark backwards.
+	SetMentionSeen(ctx context.Context, userID, channelID, mentionMessageID string) error
 }
