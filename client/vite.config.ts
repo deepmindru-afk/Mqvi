@@ -38,4 +38,8 @@ export default defineConfig(({ command }) => ({
     minify: "esbuild",
     sourcemap: false,
   },
+  esbuild:
+    command === "build"
+      ? { pure: ["console.log", "console.warn", "console.debug", "console.info"] }
+      : undefined,
 }));
