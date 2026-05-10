@@ -26,7 +26,7 @@ type MockUserRepo struct {
 	GetByEmailFn              func(ctx context.Context, email string) (*models.User, error)
 	CountFn                   func(ctx context.Context) (int, error)
 	DeleteFn                  func(ctx context.Context, id string) error
-	ListAllUsersWithStatsFn   func(ctx context.Context) ([]models.AdminUserListItem, error)
+	ListAdminUsersPagedFn     func(ctx context.Context, params models.AdminListPageParams, defaultQuotaBytes int64, activeVoiceUserIDs []string) (models.AdminUserListPage, error)
 	UpdateLastVoiceActivityFn func(ctx context.Context, userID string) error
 	PlatformBanFn             func(ctx context.Context, userID, reason, bannedBy string) error
 	PlatformUnbanFn           func(ctx context.Context, userID string) error
@@ -114,11 +114,11 @@ func (m *MockUserRepo) Delete(ctx context.Context, id string) error {
 	}
 	return nil
 }
-func (m *MockUserRepo) ListAllUsersWithStats(ctx context.Context, defaultQuotaBytes int64) ([]models.AdminUserListItem, error) {
-	if m.ListAllUsersWithStatsFn != nil {
-		return m.ListAllUsersWithStatsFn(ctx)
+func (m *MockUserRepo) ListAdminUsersPaged(ctx context.Context, params models.AdminListPageParams, defaultQuotaBytes int64, activeVoiceUserIDs []string) (models.AdminUserListPage, error) {
+	if m.ListAdminUsersPagedFn != nil {
+		return m.ListAdminUsersPagedFn(ctx, params, defaultQuotaBytes, activeVoiceUserIDs)
 	}
-	return nil, nil
+	return models.AdminUserListPage{}, nil
 }
 func (m *MockUserRepo) UpdateLastVoiceActivity(ctx context.Context, userID string) error {
 	if m.UpdateLastVoiceActivityFn != nil {

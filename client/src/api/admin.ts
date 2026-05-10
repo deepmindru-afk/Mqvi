@@ -81,12 +81,37 @@ export async function getLiveKitMetricsTimeSeries(
   );
 }
 
-export async function listAdminServers() {
-  return apiClient<AdminServerListItem[]>("/admin/servers");
+export type AdminListParams = {
+  limit: number;
+  offset: number;
+  search?: string;
+  status?: string;
+  sort?: string;
+  dir?: "asc" | "desc";
+};
+
+export type AdminListPage<T> = {
+  items: T[];
+  total: number;
+};
+
+function buildAdminListQuery(params: AdminListParams): string {
+  const sp = new URLSearchParams();
+  sp.set("limit", String(params.limit));
+  sp.set("offset", String(params.offset));
+  if (params.search) sp.set("search", params.search);
+  if (params.status) sp.set("status", params.status);
+  if (params.sort) sp.set("sort", params.sort);
+  if (params.dir) sp.set("dir", params.dir);
+  return sp.toString();
 }
 
-export async function listAdminUsers() {
-  return apiClient<AdminUserListItem[]>("/admin/users");
+export async function listAdminServers(params: AdminListParams) {
+  return apiClient<AdminListPage<AdminServerListItem>>(`/admin/servers?${buildAdminListQuery(params)}`);
+}
+
+export async function listAdminUsers(params: AdminListParams) {
+  return apiClient<AdminListPage<AdminUserListItem>>(`/admin/users?${buildAdminListQuery(params)}`);
 }
 
 export async function platformBanUser(

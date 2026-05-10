@@ -1703,13 +1703,36 @@ button.ch-tree-vu-stream svg { width:14px;height:14px; }
 }
 .admin-user-search:focus { border-color:var(--primary); }
 .admin-user-search::placeholder { color:var(--t3); }
-.admin-user-status-filter {
+.admin-user-status-filter,
+.admin-server-status-filter {
   height:36px;background:var(--input-bg);border:1px solid var(--input-border);
   border-radius:8px;padding:0 28px 0 12px;color:var(--t0);font-size:14px;
   outline:none;transition:border-color .15s;cursor:pointer;
 }
-.admin-user-status-filter:focus { border-color:var(--primary); }
+.admin-user-status-filter:focus,
+.admin-server-status-filter:focus { border-color:var(--primary); }
 .admin-user-count { font-size:13px;color:var(--t3);font-family:var(--f-m);white-space:nowrap; }
+
+/* ── Admin table loading overlay (subtle stale-page hint) ── */
+.admin-user-table-wrap,
+.admin-server-table-wrap { transition:opacity .12s ease; }
+.admin-user-table-wrap.is-loading,
+.admin-server-table-wrap.is-loading { opacity:.55;pointer-events:none; }
+
+/* ── Pagination (shared) ── */
+.pagination { display:flex;align-items:center;justify-content:space-between;gap:16px;padding:8px 12px;border-top:1px solid var(--input-border);flex-wrap:wrap;flex-shrink:0; }
+.pagination-left { display:flex;align-items:center;gap:14px; }
+.pagination-right { display:flex;align-items:center;gap:4px; }
+.pagination-size { display:flex;align-items:center;gap:8px;font-size:13px;color:var(--t2); }
+.pagination-size-label { white-space:nowrap; }
+.pagination-size-select { height:30px;background:var(--input-bg);border:1px solid var(--input-border);border-radius:6px;padding:0 26px 0 10px;color:var(--t0);font-size:13px;outline:none;cursor:pointer;transition:border-color .15s; }
+.pagination-size-select:focus { border-color:var(--primary); }
+.pagination-info { font-size:13px;color:var(--t3);font-family:var(--f-m);white-space:nowrap; }
+.pagination-arrow,.pagination-page { min-width:30px;height:30px;padding:0 8px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--t1);font-size:13px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all .12s; }
+.pagination-arrow:hover:not(:disabled),.pagination-page:not(.active):hover { background:var(--bg-h);color:var(--t0);border-color:var(--bg-h); }
+.pagination-arrow:disabled { opacity:.4;cursor:not-allowed; }
+.pagination-page.active { background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600; }
+.pagination-ellipsis { color:var(--t3);font-size:13px;padding:0 4px; }
 
 /* ── Table wrapper (scrollable) ── */
 .admin-user-table-wrap { flex:1;overflow:auto; }

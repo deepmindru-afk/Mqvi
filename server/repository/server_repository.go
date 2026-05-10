@@ -58,8 +58,12 @@ type ServerRepository interface {
 
 	// ─── Admin ───
 
-	// ListAllWithStats returns all servers with aggregated stats (members, channels, messages, storage, etc.).
-	ListAllWithStats(ctx context.Context) ([]models.AdminServerListItem, error)
+	// ListAdminServersPaged returns paginated, filtered, sorted servers with stats and total count.
+	// activeVoiceServerIDs overrides last_activity to "now" for servers with currently-in-voice
+	// users (DB last_voice_activity stamps only at JOIN). Without it the last_activity sort
+	// can drop active servers off page 1 once messaging in other servers overtakes the stamp.
+	// Sort/Dir validated against an internal whitelist; invalid values fall back to created_at DESC.
+	ListAdminServersPaged(ctx context.Context, params models.AdminListPageParams, activeVoiceServerIDs []string) (models.AdminServerListPage, error)
 
 	UpdateLastVoiceActivity(ctx context.Context, serverID string) error
 

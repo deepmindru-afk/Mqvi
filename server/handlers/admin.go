@@ -172,14 +172,15 @@ func (h *AdminHandler) DeleteLiveKitInstance(w http.ResponseWriter, r *http.Requ
 }
 
 // ListServers -- GET /api/admin/servers
+// Query: ?limit=50&offset=0&search=foo&status=all|active|soft_deleted&sort=name&dir=asc
 func (h *AdminHandler) ListServers(w http.ResponseWriter, r *http.Request) {
-	servers, err := h.livekitAdminService.ListServers(r.Context())
+	page, err := h.livekitAdminService.ListServersPaged(r.Context(),
+		parseAdminListParams(r, []string{"all", "active", "soft_deleted"}))
 	if err != nil {
 		pkg.Error(w, err)
 		return
 	}
-
-	pkg.JSON(w, http.StatusOK, servers)
+	pkg.JSON(w, http.StatusOK, page)
 }
 
 // MigrateServerInstance -- PATCH /api/admin/servers/{serverId}/instance
@@ -234,14 +235,63 @@ func (h *AdminHandler) GetLiveKitInstanceMetrics(w http.ResponseWriter, r *http.
 }
 
 // ListUsers -- GET /api/admin/users
+// Query: ?limit=50&offset=0&search=foo&status=all|active|banned|soft_deleted|tombstone&sort=username&dir=asc
 func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
-	users, err := h.livekitAdminService.ListUsers(r.Context())
+	page, err := h.livekitAdminService.ListUsersPaged(r.Context(),
+		parseAdminListParams(r, []string{"all", "active", "banned", "soft_deleted", "tombstone"}))
 	if err != nil {
 		pkg.Error(w, err)
 		return
 	}
+	pkg.JSON(w, http.StatusOK, page)
+}
 
-	pkg.JSON(w, http.StatusOK, users)
+// parseAdminListParams — shared limit/offset/search/status/sort/dir extractor.
+// allowedStatuses is the per-endpoint whitelist; values outside it fall back to "all".
+// Limit clamped to [1,100], default 50. Dir defaults to "desc".
+// Sort is opaque here — repo enforces its own whitelist.
+func parseAdminListParams(r *http.Request, allowedStatuses []string) models.AdminListPageParams {
+	q := r.URL.Query()
+	limit := 50
+	if s := q.Get("limit"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil {
+			if n < 1 {
+				n = 1
+			} else if n > 100 {
+				n = 100
+			}
+			limit = n
+		}
+	}
+	offset := 0
+	if s := q.Get("offset"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+	status := q.Get("status")
+	allowed := false
+	for _, s := range allowedStatuses {
+		if status == s {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		status = "all"
+	}
+	dir := q.Get("dir")
+	if dir != "asc" && dir != "desc" {
+		dir = "desc"
+	}
+	return models.AdminListPageParams{
+		Limit:  limit,
+		Offset: offset,
+		Search: q.Get("search"),
+		Status: status,
+		Sort:   q.Get("sort"),
+		Dir:    dir,
+	}
 }
 
 // GetLiveKitInstanceMetricsHistory -- GET /api/admin/livekit-instances/{id}/metrics/history?period=24h

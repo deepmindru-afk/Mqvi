@@ -40,8 +40,15 @@ type UserRepository interface {
 
 	// ─── Admin ───
 
-	// ListAllUsersWithStats returns all users with aggregated stats (message count, storage, bans, etc.).
-	ListAllUsersWithStats(ctx context.Context, defaultQuotaBytes int64) ([]models.AdminUserListItem, error)
+	// ListAdminUsersPaged returns paginated, filtered, sorted users with stats and the
+	// total row count under the same WHERE clause.
+	// activeVoiceUserIDs overrides last_activity to "now" for currently-in-voice users
+	// (DB last_voice_activity only updates at JOIN, so without this overlay the SQL
+	// last_activity sort can drop active voice users off page 1 once messaging from
+	// other users overtakes their stale stamp).
+	// Caller MUST pre-validate params.Limit/Offset (>= 0); Sort/Dir are validated here
+	// against an internal whitelist — invalid values fall back to created_at DESC.
+	ListAdminUsersPaged(ctx context.Context, params models.AdminListPageParams, defaultQuotaBytes int64, activeVoiceUserIDs []string) (models.AdminUserListPage, error)
 
 	UpdateLastVoiceActivity(ctx context.Context, userID string) error
 

@@ -1,6 +1,6 @@
 /** AdminUserList — Platform admin user management table (sortable, filterable, resizable columns). */
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useToastStore } from "../../stores/toastStore";
 import { useAuthStore } from "../../stores/authStore";
@@ -11,6 +11,7 @@ import { listAdminUsers, platformBanUser, platformUnbanUser, hardDeleteUser, set
 import { useContextMenu } from "../../hooks/useContextMenu";
 import { useConfirm } from "../../hooks/useConfirm";
 import ContextMenu from "../shared/ContextMenu";
+import Pagination from "../shared/Pagination";
 import PlatformBanDialog from "./PlatformBanDialog";
 import PlatformActionDialog from "./PlatformActionDialog";
 import BadgeAssignModal from "../members/BadgeAssignModal";
@@ -77,69 +78,6 @@ function parseUTC(iso: string): number {
   return new Date(iso.endsWith("Z") ? iso : iso + "Z").getTime();
 }
 
-// ─── Sort comparator ───
-
-function compareSortValue(
-  a: AdminUserListItem,
-  b: AdminUserListItem,
-  key: SortKey,
-  dir: "asc" | "desc",
-): number {
-  let result = 0;
-
-  switch (key) {
-    case "username":
-      result = a.username.localeCompare(b.username);
-      break;
-    case "display_name": {
-      const aName = a.display_name ?? "";
-      const bName = b.display_name ?? "";
-      result = aName.localeCompare(bName);
-      break;
-    }
-    case "created_at":
-      result = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      break;
-    case "status":
-      result = a.status.localeCompare(b.status);
-      break;
-    case "is_platform_admin":
-      result = (a.is_platform_admin ? 1 : 0) - (b.is_platform_admin ? 1 : 0);
-      break;
-    case "last_activity": {
-      const aTime = a.last_activity ? parseUTC(a.last_activity) : 0;
-      const bTime = b.last_activity ? parseUTC(b.last_activity) : 0;
-      result = aTime - bTime;
-      break;
-    }
-    case "message_count":
-      result = a.message_count - b.message_count;
-      break;
-    case "storage_mb":
-      result = a.storage_mb - b.storage_mb;
-      break;
-    case "quota_bytes":
-      result = a.quota_bytes - b.quota_bytes;
-      break;
-    case "owned_self_servers":
-      result = a.owned_self_servers - b.owned_self_servers;
-      break;
-    case "owned_mqvi_servers":
-      result = a.owned_mqvi_servers - b.owned_mqvi_servers;
-      break;
-    case "member_server_count":
-      result = a.member_server_count - b.member_server_count;
-      break;
-    case "ban_count":
-      result = a.ban_count - b.ban_count;
-      break;
-    default:
-      result = 0;
-  }
-
-  return dir === "desc" ? -result : result;
-}
-
 // ─── Component ───
 
 function AdminUserList() {
@@ -153,7 +91,12 @@ function AdminUserList() {
 
   // ─── Data state ───
   const [users, setUsers] = useState<AdminUserListItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+
+  // ─── Pagination ───
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
 
   // ─── Ban dialog state ───
   const [banTarget, setBanTarget] = useState<AdminUserListItem | null>(null);
@@ -170,13 +113,20 @@ function AdminUserList() {
 
   // ─── Table state ───
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   // Deletion-state filter — admin needs to triage banned/soft-deleted/tombstone
   // separately, not just one giant list. Default "all" preserves prior behaviour.
   type StatusFilter = "all" | "active" | "banned" | "soft_deleted" | "tombstone";
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [sortKey, setSortKey] = useState<SortKey>("username");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortKey, setSortKey] = useState<SortKey>("created_at");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(getDefaultWidths);
+
+  // Debounce search input — fires backend fetch 300ms after typing stops.
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // ─── Column resize refs ───
   const resizingRef = useRef<{
@@ -187,55 +137,47 @@ function AdminUserList() {
   const widthsRef = useRef(columnWidths);
   widthsRef.current = columnWidths;
 
-  // ─── Fetch ───
+  // ─── Fetch (server-side filter/sort/paging) ───
+  // Mutating actions (ban/delete/quota) bump this to force a refetch with current params.
+  const [refetchTick, setRefetchTick] = useState(0);
+
   useEffect(() => {
+    let cancelled = false;
     async function load() {
       setIsLoading(true);
-      const res = await listAdminUsers();
+      const res = await listAdminUsers({
+        limit: pageSize,
+        offset: page * pageSize,
+        search: debouncedSearch || undefined,
+        status: statusFilter,
+        sort: sortKey,
+        dir: sortDir,
+      });
+      if (cancelled) return;
       if (res.success && res.data) {
-        setUsers(res.data);
+        // Last user on the last page got deleted — backend returns items=[] but total>0.
+        // Clamp page and let the next render refetch.
+        if ((res.data.items?.length ?? 0) === 0 && res.data.total > 0 && page > 0) {
+          const lastPage = Math.max(0, Math.ceil(res.data.total / pageSize) - 1);
+          setPage(lastPage);
+          return;
+        }
+        setUsers(res.data.items ?? []);
+        setTotal(res.data.total);
       } else {
         addToast("error", res.error ?? t("platformUserLoadError"));
       }
       setIsLoading(false);
     }
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => { cancelled = true; };
+  }, [page, pageSize, debouncedSearch, statusFilter, sortKey, sortDir, refetchTick, addToast, t]);
 
-  // ─── Filtered + Sorted data ───
-  const filteredUsers = useMemo(() => {
-    let list = users;
-
-    if (statusFilter !== "all") {
-      list = list.filter((u) => {
-        switch (statusFilter) {
-          case "active":
-            return !u.is_platform_banned && !u.deleted_at;
-          case "banned":
-            return u.is_platform_banned;
-          case "soft_deleted":
-            return !!u.deleted_at && !u.is_hard_deleted;
-          case "tombstone":
-            return !!u.is_hard_deleted;
-          default:
-            return true;
-        }
-      });
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      list = list.filter(
-        (u) =>
-          u.username.toLowerCase().includes(q) ||
-          u.id.toLowerCase().includes(q) ||
-          (u.display_name?.toLowerCase().includes(q) ?? false),
-      );
-    }
-
-    return [...list].sort((a, b) => compareSortValue(a, b, sortKey, sortDir));
-  }, [users, searchQuery, statusFilter, sortKey, sortDir]);
+  // Reset to page 0 whenever the underlying filter/sort/page-size changes —
+  // staying on page N after a filter narrows results would yield an empty page.
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, statusFilter, sortKey, sortDir, pageSize]);
 
   // ─── Sort handler ───
   function handleSort(key: SortKey) {
@@ -252,11 +194,8 @@ function AdminUserList() {
 
   // ─── Context Menu ───
 
-  const refetchUsers = useCallback(async () => {
-    const res = await listAdminUsers();
-    if (res.success && res.data) {
-      setUsers(res.data);
-    }
+  const refetchUsers = useCallback(() => {
+    setRefetchTick((n) => n + 1);
   }, []);
 
   function buildContextItems(user: AdminUserListItem): ContextMenuItem[] {
@@ -679,14 +618,6 @@ function AdminUserList() {
   }
 
   // ─── Render ───
-  if (isLoading) {
-    return (
-      <div className="admin-user-list">
-        <p className="no-channel">{t("loading")}</p>
-      </div>
-    );
-  }
-
   return (
     <div className="admin-user-list">
       {/* ── Toolbar: Search + Status filter + Count ── */}
@@ -709,20 +640,19 @@ function AdminUserList() {
           <option value="soft_deleted">{t("platformUserFilterSoftDeleted")}</option>
           <option value="tombstone">{t("platformUserFilterTombstone")}</option>
         </select>
-        <span className="admin-user-count">
-          {filteredUsers.length} / {users.length}
-        </span>
       </div>
 
       {/* ── Table ── */}
-      {filteredUsers.length === 0 ? (
+      {users.length === 0 ? (
         <p className="no-channel">
-          {users.length === 0
-            ? t("platformUserNoUsers")
-            : t("platformUserNoResults")}
+          {isLoading
+            ? t("loading")
+            : total === 0
+              ? t("platformUserNoUsers")
+              : t("platformUserNoResults")}
         </p>
       ) : (
-        <div className="admin-user-table-wrap">
+        <div className={`admin-user-table-wrap${isLoading ? " is-loading" : ""}`}>
           <table className="admin-user-table">
             <colgroup>
               {COLUMNS.map((col) => (
@@ -754,7 +684,7 @@ function AdminUserList() {
               </tr>
             </thead>
             <tbody>
-              {filteredUsers.map((user) => (
+              {users.map((user) => (
                 <tr
                   key={user.id}
                   className={user.is_platform_banned ? "admin-user-row-banned" : ""}
@@ -774,6 +704,16 @@ function AdminUserList() {
           </table>
         </div>
       )}
+
+      {/* ── Pagination ── */}
+      <Pagination
+        page={page}
+        total={total}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      />
+
       {/* Context Menu */}
       <ContextMenu state={menuState} onClose={closeMenu} />
 

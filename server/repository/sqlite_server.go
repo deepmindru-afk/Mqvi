@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/akinalp/mqvi/database"
 	"github.com/akinalp/mqvi/models"
@@ -416,52 +417,141 @@ func (r *sqliteServerRepo) GetMaxMemberPosition(ctx context.Context, userID stri
 
 // ─── Admin ───
 
-// ListAllWithStats returns all servers with aggregated stats via correlated subqueries.
-func (r *sqliteServerRepo) ListAllWithStats(ctx context.Context) ([]models.AdminServerListItem, error) {
-	query := `
+var adminServerSortColumns = map[string]string{
+	"name":                "s.name COLLATE NOCASE",
+	"owner_username":      "owner_username COLLATE NOCASE",
+	"created_at":          "s.created_at",
+	"is_platform_managed": "is_platform_managed",
+	"member_count":        "member_count",
+	"channel_count":       "channel_count",
+	"message_count":       "message_count",
+	"storage_mb":          "storage_mb",
+	"last_activity":       "last_activity",
+}
+
+// buildAdminServerFilter — WHERE fragment shared by data and count queries.
+// status filter mirrors users: active/soft_deleted/tombstone (no banned for servers).
+func buildAdminServerFilter(status, search string) (string, []any) {
+	var clauses []string
+	var args []any
+
+	switch status {
+	case "active":
+		clauses = append(clauses, "s.deleted_at IS NULL")
+	case "soft_deleted":
+		clauses = append(clauses, "s.deleted_at IS NOT NULL")
+	}
+
+	if q := strings.TrimSpace(search); q != "" {
+		like := "%" + q + "%"
+		clauses = append(clauses,
+			"(s.name LIKE ? COLLATE NOCASE OR s.id LIKE ? COLLATE NOCASE OR COALESCE(u.username,'') LIKE ? COLLATE NOCASE)")
+		args = append(args, like, like, like)
+	}
+
+	if len(clauses) == 0 {
+		return "", args
+	}
+	return "WHERE " + strings.Join(clauses, " AND "), args
+}
+
+// buildVoiceServerOverlay — same idea as user overlay but keyed by server_id.
+func buildVoiceServerOverlay(serverIDs []string) (cte string, override string, args []any) {
+	if len(serverIDs) == 0 {
+		return "", "", nil
+	}
+	placeholders := make([]string, len(serverIDs))
+	args = make([]any, len(serverIDs))
+	for i, id := range serverIDs {
+		placeholders[i] = "(?)"
+		args[i] = id
+	}
+	cte = "WITH active_voice_server(server_id) AS (VALUES " + strings.Join(placeholders, ",") + ")"
+	override = "(SELECT CASE WHEN EXISTS (SELECT 1 FROM active_voice_server avs WHERE avs.server_id = s.id) THEN datetime('now') ELSE NULL END)"
+	return cte, override, args
+}
+
+// ListAdminServersPaged — see ServerRepository.ListAdminServersPaged.
+func (r *sqliteServerRepo) ListAdminServersPaged(ctx context.Context, params models.AdminListPageParams, activeVoiceServerIDs []string) (models.AdminServerListPage, error) {
+	whereSQL, whereArgs := buildAdminServerFilter(params.Status, params.Search)
+
+	sortExpr, ok := adminServerSortColumns[params.Sort]
+	if !ok {
+		sortExpr = "s.created_at"
+		params.Dir = "desc"
+	}
+	dir := "ASC"
+	if strings.EqualFold(params.Dir, "desc") {
+		dir = "DESC"
+	}
+
+	countQuery := `
+		SELECT COUNT(*)
+		FROM servers s
+		LEFT JOIN users u ON s.owner_id = u.id
+		LEFT JOIN livekit_instances li ON s.livekit_instance_id = li.id
+		` + whereSQL
+	var total int
+	if err := r.db.QueryRowContext(ctx, countQuery, whereArgs...).Scan(&total); err != nil {
+		return models.AdminServerListPage{}, fmt.Errorf("count admin servers: %w", err)
+	}
+
+	voiceCTE, voiceOverrideExpr, voiceArgs := buildVoiceServerOverlay(activeVoiceServerIDs)
+	if voiceOverrideExpr == "" {
+		voiceOverrideExpr = "NULL"
+	}
+
+	dataQuery := voiceCTE + `
 		SELECT
 			s.id,
 			s.name,
 			s.icon_url,
 			s.owner_id,
-			COALESCE(u.username, ''),
+			COALESCE(u.username, '') AS owner_username,
 			s.created_at,
 			CASE
 				WHEN s.livekit_instance_id IS NOT NULL AND li.id IS NULL THEN 1
 				ELSE COALESCE(li.is_platform_managed, 0)
-			END,
+			END AS is_platform_managed,
 			s.livekit_instance_id,
-			(SELECT COUNT(*) FROM server_members sm WHERE sm.server_id = s.id),
-			(SELECT COUNT(*) FROM channels c WHERE c.server_id = s.id),
+			(SELECT COUNT(*) FROM server_members sm WHERE sm.server_id = s.id) AS member_count,
+			(SELECT COUNT(*) FROM channels c WHERE c.server_id = s.id) AS channel_count,
 			(SELECT COUNT(*) FROM messages m
 			 INNER JOIN channels c2 ON m.channel_id = c2.id
-			 WHERE c2.server_id = s.id),
+			 WHERE c2.server_id = s.id) AS message_count,
 			COALESCE(
 				(SELECT SUM(a.file_size) FROM attachments a
 				 INNER JOIN messages m2 ON a.message_id = m2.id
 				 INNER JOIN channels c3 ON m2.channel_id = c3.id
 				 WHERE c3.server_id = s.id), 0
-			) / 1048576.0,
+			) / 1048576.0 AS storage_mb,
 			MAX(
 				COALESCE((SELECT MAX(m3.created_at) FROM messages m3
 				 INNER JOIN channels c4 ON m3.channel_id = c4.id
 				 WHERE c4.server_id = s.id), ''),
-				COALESCE(s.last_voice_activity, '')
-			),
+				COALESCE(s.last_voice_activity, ''),
+				COALESCE(` + voiceOverrideExpr + `, '')
+			) AS last_activity,
 			s.deleted_at,
 			s.deleted_by_admin
 		FROM servers s
 		LEFT JOIN users u ON s.owner_id = u.id
 		LEFT JOIN livekit_instances li ON s.livekit_instance_id = li.id
-		ORDER BY s.created_at DESC`
+		` + whereSQL + `
+		ORDER BY ` + sortExpr + ` ` + dir + `, s.id ASC
+		LIMIT ? OFFSET ?`
 
-	rows, err := r.db.QueryContext(ctx, query)
+	args := append([]any{}, voiceArgs...)
+	args = append(args, whereArgs...)
+	args = append(args, params.Limit, params.Offset)
+
+	rows, err := r.db.QueryContext(ctx, dataQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list all servers with stats: %w", err)
+		return models.AdminServerListPage{}, fmt.Errorf("list admin servers paged: %w", err)
 	}
 	defer rows.Close()
 
-	var servers []models.AdminServerListItem
+	items := make([]models.AdminServerListItem, 0, params.Limit)
 	for rows.Next() {
 		var s models.AdminServerListItem
 		if err := rows.Scan(
@@ -471,16 +561,15 @@ func (r *sqliteServerRepo) ListAllWithStats(ctx context.Context) ([]models.Admin
 			&s.StorageMB, &s.LastActivity,
 			&s.DeletedAt, &s.DeletedByAdmin,
 		); err != nil {
-			return nil, fmt.Errorf("failed to scan admin server row: %w", err)
+			return models.AdminServerListPage{}, fmt.Errorf("scan admin server row: %w", err)
 		}
-		servers = append(servers, s)
+		items = append(items, s)
 	}
-
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating admin server rows: %w", err)
+		return models.AdminServerListPage{}, fmt.Errorf("iterate admin server rows: %w", err)
 	}
 
-	return servers, nil
+	return models.AdminServerListPage{Items: items, Total: total}, nil
 }
 
 func (r *sqliteServerRepo) UpdateLastVoiceActivity(ctx context.Context, serverID string) error {

@@ -36,11 +36,11 @@ type LiveKitAdminService interface {
 	// DeleteInstance deletes an instance. If servers are attached, migrates them
 	// to targetInstanceID. Errors if targetInstanceID is empty and serverCount > 0.
 	DeleteInstance(ctx context.Context, instanceID, targetInstanceID string) error
-	ListServers(ctx context.Context) ([]models.AdminServerListItem, error)
+	ListServersPaged(ctx context.Context, params models.AdminListPageParams) (models.AdminServerListPage, error)
 	// MigrateServerInstance moves a server to a different LiveKit instance.
 	// Target must be platform-managed with available capacity. Self-hosted servers cannot be migrated.
 	MigrateServerInstance(ctx context.Context, serverID, newInstanceID string) error
-	ListUsers(ctx context.Context) ([]models.AdminUserListItem, error)
+	ListUsersPaged(ctx context.Context, params models.AdminListPageParams) (models.AdminUserListPage, error)
 	// GetInstanceMetrics fetches real-time metrics from a LiveKit instance's Prometheus endpoint.
 	// Returns Available=false if /metrics is unreachable (no error returned).
 	GetInstanceMetrics(ctx context.Context, instanceID string) (*models.LiveKitInstanceMetrics, error)
@@ -242,28 +242,22 @@ func (s *livekitAdminService) DeleteInstance(ctx context.Context, instanceID, ta
 	return nil
 }
 
-func (s *livekitAdminService) ListServers(ctx context.Context) ([]models.AdminServerListItem, error) {
-	servers, err := s.serverRepo.ListAllWithStats(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list all servers: %w", err)
-	}
-
-	// Cross-reference in-memory voice state to update last_activity for servers
-	// with active voice users (DB only records join time, not ongoing sessions)
+func (s *livekitAdminService) ListServersPaged(ctx context.Context, params models.AdminListPageParams) (models.AdminServerListPage, error) {
 	activeServerIDs := s.getActiveVoiceServerIDs(ctx)
-	if len(activeServerIDs) > 0 {
-		now := time.Now().UTC().Format("2006-01-02 15:04:05")
-		for i := range servers {
-			if activeServerIDs[servers[i].ID] {
-				servers[i].LastActivity = &now
-			}
-		}
+	voiceServerIDs := make([]string, 0, len(activeServerIDs))
+	for id := range activeServerIDs {
+		voiceServerIDs = append(voiceServerIDs, id)
 	}
 
-	for i := range servers {
-		servers[i].IconURL = s.urlSigner.SignURLPtr(servers[i].IconURL)
+	page, err := s.serverRepo.ListAdminServersPaged(ctx, params, voiceServerIDs)
+	if err != nil {
+		return models.AdminServerListPage{}, fmt.Errorf("list admin servers paged: %w", err)
 	}
-	return servers, nil
+
+	for i := range page.Items {
+		page.Items[i].IconURL = s.urlSigner.SignURLPtr(page.Items[i].IconURL)
+	}
+	return page, nil
 }
 
 func (s *livekitAdminService) MigrateServerInstance(ctx context.Context, serverID, newInstanceID string) error {
@@ -306,28 +300,25 @@ func (s *livekitAdminService) MigrateServerInstance(ctx context.Context, serverI
 	return nil
 }
 
-func (s *livekitAdminService) ListUsers(ctx context.Context) ([]models.AdminUserListItem, error) {
-	users, err := s.userRepo.ListAllUsersWithStats(ctx, s.defaultQuotaBytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list all users: %w", err)
-	}
-
-	// Update last_activity for users currently in voice channels
+func (s *livekitAdminService) ListUsersPaged(ctx context.Context, params models.AdminListPageParams) (models.AdminUserListPage, error) {
+	// Pass voice IDs to the repo so the SQL last_activity sort sees them too —
+	// post-paging in-memory patching can't fix sort-induced page exclusion.
 	activeUserIDs := s.getActiveVoiceUserIDs()
-	if len(activeUserIDs) > 0 {
-		now := time.Now().UTC().Format("2006-01-02 15:04:05")
-		for i := range users {
-			if activeUserIDs[users[i].ID] {
-				users[i].LastActivity = &now
-			}
-		}
+	voiceIDs := make([]string, 0, len(activeUserIDs))
+	for id := range activeUserIDs {
+		voiceIDs = append(voiceIDs, id)
 	}
 
-	for i := range users {
-		users[i].AvatarURL = s.urlSigner.SignURLPtr(users[i].AvatarURL)
+	page, err := s.userRepo.ListAdminUsersPaged(ctx, params, s.defaultQuotaBytes, voiceIDs)
+	if err != nil {
+		return models.AdminUserListPage{}, fmt.Errorf("list admin users paged: %w", err)
 	}
 
-	return users, nil
+	for i := range page.Items {
+		page.Items[i].AvatarURL = s.urlSigner.SignURLPtr(page.Items[i].AvatarURL)
+	}
+
+	return page, nil
 }
 
 // getActiveVoiceServerIDs resolves which servers have active voice users.

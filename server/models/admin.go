@@ -24,6 +24,30 @@ type AdminServerListItem struct {
 	DeletedByAdmin    bool    `json:"deleted_by_admin"`
 }
 
+// AdminListPageParams — common pagination/filter/sort input for admin list endpoints.
+// Limit/Offset must be normalized by the caller (handler) before reaching the repo.
+// Sort/Dir are validated against per-list whitelists in the repository to block injection.
+type AdminListPageParams struct {
+	Limit  int
+	Offset int
+	Search string
+	Status string // "all" | "active" | "banned" | "soft_deleted" | "tombstone"
+	Sort   string
+	Dir    string // "asc" | "desc"
+}
+
+// AdminUserListPage — paged result for /api/admin/users.
+type AdminUserListPage struct {
+	Items []AdminUserListItem `json:"items"`
+	Total int                 `json:"total"`
+}
+
+// AdminServerListPage — paged result for /api/admin/servers.
+type AdminServerListPage struct {
+	Items []AdminServerListItem `json:"items"`
+	Total int                   `json:"total"`
+}
+
 // AdminUserListItem — user info for platform admin panel. Aggregated via correlated subqueries.
 type AdminUserListItem struct {
 	ID                string  `json:"id"`

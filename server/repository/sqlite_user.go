@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/akinalp/mqvi/database"
 	"github.com/akinalp/mqvi/models"
@@ -458,9 +459,100 @@ func searchString(s, substr string) bool {
 
 // ─── Admin ───
 
-// ListAllUsersWithStats returns all users with aggregated stats via correlated subqueries.
-func (r *sqliteUserRepo) ListAllUsersWithStats(ctx context.Context, defaultQuotaBytes int64) ([]models.AdminUserListItem, error) {
-	query := `
+// buildVoiceUserOverlay returns CTE + UNION fragment + args used to inject
+// "now" as last_voice_activity for currently-in-voice users. Empty slice → empty
+// strings (no CTE, no override).
+func buildVoiceUserOverlay(userIDs []string) (cte string, union string, args []any) {
+	if len(userIDs) == 0 {
+		return "", "", nil
+	}
+	placeholders := make([]string, len(userIDs))
+	args = make([]any, len(userIDs))
+	for i, id := range userIDs {
+		placeholders[i] = "(?)"
+		args[i] = id
+	}
+	cte = "WITH active_voice(user_id) AS (VALUES " + strings.Join(placeholders, ",") + ")"
+	union = "UNION ALL SELECT CASE WHEN EXISTS (SELECT 1 FROM active_voice av WHERE av.user_id = u.id) THEN datetime('now') END"
+	return cte, union, args
+}
+
+// adminUserSortColumns maps validated sort keys to SQL expressions. Anything not
+// in this map falls back to created_at DESC. Tie-breaker u.id is always appended.
+var adminUserSortColumns = map[string]string{
+	"username":            "u.username COLLATE NOCASE",
+	"display_name":        "COALESCE(u.display_name, '') COLLATE NOCASE",
+	"created_at":          "u.created_at",
+	"status":              "u.status",
+	"is_platform_admin":   "u.is_platform_admin",
+	"last_activity":       "last_activity",
+	"message_count":       "message_count",
+	"storage_mb":          "storage_mb",
+	"quota_bytes":         "quota_bytes",
+	"owned_self_servers":  "owned_self_servers",
+	"owned_mqvi_servers":  "owned_mqvi_servers",
+	"member_server_count": "member_server_count",
+	"ban_count":           "ban_count",
+}
+
+// buildAdminUserFilter — produces the WHERE fragment and arg list shared by the
+// data and count queries. status is whitelisted; search applies to username/id/display_name.
+func buildAdminUserFilter(status, search string) (string, []any) {
+	var clauses []string
+	var args []any
+
+	switch status {
+	case "active":
+		clauses = append(clauses, "u.is_platform_banned = 0 AND u.deleted_at IS NULL")
+	case "banned":
+		clauses = append(clauses, "u.is_platform_banned = 1")
+	case "soft_deleted":
+		clauses = append(clauses, "u.deleted_at IS NOT NULL AND u.is_hard_deleted = 0")
+	case "tombstone":
+		clauses = append(clauses, "u.is_hard_deleted = 1")
+	}
+
+	if s := strings.TrimSpace(search); s != "" {
+		like := "%" + s + "%"
+		clauses = append(clauses,
+			"(u.username LIKE ? COLLATE NOCASE OR u.id LIKE ? COLLATE NOCASE OR COALESCE(u.display_name,'') LIKE ? COLLATE NOCASE)")
+		args = append(args, like, like, like)
+	}
+
+	if len(clauses) == 0 {
+		return "", args
+	}
+	return "WHERE " + strings.Join(clauses, " AND "), args
+}
+
+// ListAdminUsersPaged — see UserRepository.ListAdminUsersPaged.
+func (r *sqliteUserRepo) ListAdminUsersPaged(ctx context.Context, params models.AdminListPageParams, defaultQuotaBytes int64, activeVoiceUserIDs []string) (models.AdminUserListPage, error) {
+	whereSQL, whereArgs := buildAdminUserFilter(params.Status, params.Search)
+
+	sortExpr, ok := adminUserSortColumns[params.Sort]
+	if !ok {
+		sortExpr = "u.created_at"
+		params.Dir = "desc"
+	}
+	dir := "ASC"
+	if strings.EqualFold(params.Dir, "desc") {
+		dir = "DESC"
+	}
+
+	// Count first — same WHERE, no LIMIT.
+	countQuery := "SELECT COUNT(*) FROM users u " + whereSQL
+	var total int
+	if err := r.db.QueryRowContext(ctx, countQuery, whereArgs...).Scan(&total); err != nil {
+		return models.AdminUserListPage{}, fmt.Errorf("count admin users: %w", err)
+	}
+
+	// Voice override CTE: feeds last_voice_activity = "now" into the last_activity
+	// subquery for users currently in voice (DB last_voice_activity only stamps at
+	// JOIN time). Without this, last_activity sort would mis-order long-running voice
+	// sessions across page boundaries.
+	voiceCTE, voiceUnion, voiceArgs := buildVoiceUserOverlay(activeVoiceUserIDs)
+
+	dataQuery := voiceCTE + `
 		SELECT
 			u.id,
 			u.username,
@@ -474,31 +566,39 @@ func (r *sqliteUserRepo) ListAllUsersWithStats(ctx context.Context, defaultQuota
 				SELECT MAX(m.created_at) AS val FROM messages m WHERE m.user_id = u.id
 				UNION ALL
 				SELECT u.last_voice_activity
-			) sub WHERE val IS NOT NULL),
-			(SELECT COUNT(*) FROM messages m2 WHERE m2.user_id = u.id),
-			COALESCE((SELECT us.bytes_used FROM user_storage us WHERE us.user_id = u.id), 0) / 1048576.0,
-			COALESCE((SELECT us.quota_bytes FROM user_storage us WHERE us.user_id = u.id), ?),
+				` + voiceUnion + `
+			) sub WHERE val IS NOT NULL) AS last_activity,
+			(SELECT COUNT(*) FROM messages m2 WHERE m2.user_id = u.id) AS message_count,
+			COALESCE((SELECT us.bytes_used FROM user_storage us WHERE us.user_id = u.id), 0) / 1048576.0 AS storage_mb,
+			COALESCE((SELECT us.quota_bytes FROM user_storage us WHERE us.user_id = u.id), ?) AS quota_bytes,
 			(SELECT COUNT(*) FROM servers sv
 			 LEFT JOIN livekit_instances li ON sv.livekit_instance_id = li.id
-			 WHERE sv.owner_id = u.id AND COALESCE(li.is_platform_managed, 0) = 0),
+			 WHERE sv.owner_id = u.id AND COALESCE(li.is_platform_managed, 0) = 0) AS owned_self_servers,
 			(SELECT COUNT(*) FROM servers sv2
 			 LEFT JOIN livekit_instances li2 ON sv2.livekit_instance_id = li2.id
-			 WHERE sv2.owner_id = u.id AND COALESCE(li2.is_platform_managed, 0) = 1),
-			(SELECT COUNT(*) FROM server_members sm WHERE sm.user_id = u.id),
-			(SELECT COUNT(*) FROM bans b WHERE b.user_id = u.id),
+			 WHERE sv2.owner_id = u.id AND COALESCE(li2.is_platform_managed, 0) = 1) AS owned_mqvi_servers,
+			(SELECT COUNT(*) FROM server_members sm WHERE sm.user_id = u.id) AS member_server_count,
+			(SELECT COUNT(*) FROM bans b WHERE b.user_id = u.id) AS ban_count,
 			u.deleted_at,
 			u.deleted_by_admin,
 			u.is_hard_deleted
 		FROM users u
-		ORDER BY u.created_at DESC`
+		` + whereSQL + `
+		ORDER BY ` + sortExpr + ` ` + dir + `, u.id ASC
+		LIMIT ? OFFSET ?`
 
-	rows, err := r.db.QueryContext(ctx, query, defaultQuotaBytes)
+	args := append([]any{}, voiceArgs...)
+	args = append(args, defaultQuotaBytes)
+	args = append(args, whereArgs...)
+	args = append(args, params.Limit, params.Offset)
+
+	rows, err := r.db.QueryContext(ctx, dataQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list all users with stats: %w", err)
+		return models.AdminUserListPage{}, fmt.Errorf("list admin users paged: %w", err)
 	}
 	defer rows.Close()
 
-	var users []models.AdminUserListItem
+	items := make([]models.AdminUserListItem, 0, params.Limit)
 	for rows.Next() {
 		var u models.AdminUserListItem
 		if err := rows.Scan(
@@ -509,16 +609,15 @@ func (r *sqliteUserRepo) ListAllUsersWithStats(ctx context.Context, defaultQuota
 			&u.MemberServerCount, &u.BanCount,
 			&u.DeletedAt, &u.DeletedByAdmin, &u.IsHardDeleted,
 		); err != nil {
-			return nil, fmt.Errorf("failed to scan admin user row: %w", err)
+			return models.AdminUserListPage{}, fmt.Errorf("scan admin user row: %w", err)
 		}
-		users = append(users, u)
+		items = append(items, u)
 	}
-
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating admin user rows: %w", err)
+		return models.AdminUserListPage{}, fmt.Errorf("iterate admin user rows: %w", err)
 	}
 
-	return users, nil
+	return models.AdminUserListPage{Items: items, Total: total}, nil
 }
 
 func (r *sqliteUserRepo) UpdateLastVoiceActivity(ctx context.Context, userID string) error {

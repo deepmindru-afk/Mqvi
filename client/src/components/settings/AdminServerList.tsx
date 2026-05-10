@@ -1,6 +1,7 @@
 /** AdminServerList — Platform admin server management table with LiveKit instance migration. */
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import Pagination from "../shared/Pagination";
 import { useTranslation } from "react-i18next";
 import { useToastStore } from "../../stores/toastStore";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -71,52 +72,12 @@ function parseUTC(iso: string): number {
   return new Date(iso.endsWith("Z") ? iso : iso + "Z").getTime();
 }
 
-// ─── Sort comparator ───
-
-function compareSortValue(
-  a: AdminServerListItem,
-  b: AdminServerListItem,
-  key: SortKey,
-  dir: "asc" | "desc",
-): number {
-  let result = 0;
-
-  switch (key) {
-    case "name":
-      result = a.name.localeCompare(b.name);
-      break;
-    case "owner_username":
-      result = a.owner_username.localeCompare(b.owner_username);
-      break;
-    case "created_at":
-      result = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      break;
-    case "type":
-      result = (a.is_platform_managed ? 1 : 0) - (b.is_platform_managed ? 1 : 0);
-      break;
-    case "member_count":
-      result = a.member_count - b.member_count;
-      break;
-    case "channel_count":
-      result = a.channel_count - b.channel_count;
-      break;
-    case "message_count":
-      result = a.message_count - b.message_count;
-      break;
-    case "storage_mb":
-      result = a.storage_mb - b.storage_mb;
-      break;
-    case "last_activity": {
-      const aTime = a.last_activity ? parseUTC(a.last_activity) : 0;
-      const bTime = b.last_activity ? parseUTC(b.last_activity) : 0;
-      result = aTime - bTime;
-      break;
-    }
-    default:
-      result = 0;
-  }
-
-  return dir === "desc" ? -result : result;
+// "type" is the UI sort key for platform-managed flag — backend column is is_platform_managed.
+const SORT_KEY_TO_BACKEND: Partial<Record<SortKey, string>> = {
+  type: "is_platform_managed",
+};
+function backendSortKey(k: SortKey): string {
+  return SORT_KEY_TO_BACKEND[k] ?? k;
 }
 
 // ─── Component ───
@@ -129,17 +90,30 @@ function AdminServerList() {
 
   // ─── Data state ───
   const [servers, setServers] = useState<AdminServerListItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [instances, setInstances] = useState<LiveKitInstanceAdmin[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // ─── Pagination ───
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
 
   // ─── Delete dialog state ───
   const [deleteTarget, setDeleteTarget] = useState<AdminServerListItem | null>(null);
 
   // ─── Table state ───
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  type StatusFilter = "all" | "active" | "soft_deleted";
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("created_at");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(getDefaultWidths);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // ─── Migration state ───
   const [pendingChanges, setPendingChanges] = useState<Record<string, string>>({});
@@ -154,40 +128,52 @@ function AdminServerList() {
   const widthsRef = useRef(columnWidths);
   widthsRef.current = columnWidths;
 
-  // ─── Fetch ───
+  // ─── Fetch (server-side filter/sort/paging) ───
+  const [refetchTick, setRefetchTick] = useState(0);
+
+  // Instances list is small and orthogonal to server pagination — load once.
   useEffect(() => {
+    let cancelled = false;
+    listLiveKitInstances().then((res) => {
+      if (cancelled) return;
+      if (res.success && res.data) setInstances(res.data);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
     async function load() {
       setIsLoading(true);
-      const [srvRes, instRes] = await Promise.all([
-        listAdminServers(),
-        listLiveKitInstances(),
-      ]);
-      if (srvRes.success && srvRes.data) setServers(srvRes.data);
-      else addToast("error", srvRes.error ?? t("platformServerLoadError"));
-
-      if (instRes.success && instRes.data) setInstances(instRes.data);
+      const res = await listAdminServers({
+        limit: pageSize,
+        offset: page * pageSize,
+        search: debouncedSearch || undefined,
+        status: statusFilter,
+        sort: backendSortKey(sortKey),
+        dir: sortDir,
+      });
+      if (cancelled) return;
+      if (res.success && res.data) {
+        if ((res.data.items?.length ?? 0) === 0 && res.data.total > 0 && page > 0) {
+          const lastPage = Math.max(0, Math.ceil(res.data.total / pageSize) - 1);
+          setPage(lastPage);
+          return;
+        }
+        setServers(res.data.items ?? []);
+        setTotal(res.data.total);
+      } else {
+        addToast("error", res.error ?? t("platformServerLoadError"));
+      }
       setIsLoading(false);
     }
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => { cancelled = true; };
+  }, [page, pageSize, debouncedSearch, statusFilter, sortKey, sortDir, refetchTick, addToast, t]);
 
-  // ─── Filtered + Sorted data ───
-  const filteredServers = useMemo(() => {
-    let list = servers;
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      list = list.filter(
-        (s) =>
-          s.name.toLowerCase().includes(q) ||
-          s.id.toLowerCase().includes(q) ||
-          s.owner_username.toLowerCase().includes(q),
-      );
-    }
-
-    return [...list].sort((a, b) => compareSortValue(a, b, sortKey, sortDir));
-  }, [servers, searchQuery, sortKey, sortDir]);
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, statusFilter, sortKey, sortDir, pageSize]);
 
   // ─── Sort handler ───
   function handleSort(key: SortKey) {
@@ -349,11 +335,8 @@ function AdminServerList() {
 
   // ─── Context Menu ───
 
-  const refetchServers = useCallback(async () => {
-    const res = await listAdminServers();
-    if (res.success && res.data) {
-      setServers(res.data);
-    }
+  const refetchServers = useCallback(() => {
+    setRefetchTick((n) => n + 1);
   }, []);
 
   function buildContextItems(srv: AdminServerListItem): ContextMenuItem[] {
@@ -578,17 +561,9 @@ function AdminServerList() {
   }
 
   // ─── Render ───
-  if (isLoading) {
-    return (
-      <div className="admin-server-list">
-        <p className="no-channel">{t("loading")}</p>
-      </div>
-    );
-  }
-
   return (
     <div className="admin-server-list">
-      {/* ── Toolbar: Search + Count ── */}
+      {/* ── Toolbar: Search + Status filter ── */}
       <div className="admin-server-toolbar">
         <input
           className="admin-server-search"
@@ -597,20 +572,28 @@ function AdminServerList() {
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder={t("platformServerSearchPlaceholder")}
         />
-        <span className="admin-server-count">
-          {filteredServers.length} / {servers.length}
-        </span>
+        <select
+          className="admin-server-status-filter"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+        >
+          <option value="all">{t("platformUserFilterAll")}</option>
+          <option value="active">{t("platformUserFilterActive")}</option>
+          <option value="soft_deleted">{t("platformUserFilterSoftDeleted")}</option>
+        </select>
       </div>
 
       {/* ── Table ── */}
-      {filteredServers.length === 0 ? (
+      {servers.length === 0 ? (
         <p className="no-channel">
-          {servers.length === 0
-            ? t("platformServerNoServers")
-            : t("platformServerNoResults")}
+          {isLoading
+            ? t("loading")
+            : total === 0
+              ? t("platformServerNoServers")
+              : t("platformServerNoResults")}
         </p>
       ) : (
-        <div className="admin-server-table-wrap">
+        <div className={`admin-server-table-wrap${isLoading ? " is-loading" : ""}`}>
           <table className="admin-server-table">
             <colgroup>
               {COLUMNS.map((col) => (
@@ -642,7 +625,7 @@ function AdminServerList() {
               </tr>
             </thead>
             <tbody>
-              {filteredServers.map((srv) => (
+              {servers.map((srv) => (
                 <tr
                   key={srv.id}
                   onContextMenu={(e) => {
@@ -661,6 +644,16 @@ function AdminServerList() {
           </table>
         </div>
       )}
+
+      {/* ── Pagination ── */}
+      <Pagination
+        page={page}
+        total={total}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      />
+
       {/* Context Menu */}
       <ContextMenu state={menuState} onClose={closeMenu} />
 
