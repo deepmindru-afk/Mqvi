@@ -31,7 +31,8 @@ type AuthService interface {
 	RefreshToken(ctx context.Context, refreshToken string) (*AuthTokens, error)
 	Logout(ctx context.Context, refreshToken string) error
 	ValidateAccessToken(tokenString string) (*models.TokenClaims, error)
-	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
+	ValidateFileToken(tokenString string) (*models.TokenClaims, error)
+	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) (*AuthTokens, error)
 	ChangeEmail(ctx context.Context, userID, password, newEmail string) error
 
 	// ForgotPassword sends a password reset email.
@@ -71,6 +72,7 @@ func (e *AccountDeletedError) Error() string {
 type AuthTokens struct {
 	AccessToken  string      `json:"access_token"`
 	RefreshToken string      `json:"refresh_token"`
+	FileToken    string      `json:"file_token"`
 	User         models.User `json:"user"`
 }
 
@@ -292,49 +294,69 @@ func (s *authService) Logout(ctx context.Context, refreshToken string) error {
 }
 
 func (s *authService) ValidateAccessToken(tokenString string) (*models.TokenClaims, error) {
+	return s.validateToken(tokenString, models.AudienceAPI)
+}
+
+func (s *authService) ValidateFileToken(tokenString string) (*models.TokenClaims, error) {
+	return s.validateToken(tokenString, models.AudienceFile)
+}
+
+func (s *authService) validateToken(tokenString, requiredAud string) (*models.TokenClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &models.TokenClaims{}, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return s.jwtSecret, nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid token", pkg.ErrUnauthorized)
 	}
-
 	claims, ok := token.Claims.(*models.TokenClaims)
 	if !ok || !token.Valid {
 		return nil, fmt.Errorf("%w: invalid token claims", pkg.ErrUnauthorized)
 	}
 
-	return claims, nil
+	if len(claims.Audience) == 0 {
+		return nil, fmt.Errorf("%w: token has no audience", pkg.ErrUnauthorized)
+	}
+	for _, a := range claims.Audience {
+		if a == requiredAud {
+			return claims, nil
+		}
+	}
+	return nil, fmt.Errorf("%w: wrong token audience", pkg.ErrUnauthorized)
 }
 
-func (s *authService) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error {
+func (s *authService) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) (*AuthTokens, error) {
 	if len(newPassword) < 6 {
-		return fmt.Errorf("%w: password must be at least 6 characters", pkg.ErrBadRequest)
+		return nil, fmt.Errorf("%w: password must be at least 6 characters", pkg.ErrBadRequest)
 	}
 
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(currentPassword)); err != nil {
-		return fmt.Errorf("%w: current password is incorrect", pkg.ErrUnauthorized)
+		return nil, fmt.Errorf("%w: current password is incorrect", pkg.ErrUnauthorized)
 	}
 
 	if currentPassword == newPassword {
-		return fmt.Errorf("%w: new password must be different from current password", pkg.ErrBadRequest)
+		return nil, fmt.Errorf("%w: new password must be different from current password", pkg.ErrBadRequest)
 	}
 
 	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), 12)
 	if err != nil {
-		return fmt.Errorf("failed to hash new password: %w", err)
+		return nil, fmt.Errorf("failed to hash new password: %w", err)
 	}
 
-	return s.userRepo.UpdatePassword(ctx, userID, string(newHash))
+	newTV, err := s.userRepo.UpdatePassword(ctx, userID, user.PasswordHash, string(newHash))
+	if err != nil {
+		return nil, err
+	}
+	user.TokenVersion = newTV
+	user.PasswordHash = string(newHash)
+	return s.generateTokens(ctx, user)
 }
 
 func (s *authService) ChangeEmail(ctx context.Context, userID, password, newEmail string) error {
@@ -566,13 +588,11 @@ func (s *authService) ResetPassword(ctx context.Context, token, newPassword stri
 		return fmt.Errorf("failed to hash new password: %w", err)
 	}
 
-	if err := s.userRepo.UpdatePassword(ctx, resetToken.UserID, string(newHash)); err != nil {
+	if _, err := s.userRepo.ResetPasswordWithToken(ctx, resetToken.UserID, resetToken.ID, string(newHash)); err != nil {
+		if errors.Is(err, pkg.ErrNotFound) {
+			return fmt.Errorf("%w: invalid or expired reset token", pkg.ErrBadRequest)
+		}
 		return fmt.Errorf("failed to update password: %w", err)
-	}
-
-	// Delete all tokens for this user (one-time use)
-	if err := s.resetRepo.DeleteByUserID(ctx, resetToken.UserID); err != nil {
-		log.Printf("[auth] warning: failed to delete reset tokens for user %s: %v", resetToken.UserID, err)
 	}
 
 	log.Printf("[auth] password reset completed for user %s", resetToken.UserID)
@@ -583,20 +603,14 @@ func (s *authService) ResetPassword(ctx context.Context, token, newPassword stri
 
 func (s *authService) generateTokens(ctx context.Context, user *models.User) (*AuthTokens, error) {
 	now := time.Now()
-	accessClaims := &models.TokenClaims{
-		UserID:   user.ID,
-		Username: user.Username,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessExp)),
-			IssuedAt:  jwt.NewNumericDate(now),
-			Issuer:    "mqvi",
-		},
-	}
 
-	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
-	accessString, err := accessToken.SignedString(s.jwtSecret)
+	accessString, err := s.signJWT(user, models.AudienceAPI, now, s.accessExp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign access token: %w", err)
+	}
+	fileString, err := s.signJWT(user, models.AudienceFile, now, s.refreshExp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign file token: %w", err)
 	}
 
 	refreshBytes := make([]byte, 32)
@@ -620,6 +634,22 @@ func (s *authService) generateTokens(ctx context.Context, user *models.User) (*A
 	return &AuthTokens{
 		AccessToken:  accessString,
 		RefreshToken: refreshString,
+		FileToken:    fileString,
 		User:         *user,
 	}, nil
+}
+
+func (s *authService) signJWT(user *models.User, audience string, now time.Time, ttl time.Duration) (string, error) {
+	claims := &models.TokenClaims{
+		UserID:       user.ID,
+		Username:     user.Username,
+		TokenVersion: user.TokenVersion,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Audience:  jwt.ClaimStrings{audience},
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Issuer:    "mqvi",
+		},
+	}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(s.jwtSecret)
 }

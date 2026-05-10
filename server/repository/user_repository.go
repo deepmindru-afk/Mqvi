@@ -23,7 +23,13 @@ type UserRepository interface {
 	Update(ctx context.Context, user *models.User) error
 	UpdateStatus(ctx context.Context, userID string, status models.UserStatus) error
 	UpdatePrefStatus(ctx context.Context, userID string, prefStatus models.UserStatus) error
-	UpdatePassword(ctx context.Context, userID string, newPasswordHash string) error
+	// UpdatePassword writes the password, bumps token_version, and revokes all sessions.
+	// oldPasswordHash guards user-initiated changes; a mismatch returns pkg.ErrConflict.
+	// Empty oldPasswordHash skips that guard for already-authorized reset/admin flows.
+	UpdatePassword(ctx context.Context, userID, oldPasswordHash, newPasswordHash string) (newTokenVersion int, err error)
+	// ResetPasswordWithToken atomically consumes one unexpired reset token, updates the
+	// password, bumps token_version, revokes sessions, and clears all reset tokens for the user.
+	ResetPasswordWithToken(ctx context.Context, userID, resetTokenID, newPasswordHash string) (newTokenVersion int, err error)
 	// UpdateEmail sets or clears the user's email. nil removes, *string sets.
 	UpdateEmail(ctx context.Context, userID string, email *string) error
 	UpdateWallpaper(ctx context.Context, userID string, wallpaperURL *string) error

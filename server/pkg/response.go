@@ -68,6 +68,8 @@ func mapErrorToStatus(err error) int {
 		return http.StatusForbidden
 	case errors.Is(err, ErrAlreadyExists):
 		return http.StatusConflict
+	case errors.Is(err, ErrConflict):
+		return http.StatusConflict
 	case errors.Is(err, ErrBadRequest):
 		return http.StatusBadRequest
 	case errors.Is(err, ErrQuotaExceeded):

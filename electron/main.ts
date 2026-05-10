@@ -484,14 +484,25 @@ function createTray(): void {
   );
 }
 
-// File-serve bearer injection — the cookie path doesn't survive Electron's
-// file:// → https cross-site context, so we attach the token from main process.
 let fileAuthToken: string | null = null;
+let fileAuthOrigin: string | null = null;
 
 function setupFileAuthInjection(): void {
   const filter = { urls: ["http://*/api/files/*", "https://*/api/files/*"] };
   session.defaultSession.webRequest.onBeforeSendHeaders(filter, (details, callback) => {
-    if (!fileAuthToken) {
+    if (!fileAuthToken || !fileAuthOrigin) {
+      callback({});
+      return;
+    }
+    let reqOrigin: string;
+    try {
+      const u = new URL(details.url);
+      reqOrigin = `${u.protocol}//${u.host}`;
+    } catch {
+      callback({});
+      return;
+    }
+    if (reqOrigin !== fileAuthOrigin) {
       callback({});
       return;
     }
@@ -516,13 +527,22 @@ function setupIPC(): void {
     app.exit(0);
   });
 
-  ipcMain.handle("set-file-auth-token", (_event, token: string) => {
-    if (typeof token === "string" && token.length > 0) {
-      fileAuthToken = token;
+  ipcMain.handle("set-file-auth-token", (_event, token: string, apiOrigin: string) => {
+    if (typeof token !== "string" || token.length === 0) return;
+    if (typeof apiOrigin !== "string" || apiOrigin.length === 0) return;
+    let normalized: string;
+    try {
+      const u = new URL(apiOrigin);
+      normalized = `${u.protocol}//${u.host}`;
+    } catch {
+      return;
     }
+    fileAuthToken = token;
+    fileAuthOrigin = normalized;
   });
   ipcMain.handle("clear-file-auth-token", () => {
     fileAuthToken = null;
+    fileAuthOrigin = null;
   });
 
   // ─── Auto-Updater IPC ───

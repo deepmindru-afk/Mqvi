@@ -36,7 +36,7 @@ interface ElectronAPI {
   getVersion: () => Promise<string>;
   relaunch: () => Promise<void>;
 
-  setFileAuthToken: (token: string) => Promise<void>;
+  setFileAuthToken: (token: string, apiOrigin: string) => Promise<void>;
   clearFileAuthToken: () => Promise<void>;
 
   /** Whether update check was already performed at splash */

@@ -20,7 +20,8 @@ type MockUserRepo struct {
 	GetAllFn                  func(ctx context.Context) ([]models.User, error)
 	UpdateFn                  func(ctx context.Context, user *models.User) error
 	UpdateStatusFn            func(ctx context.Context, userID string, status models.UserStatus) error
-	UpdatePasswordFn          func(ctx context.Context, userID string, newPasswordHash string) error
+	UpdatePasswordFn          func(ctx context.Context, userID, oldPasswordHash, newPasswordHash string) (int, error)
+	ResetPasswordWithTokenFn  func(ctx context.Context, userID, resetTokenID, newPasswordHash string) (int, error)
 	UpdateEmailFn             func(ctx context.Context, userID string, email *string) error
 	GetByEmailFn              func(ctx context.Context, email string) (*models.User, error)
 	CountFn                   func(ctx context.Context) (int, error)
@@ -74,11 +75,17 @@ func (m *MockUserRepo) UpdateStatus(ctx context.Context, userID string, status m
 	}
 	return nil
 }
-func (m *MockUserRepo) UpdatePassword(ctx context.Context, userID string, newPasswordHash string) error {
+func (m *MockUserRepo) UpdatePassword(ctx context.Context, userID, oldPasswordHash, newPasswordHash string) (int, error) {
 	if m.UpdatePasswordFn != nil {
-		return m.UpdatePasswordFn(ctx, userID, newPasswordHash)
+		return m.UpdatePasswordFn(ctx, userID, oldPasswordHash, newPasswordHash)
 	}
-	return nil
+	return 0, nil
+}
+func (m *MockUserRepo) ResetPasswordWithToken(ctx context.Context, userID, resetTokenID, newPasswordHash string) (int, error) {
+	if m.ResetPasswordWithTokenFn != nil {
+		return m.ResetPasswordWithTokenFn(ctx, userID, resetTokenID, newPasswordHash)
+	}
+	return 0, nil
 }
 func (m *MockUserRepo) UpdateEmail(ctx context.Context, userID string, email *string) error {
 	if m.UpdateEmailFn != nil {

@@ -21,7 +21,7 @@ export async function login(data: LoginRequest) {
 }
 
 export async function refreshToken(refresh_token: string) {
-  return apiClient<{ access_token: string; refresh_token: string }>(
+  return apiClient<{ access_token: string; refresh_token: string; file_token: string }>(
     "/auth/refresh",
     {
       method: "POST",
@@ -45,7 +45,7 @@ export async function changePassword(
   currentPassword: string,
   newPassword: string,
 ) {
-  return apiClient<{ message: string }>("/users/me/password", {
+  return apiClient<AuthTokens>("/users/me/password", {
     method: "POST",
     body: { current_password: currentPassword, new_password: newPassword },
   });

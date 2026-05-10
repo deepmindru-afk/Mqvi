@@ -1,84 +1,127 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/akinalp/mqvi/models"
 	"github.com/akinalp/mqvi/pkg/authcookie"
+	"github.com/akinalp/mqvi/pkg/fileacl"
+	"github.com/akinalp/mqvi/services"
+	"github.com/akinalp/mqvi/testutil"
 )
 
-func TestReadJWTToken_Cookie(t *testing.T) {
+type fileTokenAuthStub struct {
+	claims *models.TokenClaims
+	err    error
+}
+
+func (s fileTokenAuthStub) Register(context.Context, *models.CreateUserRequest) (*services.AuthTokens, error) {
+	return nil, nil
+}
+func (s fileTokenAuthStub) Login(context.Context, *models.LoginRequest) (*services.AuthTokens, error) {
+	return nil, nil
+}
+func (s fileTokenAuthStub) RefreshToken(context.Context, string) (*services.AuthTokens, error) {
+	return nil, nil
+}
+func (s fileTokenAuthStub) Logout(context.Context, string) error {
+	return nil
+}
+func (s fileTokenAuthStub) ValidateAccessToken(string) (*models.TokenClaims, error) {
+	return nil, nil
+}
+func (s fileTokenAuthStub) ValidateFileToken(string) (*models.TokenClaims, error) {
+	return s.claims, s.err
+}
+func (s fileTokenAuthStub) ChangePassword(context.Context, string, string, string) (*services.AuthTokens, error) {
+	return nil, nil
+}
+func (s fileTokenAuthStub) ChangeEmail(context.Context, string, string, string) error {
+	return nil
+}
+func (s fileTokenAuthStub) ForgotPassword(context.Context, string) (int, error) {
+	return 0, nil
+}
+func (s fileTokenAuthStub) ResetPassword(context.Context, string, string) error {
+	return nil
+}
+func (s fileTokenAuthStub) SoftDeleteSelf(context.Context, string, string) error {
+	return nil
+}
+func (s fileTokenAuthStub) RestoreAccount(context.Context, string, string) (*services.AuthTokens, error) {
+	return nil, nil
+}
+func (s fileTokenAuthStub) SetAppLogger(services.AuthAppLogger) {}
+
+func TestReadJWTTokens_CookieOnly(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/files/avatars/u/x.png", nil)
 	r.AddCookie(&http.Cookie{Name: authcookie.Name, Value: "cookie-jwt"})
-	if got := readJWTToken(r); got != "cookie-jwt" {
-		t.Fatalf("got %q want %q", got, "cookie-jwt")
+	got := readJWTTokens(r)
+	if len(got) != 1 || got[0] != "cookie-jwt" {
+		t.Fatalf("got %v want [cookie-jwt]", got)
 	}
 }
 
-func TestReadJWTToken_BearerHeader(t *testing.T) {
+func TestReadJWTTokens_BearerOnly(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/files/avatars/u/x.png", nil)
 	r.Header.Set("Authorization", "Bearer header-jwt")
-	if got := readJWTToken(r); got != "header-jwt" {
-		t.Fatalf("got %q want %q", got, "header-jwt")
+	got := readJWTTokens(r)
+	if len(got) != 1 || got[0] != "header-jwt" {
+		t.Fatalf("got %v want [header-jwt]", got)
 	}
 }
 
-// Cookie wins so browser users aren't overridden by an unexpected bearer header.
-func TestReadJWTToken_CookieWinsOverBearer(t *testing.T) {
+func TestReadJWTTokens_BothReturnsBothCookieFirst(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/files/avatars/u/x.png", nil)
 	r.AddCookie(&http.Cookie{Name: authcookie.Name, Value: "cookie-jwt"})
 	r.Header.Set("Authorization", "Bearer header-jwt")
-	if got := readJWTToken(r); got != "cookie-jwt" {
-		t.Fatalf("got %q want %q", got, "cookie-jwt")
+	got := readJWTTokens(r)
+	if len(got) != 2 || got[0] != "cookie-jwt" || got[1] != "header-jwt" {
+		t.Fatalf("got %v want [cookie-jwt header-jwt]", got)
 	}
 }
 
-func TestReadJWTToken_NoAuthReturnsEmpty(t *testing.T) {
+func TestReadJWTTokens_None(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/files/avatars/u/x.png", nil)
-	if got := readJWTToken(r); got != "" {
-		t.Fatalf("got %q want empty", got)
+	if got := readJWTTokens(r); len(got) != 0 {
+		t.Fatalf("got %v want empty", got)
 	}
 }
 
-func TestReadJWTToken_MalformedAuthorizationIgnored(t *testing.T) {
-	cases := []string{
-		"Basic abc:def",
-		"bearer lowercase-prefix",
-		"Bearer", // no token
-		"BearerNoSpace",
-	}
+func TestReadJWTTokens_MalformedAuthorizationIgnored(t *testing.T) {
+	cases := []string{"Basic abc:def", "bearer lowercase-prefix", "BearerNoSpace"}
 	for _, h := range cases {
 		r := httptest.NewRequest(http.MethodGet, "/api/files/avatars/u/x.png", nil)
 		r.Header.Set("Authorization", h)
-		got := readJWTToken(r)
-		if h == "Bearer" {
-			// "Bearer" alone — strip leaves empty
-			if got != "" {
-				t.Errorf("Authorization=%q: got %q want empty", h, got)
-			}
-			continue
-		}
-		if got != "" {
-			t.Errorf("Authorization=%q: got %q want empty (only %q-prefixed accepted)", h, got, "Bearer ")
+		if got := readJWTTokens(r); len(got) != 0 {
+			t.Errorf("Authorization=%q: got %v want empty", h, got)
 		}
 	}
 }
 
-func TestReadJWTToken_OtherCookiesIgnored(t *testing.T) {
+func TestReadJWTTokens_OtherCookiesIgnored(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/files/avatars/u/x.png", nil)
 	r.AddCookie(&http.Cookie{Name: "session", Value: "wrong-cookie"})
 	r.AddCookie(&http.Cookie{Name: "csrf", Value: "noise"})
-	if got := readJWTToken(r); got != "" {
-		t.Fatalf("only mqvi_file_session counts; got %q", got)
+	if got := readJWTTokens(r); len(got) != 0 {
+		t.Fatalf("only mqvi_file_session counts; got %v", got)
 	}
 }
 
-func TestReadJWTToken_BearerWithExtraSpacesPreserved(t *testing.T) {
-	// Don't trim extra whitespace — downstream JWT validation rejects it.
-	r := httptest.NewRequest(http.MethodGet, "/api/files/avatars/u/x.png", nil)
-	r.Header.Set("Authorization", "Bearer  jwt")
-	if got := readJWTToken(r); got != " jwt" {
-		t.Fatalf("got %q want leading space preserved", got)
+func TestCheckFileTokenRejectsTokenVersionMismatch(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/api/files/avatars/u1/a.png", nil)
+	authSvc := fileTokenAuthStub{claims: &models.TokenClaims{UserID: "u1", TokenVersion: 1}}
+	userRepo := &testutil.MockUserRepo{
+		GetActiveByIDFn: func(context.Context, string) (*models.User, error) {
+			return &models.User{ID: "u1", TokenVersion: 2}, nil
+		},
+	}
+	acl := fileacl.NewChecker(nil, nil, nil, nil, nil, nil, nil)
+
+	if checkFileToken(r, "file-token", "/api/files/avatars/u1/a.png", authSvc, userRepo, acl) {
+		t.Fatal("expected token_version mismatch to reject file token")
 	}
 }

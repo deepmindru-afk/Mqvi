@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -374,6 +375,7 @@ func TestValidateAccessToken(t *testing.T) {
 		UserID:   "user-1",
 		Username: "testuser",
 		RegisteredClaims: jwt.RegisteredClaims{
+			Audience:  jwt.ClaimStrings{models.AudienceAPI},
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    "mqvi",
@@ -469,6 +471,102 @@ func TestValidateAccessToken(t *testing.T) {
 	}
 }
 
+func TestAudienceSeparation(t *testing.T) {
+	svc := newTestAuthService(&testutil.MockUserRepo{}, &testutil.MockSessionRepo{})
+
+	mkToken := func(audiences ...string) string {
+		claims := &models.TokenClaims{
+			UserID:   "user-1",
+			Username: "testuser",
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+				IssuedAt:  jwt.NewNumericDate(time.Now()),
+				Issuer:    "mqvi",
+			},
+		}
+		if len(audiences) > 0 {
+			claims.Audience = jwt.ClaimStrings(audiences)
+		}
+		s, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(testJWTSecret))
+		if err != nil {
+			t.Fatalf("sign: %v", err)
+		}
+		return s
+	}
+
+	apiTok := mkToken(models.AudienceAPI)
+	fileTok := mkToken(models.AudienceFile)
+	legacyTok := mkToken()
+
+	if _, err := svc.ValidateAccessToken(apiTok); err != nil {
+		t.Errorf("aud=api on API path: %v", err)
+	}
+	if _, err := svc.ValidateAccessToken(fileTok); err == nil {
+		t.Error("aud=file MUST be rejected on API path (token confusion)")
+	}
+	if _, err := svc.ValidateAccessToken(legacyTok); err == nil {
+		t.Error("legacy token MUST be rejected on API path")
+	}
+
+	if _, err := svc.ValidateFileToken(fileTok); err != nil {
+		t.Errorf("aud=file on file path: %v", err)
+	}
+	if _, err := svc.ValidateFileToken(apiTok); err == nil {
+		t.Error("aud=api MUST be rejected on file path")
+	}
+	if _, err := svc.ValidateFileToken(legacyTok); err == nil {
+		t.Error("legacy token MUST be rejected on file path (file tokens started with aud claim)")
+	}
+}
+
+func TestGenerateTokens_StampsAudienceAndTokenVersion(t *testing.T) {
+	user := &models.User{
+		ID:           "user-1",
+		Username:     "testuser",
+		TokenVersion: 7,
+		PasswordHash: "x",
+	}
+	svc := newTestAuthService(
+		&testutil.MockUserRepo{
+			GetByIDFn: func(_ context.Context, _ string) (*models.User, error) { return user, nil },
+		},
+		&testutil.MockSessionRepo{
+			CreateFn: func(_ context.Context, _ *models.Session) error { return nil },
+		},
+	)
+
+	authSvc, ok := svc.(*authService)
+	if !ok {
+		t.Fatal("expected *authService")
+	}
+	tokens, err := authSvc.generateTokens(context.Background(), user)
+	if err != nil {
+		t.Fatalf("generateTokens: %v", err)
+	}
+
+	accessClaims, err := svc.ValidateAccessToken(tokens.AccessToken)
+	if err != nil {
+		t.Fatalf("validate access: %v", err)
+	}
+	if accessClaims.TokenVersion != 7 {
+		t.Errorf("access tv: got %d want 7", accessClaims.TokenVersion)
+	}
+	if !slices.Contains(accessClaims.Audience, models.AudienceAPI) {
+		t.Errorf("access aud: got %v want includes %q", accessClaims.Audience, models.AudienceAPI)
+	}
+
+	fileClaims, err := svc.ValidateFileToken(tokens.FileToken)
+	if err != nil {
+		t.Fatalf("validate file: %v", err)
+	}
+	if fileClaims.TokenVersion != 7 {
+		t.Errorf("file tv: got %d want 7", fileClaims.TokenVersion)
+	}
+	if !slices.Contains(fileClaims.Audience, models.AudienceFile) {
+		t.Errorf("file aud: got %v want includes %q", fileClaims.Audience, models.AudienceFile)
+	}
+}
+
 func TestChangePassword(t *testing.T) {
 	hashedPassword := preHashPassword(t, "currentpass1")
 
@@ -493,11 +591,11 @@ func TestChangePassword(t *testing.T) {
 						PasswordHash: hashedPassword,
 					}, nil
 				}
-				ur.UpdatePasswordFn = func(ctx context.Context, userID string, newHash string) error {
+				ur.UpdatePasswordFn = func(ctx context.Context, userID, oldHash, newHash string) (int, error) {
 					if err := bcrypt.CompareHashAndPassword([]byte(newHash), []byte("newpassword1")); err != nil {
 						t.Errorf("new password hash does not match: %v", err)
 					}
-					return nil
+					return 1, nil
 				}
 			},
 			wantErr: false,
@@ -552,7 +650,7 @@ func TestChangePassword(t *testing.T) {
 			}
 
 			svc := newTestAuthService(userRepo, &testutil.MockSessionRepo{})
-			err := svc.ChangePassword(context.Background(), tc.userID, tc.currentPass, tc.newPass)
+			_, err := svc.ChangePassword(context.Background(), tc.userID, tc.currentPass, tc.newPass)
 
 			if tc.wantErr {
 				if err == nil {

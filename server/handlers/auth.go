@@ -21,7 +21,7 @@ type AuthHandler struct {
 	forgotPwdLimiter *ratelimit.LoginRateLimiter
 	resetPwdLimiter  *ratelimit.LoginRateLimiter
 	urlSigner        services.FileURLSigner
-	fileCookieTTL    time.Duration // matches access token TTL
+	fileCookieTTL    time.Duration
 }
 
 // NewAuthHandler creates a new AuthHandler. All limiters may be nil to disable rate limiting.
@@ -32,7 +32,7 @@ func NewAuthHandler(
 	forgotPwdLimiter *ratelimit.LoginRateLimiter,
 	resetPwdLimiter *ratelimit.LoginRateLimiter,
 	urlSigner services.FileURLSigner,
-	accessTokenTTL time.Duration,
+	fileCookieTTL time.Duration,
 ) *AuthHandler {
 	return &AuthHandler{
 		authService:      authService,
@@ -41,7 +41,7 @@ func NewAuthHandler(
 		forgotPwdLimiter: forgotPwdLimiter,
 		resetPwdLimiter:  resetPwdLimiter,
 		urlSigner:        urlSigner,
-		fileCookieTTL:    accessTokenTTL,
+		fileCookieTTL:    fileCookieTTL,
 	}
 }
 
@@ -72,7 +72,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authcookie.Set(w, tokens.AccessToken, h.fileCookieTTL)
+	authcookie.Set(w, tokens.FileToken, h.fileCookieTTL)
 	h.signTokenURLs(tokens)
 	pkg.JSON(w, http.StatusCreated, tokens)
 }
@@ -125,7 +125,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		h.loginLimiter.Reset(ip)
 	}
 
-	authcookie.Set(w, tokens.AccessToken, h.fileCookieTTL)
+	authcookie.Set(w, tokens.FileToken, h.fileCookieTTL)
 	h.signTokenURLs(tokens)
 	pkg.JSON(w, http.StatusOK, tokens)
 }
@@ -152,7 +152,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authcookie.Set(w, tokens.AccessToken, h.fileCookieTTL)
+	authcookie.Set(w, tokens.FileToken, h.fileCookieTTL)
 	h.signTokenURLs(tokens)
 	pkg.JSON(w, http.StatusOK, tokens)
 }
@@ -219,12 +219,15 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.authService.ChangePassword(r.Context(), user.ID, req.CurrentPassword, req.NewPassword); err != nil {
+	tokens, err := h.authService.ChangePassword(r.Context(), user.ID, req.CurrentPassword, req.NewPassword)
+	if err != nil {
 		pkg.Error(w, err)
 		return
 	}
 
-	pkg.JSON(w, http.StatusOK, map[string]string{"message": "password changed"})
+	authcookie.Set(w, tokens.FileToken, h.fileCookieTTL)
+	h.signTokenURLs(tokens)
+	pkg.JSON(w, http.StatusOK, tokens)
 }
 
 // ChangeEmail handles PUT /api/users/me/email
@@ -413,7 +416,7 @@ func (h *AuthHandler) RestoreAccount(w http.ResponseWriter, r *http.Request) {
 		h.loginLimiter.Reset(ip)
 	}
 
-	authcookie.Set(w, tokens.AccessToken, h.fileCookieTTL)
+	authcookie.Set(w, tokens.FileToken, h.fileCookieTTL)
 	h.signTokenURLs(tokens)
 	pkg.JSON(w, http.StatusOK, tokens)
 }

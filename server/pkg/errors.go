@@ -10,6 +10,7 @@ var (
 	ErrForbidden     = errors.New("forbidden")
 	ErrAlreadyExists = errors.New("already exists")
 	ErrBadRequest    = errors.New("bad request")
+	ErrConflict      = errors.New("conflict") // concurrent write lost the race
 	ErrInternal      = errors.New("internal error")
 	ErrQuotaExceeded = errors.New("storage quota exceeded")
 

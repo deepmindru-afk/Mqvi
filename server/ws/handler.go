@@ -174,6 +174,12 @@ func (h *Handler) HandleConnection(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "account deleted", http.StatusUnauthorized)
 			return
 		}
+		// Token revocation (password change, force-logout): reject tokens with stale tv.
+		if claims.TokenVersion != user.TokenVersion {
+			h.hub.logEvent(models.LogLevelWarn, models.LogCategoryAuth, &claims.UserID, "WS connect blocked: token revoked", nil)
+			http.Error(w, "token revoked", http.StatusUnauthorized)
+			return
+		}
 		if user.DisplayName != nil {
 			displayName = *user.DisplayName
 		}

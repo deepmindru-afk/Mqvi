@@ -5,6 +5,7 @@
 import { create } from "zustand";
 import * as authApi from "../api/auth";
 import { setTokens, clearTokens } from "../api/client";
+import { API_BASE_URL } from "../utils/constants";
 import { changeLanguage, type Language, SUPPORTED_LANGUAGES } from "../i18n";
 import { useE2EEStore } from "./e2eeStore";
 import { usePreferencesStore } from "./preferencesStore";
@@ -51,6 +52,7 @@ type AuthState = {
   initialize: () => Promise<void>;
   clearError: () => void;
   updateUser: (partial: Partial<User>) => void;
+  replaceTokens: (access: string, refresh: string, file: string) => void;
 
   /**
    * User's manually selected presence. When set to "online", idle detection works normally.
@@ -81,7 +83,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
 
     if (res.success && res.data) {
-      setTokens(res.data.access_token, res.data.refresh_token);
+      setTokens(res.data.access_token, res.data.refresh_token, res.data.file_token);
       syncLanguageFromUser(res.data.user);
       set({ user: res.data.user, isLoading: false });
       usePreferencesStore.getState().fetchAndApply();
@@ -98,7 +100,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const res = await authApi.login({ username, password });
 
     if (res.success && res.data) {
-      setTokens(res.data.access_token, res.data.refresh_token);
+      setTokens(res.data.access_token, res.data.refresh_token, res.data.file_token);
       syncLanguageFromUser(res.data.user);
       set({ user: res.data.user, isLoading: false });
       // Fetch server-side preferences and apply to stores
@@ -139,7 +141,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const res = await authApi.restoreAccount(info.username, info.password);
 
     if (res.success && res.data) {
-      setTokens(res.data.access_token, res.data.refresh_token);
+      setTokens(res.data.access_token, res.data.refresh_token, res.data.file_token);
       syncLanguageFromUser(res.data.user);
       set({ user: res.data.user, isLoading: false, accountDeleted: null });
       usePreferencesStore.getState().fetchAndApply();
@@ -184,8 +186,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isInitialized: true });
       return;
     }
-    // Persisted token must be re-pushed to Electron main on every cold start.
-    void window.electronAPI?.setFileAuthToken(token);
+    const fileToken = localStorage.getItem("file_token");
+    if (fileToken) {
+      void window.electronAPI?.setFileAuthToken(fileToken, API_BASE_URL);
+    }
 
     const res = await authApi.getMe();
     if (res.success && res.data) {
@@ -204,6 +208,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set((state) => ({
       user: state.user ? { ...state.user, ...partial } : null,
     })),
+
+  replaceTokens: (access, refresh, file) => {
+    setTokens(access, refresh, file);
+  },
 
   setManualStatus: (status) => {
     localStorage.setItem(MANUAL_STATUS_KEY, status);

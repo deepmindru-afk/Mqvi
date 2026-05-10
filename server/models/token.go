@@ -2,10 +2,17 @@ package models
 
 import "github.com/golang-jwt/jwt/v5"
 
-// TokenClaims — JWT payload. Defined in models to avoid circular deps
-// between services, ws, and middleware.
+// Audience values for JWT aud claim. Tokens issued for one audience MUST be
+// rejected at endpoints expecting a different one.
+const (
+	AudienceAPI  = "api"  // /api/* endpoints (except /api/files)
+	AudienceFile = "file" // /api/files only — separate long-lived token
+)
+
+// TokenClaims — JWT payload.
 type TokenClaims struct {
-	UserID   string `json:"user_id"`
-	Username string `json:"username"`
+	UserID       string `json:"user_id"`
+	Username     string `json:"username"`
+	TokenVersion int    `json:"tv,omitempty"` // bumped on password change to invalidate prior tokens
 	jwt.RegisteredClaims
 }

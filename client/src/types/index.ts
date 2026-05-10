@@ -658,6 +658,7 @@ export type RegisterRequest = {
 export type AuthTokens = {
   access_token: string;
   refresh_token: string;
+  file_token: string;
   user: User;
 };
 

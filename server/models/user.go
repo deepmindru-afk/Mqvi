@@ -48,6 +48,7 @@ type User struct {
 	DeletedAt         *time.Time `json:"deleted_at,omitempty"`
 	DeletedByAdmin    bool       `json:"-"`
 	IsHardDeleted     bool       `json:"is_hard_deleted,omitempty"`
+	TokenVersion      int        `json:"-"` // bumped to invalidate every prior JWT
 	CreatedAt         time.Time  `json:"created_at"`
 }
 

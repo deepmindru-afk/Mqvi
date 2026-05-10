@@ -32,6 +32,7 @@ function SecuritySettings() {
   const addToast = useToastStore((s) => s.addToast);
   const user = useAuthStore((s) => s.user);
   const updateUser = useAuthStore((s) => s.updateUser);
+  const replaceTokens = useAuthStore((s) => s.replaceTokens);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
 
@@ -140,7 +141,8 @@ function SecuritySettings() {
     setIsSaving(true);
     try {
       const res = await authApi.changePassword(currentPassword, newPassword);
-      if (res.success) {
+      if (res.success && res.data) {
+        replaceTokens(res.data.access_token, res.data.refresh_token, res.data.file_token);
         addToast("success", t("passwordChanged"));
         setCurrentPassword("");
         setNewPassword("");

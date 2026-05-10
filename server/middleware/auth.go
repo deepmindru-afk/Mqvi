@@ -45,17 +45,20 @@ func (m *AuthMiddleware) Require(next http.Handler) http.Handler {
 			return
 		}
 
-		// GetActiveByID rejects soft-deleted/tombstone users so existing access
-		// tokens cannot be used after admin or self soft-delete (within token TTL).
 		user, err := m.userRepo.GetActiveByID(r.Context(), claims.UserID)
 		if err != nil {
 			pkg.ErrorWithMessage(w, http.StatusUnauthorized, "user not found")
 			return
 		}
 
-		// Banned users blocked at middleware too (defense in depth — login already rejects).
 		if user.IsPlatformBanned {
 			pkg.ErrorWithMessage(w, http.StatusForbidden, "account suspended")
+			return
+		}
+
+		// Reject tokens issued before a password change / force-logout.
+		if claims.TokenVersion != user.TokenVersion {
+			pkg.ErrorWithMessage(w, http.StatusUnauthorized, "token revoked")
 			return
 		}
 

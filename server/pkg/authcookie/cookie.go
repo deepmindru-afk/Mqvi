@@ -1,5 +1,3 @@
-// Package authcookie sets the /api/files session cookie used as a fallback
-// when the signed URL TTL has elapsed.
 package authcookie
 
 import (
@@ -9,15 +7,12 @@ import (
 
 const Name = "mqvi_file_session"
 
-// Path scopes the cookie so browsers don't replay it on /api/* mutations.
 const Path = "/api/files"
 
-// Set writes the cookie. SameSite=None+Secure is required for the Electron
-// renderer (file:// → API is cross-site).
-func Set(w http.ResponseWriter, accessToken string, maxAge time.Duration) {
+func Set(w http.ResponseWriter, fileToken string, maxAge time.Duration) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     Name,
-		Value:    accessToken,
+		Value:    fileToken,
 		Path:     Path,
 		MaxAge:   int(maxAge.Seconds()),
 		HttpOnly: true,

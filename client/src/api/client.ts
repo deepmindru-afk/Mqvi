@@ -15,17 +15,17 @@ function getRefreshToken(): string | null {
   return localStorage.getItem("refresh_token");
 }
 
-function setTokens(access: string, refresh: string): void {
+function setTokens(access: string, refresh: string, file: string): void {
   localStorage.setItem("access_token", access);
   localStorage.setItem("refresh_token", refresh);
-  // Electron main injects this as Authorization on /api/files/* (cookie path
-  // doesn't survive the file:// → https cross-site context).
-  void window.electronAPI?.setFileAuthToken(access);
+  localStorage.setItem("file_token", file);
+  void window.electronAPI?.setFileAuthToken(file, API_BASE_URL);
 }
 
 function clearTokens(): void {
   localStorage.removeItem("access_token");
   localStorage.removeItem("refresh_token");
+  localStorage.removeItem("file_token");
   void window.electronAPI?.clearFileAuthToken();
 }
 
@@ -76,11 +76,11 @@ async function doRefresh(): Promise<boolean> {
       return false;
     }
 
-    const data: APIResponse<{ access_token: string; refresh_token: string }> =
+    const data: APIResponse<{ access_token: string; refresh_token: string; file_token: string }> =
       await res.json();
 
     if (data.success && data.data) {
-      setTokens(data.data.access_token, data.data.refresh_token);
+      setTokens(data.data.access_token, data.data.refresh_token, data.data.file_token);
       return true;
     }
 

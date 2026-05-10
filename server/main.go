@@ -19,10 +19,10 @@ import (
 	"github.com/akinalp/mqvi/config"
 	"github.com/akinalp/mqvi/database"
 	"github.com/akinalp/mqvi/models"
-	"github.com/akinalp/mqvi/pkg/crypto"
-	"github.com/akinalp/mqvi/pkg/files"
 	"github.com/akinalp/mqvi/pkg/authcookie"
+	"github.com/akinalp/mqvi/pkg/crypto"
 	"github.com/akinalp/mqvi/pkg/fileacl"
+	"github.com/akinalp/mqvi/pkg/files"
 	"github.com/akinalp/mqvi/pkg/i18n"
 	"github.com/akinalp/mqvi/pkg/signedurl"
 	"github.com/akinalp/mqvi/repository"
@@ -394,8 +394,6 @@ func runStartupCleanup(db *database.DB, repos *Repositories, cfg *config.Config,
 	}
 }
 
-// registerFileEndpoint authorizes via signed URL OR session cookie OR
-// Authorization: Bearer (Electron path), with fileACL on the JWT branches.
 func registerFileEndpoint(
 	mux *http.ServeMux,
 	cfg *config.Config,
@@ -406,8 +404,6 @@ func registerFileEndpoint(
 ) {
 	fileLocator := files.NewLocator(cfg.Upload.Dir, cfg.Upload.PublicURL)
 	filesHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract the portion after /api/files/ using the escaped path so
-		// the signature matches exactly what was signed (percent-encoded).
 		escaped := r.URL.EscapedPath()
 		after, found := strings.CutPrefix(escaped, files.URLPathPrefix+"/")
 		if !found || after == "" {
@@ -416,18 +412,15 @@ func registerFileEndpoint(
 		}
 		signedPath := files.URLPathPrefix + "/" + after
 
-		// Try signed URL first (cheap stateless check).
 		sigOK := signer.Verify(signedPath, r.URL.Query().Get("exp"), r.URL.Query().Get("sig")) == nil
 
 		if !sigOK {
-			// Fall back to JWT-based auth (cookie or bearer header) + per-file ACL.
 			if !authorizeByJWT(r, signedPath, authService, userRepo, fileACL) {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
 		}
 
-		// ResolveServePath expects encoded segments — it does its own decode.
 		disk, err := fileLocator.ResolveServePath(after)
 		if err != nil {
 			http.NotFound(w, r)
@@ -439,18 +432,14 @@ func registerFileEndpoint(
 			return
 		}
 
-		// Extract filename from URL path (last segment)
 		urlParts := strings.Split(after, "/")
 		urlFilename := urlParts[len(urlParts)-1]
 
-		// Safe-serve: inline only for known-safe media types, force download for everything else
 		contentType, disposition := files.ServeDisposition(disk, urlFilename)
 		w.Header().Set("Content-Type", contentType)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		// Electron production renders from file://, which is not same-site with
-		// mqvi.net. Signed URLs already carry the authorization boundary, so
-		// allow cross-origin embedding for images/media loaded by the desktop app.
 		w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
+		w.Header().Set("Vary", "Authorization, Cookie")
 		w.Header().Set("Cache-Control", "private, max-age=3600")
 		if disposition != "" {
 			w.Header().Set("Content-Disposition", disposition)
@@ -461,8 +450,6 @@ func registerFileEndpoint(
 			return
 		}
 		defer f.Close()
-		// ServeContent handles Range requests and does not override Content-Type.
-		// Empty name parameter prevents auto-detection from overriding our headers.
 		http.ServeContent(w, r, "", info.ModTime(), f)
 	})
 	mux.Handle("GET "+files.URLPathPrefix+"/", filesHandler)
@@ -507,10 +494,10 @@ func initCORS(cfg *config.Config) (*cors.Cors, []string) {
 	corsOrigins := []string{
 		"http://localhost:3030",
 		"http://localhost:1420",
-		"capacitor://localhost",  // iOS Capacitor WKWebView
-		"ionic://localhost",      // iOS Capacitor (legacy scheme)
-		"http://localhost",       // Android Capacitor WebView (legacy)
-		"https://localhost",      // Android Capacitor WebView (Capacitor 6+)
+		"capacitor://localhost", // iOS Capacitor WKWebView
+		"ionic://localhost",     // iOS Capacitor (legacy scheme)
+		"http://localhost",      // Android Capacitor WebView (legacy)
+		"https://localhost",     // Android Capacitor WebView (Capacitor 6+)
 	}
 	if extra := os.Getenv("CORS_ORIGINS"); extra != "" {
 		for _, origin := range strings.Split(extra, ",") {
@@ -637,7 +624,6 @@ func serveInviteOG(w http.ResponseWriter, r *http.Request, inviteSvc services.In
 	return true
 }
 
-// authorizeByJWT validates the JWT (cookie or bearer) and runs fileACL.
 func authorizeByJWT(
 	r *http.Request,
 	signedPath string,
@@ -645,11 +631,22 @@ func authorizeByJWT(
 	userRepo repository.UserRepository,
 	fileACL *fileacl.Checker,
 ) bool {
-	token := readJWTToken(r)
-	if token == "" {
-		return false
+	for _, token := range readJWTTokens(r) {
+		if checkFileToken(r, token, signedPath, authService, userRepo, fileACL) {
+			return true
+		}
 	}
-	claims, err := authService.ValidateAccessToken(token)
+	return false
+}
+
+func checkFileToken(
+	r *http.Request,
+	token, signedPath string,
+	authService services.AuthService,
+	userRepo repository.UserRepository,
+	fileACL *fileacl.Checker,
+) bool {
+	claims, err := authService.ValidateFileToken(token)
 	if err != nil {
 		return false
 	}
@@ -657,26 +654,27 @@ func authorizeByJWT(
 	if err != nil || user == nil {
 		return false
 	}
+	if user.DeletedAt != nil {
+		return false
+	}
 	if user.IsPlatformBanned {
 		return false
 	}
-	user.PasswordHash = ""
-	if err := fileACL.Check(r.Context(), user, signedPath); err != nil {
+	if claims.TokenVersion != user.TokenVersion {
 		return false
 	}
-	return true
+	user.PasswordHash = ""
+	return fileACL.Check(r.Context(), user, signedPath) == nil
 }
 
-// readJWTToken returns the token from the cookie, falling back to the
-// Authorization: Bearer header.
-func readJWTToken(r *http.Request) string {
-	if t := authcookie.Read(r); t != "" {
-		return t
+func readJWTTokens(r *http.Request) []string {
+	var tokens []string
+	if c := authcookie.Read(r); c != "" {
+		tokens = append(tokens, c)
 	}
 	const prefix = "Bearer "
-	auth := r.Header.Get("Authorization")
-	if strings.HasPrefix(auth, prefix) {
-		return strings.TrimPrefix(auth, prefix)
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, prefix) {
+		tokens = append(tokens, strings.TrimPrefix(auth, prefix))
 	}
-	return ""
+	return tokens
 }
