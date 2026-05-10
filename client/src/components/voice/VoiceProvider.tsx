@@ -194,6 +194,7 @@ function VoiceProvider({ children }: VoiceProviderProps) {
   // Stable ref — LiveKitRoom does reference comparison on props
   const audioCaptureDefaults: AudioCaptureOptions = useMemo(
     () => ({
+      channelCount: 1,
       noiseSuppression: true,
       autoGainControl: true,
       echoCancellation: true,

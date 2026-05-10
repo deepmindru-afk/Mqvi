@@ -90,7 +90,12 @@ type P2PCallStore = {
 
 async function getMediaStream(callType: P2PCallType): Promise<MediaStream> {
   return navigator.mediaDevices.getUserMedia({
-    audio: true,
+    audio: {
+      channelCount: 1,
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    },
     video: callType === "video"
       ? {
           width: { ideal: 1920 },

@@ -75,11 +75,24 @@ class VadGateProcessor
     // Input volume GainNode — applied before VAD gate processing
     this.gainNode = audioContext.createGain();
     this.gainNode.gain.value = this.initialInputVolume / 100;
+    this.gainNode.channelCount = 1;
+    this.gainNode.channelCountMode = "explicit";
+    this.gainNode.channelInterpretation = "speakers";
 
-    this.vadGateNode = new AudioWorkletNode(audioContext, "vad-gate-processor");
+    this.vadGateNode = new AudioWorkletNode(audioContext, "vad-gate-processor", {
+      numberOfInputs: 1,
+      numberOfOutputs: 1,
+      outputChannelCount: [1],
+      channelCount: 1,
+      channelCountMode: "explicit",
+      channelInterpretation: "speakers",
+    });
     this.setMicSensitivity(this.initialSensitivity);
 
     this.destinationNode = audioContext.createMediaStreamDestination();
+    this.destinationNode.channelCount = 1;
+    this.destinationNode.channelCountMode = "explicit";
+    this.destinationNode.channelInterpretation = "speakers";
 
     this.sourceNode.connect(this.gainNode);
     this.gainNode.connect(this.vadGateNode);
