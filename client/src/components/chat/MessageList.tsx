@@ -35,7 +35,11 @@ function MessageList() {
   const members = useActiveMembers();
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const isAtBottomRef = useRef(true);
+  const contentRef = useRef<HTMLDivElement>(null);
+  // Intent flag: "user wants to stay pinned to bottom". Only the user scrolling
+  // UP invalidates it; programmatic scrollTo / image-load resize do not.
+  const stickToBottomRef = useRef(true);
+  const prevScrollTopRef = useRef(0);
   const prevMessageCountRef = useRef(0);
 
   // ─── Mention Navigation State ───
@@ -87,22 +91,32 @@ function MessageList() {
     }
   }
 
-  // Fetch messages on channel change, disable auto-scroll during transition
   useEffect(() => {
-    isAtBottomRef.current = false;
-
-    if (channelId) {
-      fetchMessages();
-    }
+    stickToBottomRef.current = false;
+    if (channelId) fetchMessages();
   }, [channelId, fetchMessages]);
 
-  // Auto-scroll on new message (only when already at bottom)
+  // Auto-scroll on new message when intent is sticky.
   useEffect(() => {
-    if (messages.length > prevMessageCountRef.current && isAtBottomRef.current) {
+    if (messages.length > prevMessageCountRef.current && stickToBottomRef.current) {
       scrollToBottom();
     }
     prevMessageCountRef.current = messages.length;
   }, [messages.length]);
+
+  // Re-pin to bottom while async content (images, embeds, GIFs) expands the
+  // container. Uses the intent flag, not a position re-measurement, so the
+  // programmatic-scroll → handleScroll feedback loop can't unstick.
+  useEffect(() => {
+    if (!contentRef.current) return;
+    const observer = new ResizeObserver(() => {
+      if (stickToBottomRef.current && scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    });
+    observer.observe(contentRef.current);
+    return () => observer.disconnect();
+  }, [isLoading, channelId]);
 
   /** Restore scroll position — runs before paint via useLayoutEffect. */
   useLayoutEffect(() => {
@@ -110,12 +124,14 @@ function MessageList() {
       const savedPos = scrollPositions.get(channelId);
       if (savedPos !== undefined) {
         scrollRef.current.scrollTop = savedPos;
+        const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+        stickToBottomRef.current = scrollHeight - scrollTop - clientHeight < 20;
       } else {
         scrollToBottom();
+        stickToBottomRef.current = true;
       }
       prevMessageCountRef.current = messages.length;
-      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-      isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 20;
+      prevScrollTopRef.current = scrollRef.current.scrollTop;
     }
   }, [isLoading, channelId]);
 
@@ -143,13 +159,22 @@ function MessageList() {
     }
   }
 
-  /** Scroll handler — save position + check if at bottom + trigger infinite scroll */
+  /** Scroll handler — direction-based intent tracking + persist position + infinite scroll. */
   const handleScroll = useCallback(() => {
     if (!scrollRef.current) return;
 
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    const prev = prevScrollTopRef.current;
 
-    isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 20;
+    // Only USER scroll-up unstuck intent; programmatic scrolls (scrollToBottom on resize,
+    // infinite-scroll restore) move scrollTop forward, never decrease it.
+    if (scrollTop < prev - 5) {
+      stickToBottomRef.current = false;
+    }
+    if (scrollHeight - scrollTop - clientHeight < 20) {
+      stickToBottomRef.current = true;
+    }
+    prevScrollTopRef.current = scrollTop;
 
     if (channelId) {
       scrollPositions.set(channelId, scrollTop);
@@ -231,7 +256,7 @@ function MessageList() {
             </p>
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: "8px 0" }}>
+          <div ref={contentRef} style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: "8px 0" }}>
             {messages.map((msg, index) => (
               <div key={msg.id} id={`msg-${msg.id}`}>
                 <Message
