@@ -101,6 +101,27 @@ body { font-family:var(--f-ui); font-weight:500; -webkit-font-smoothing:antialia
 button { font-family:inherit; }
 .mono { font-family:var(--f-m); }
 
+/* ═══════════════════════════════════════
+   NATIVE SELECT DROPDOWN — option items use theme palette
+   Chromium renders <option> popup with OS colors unless we force theme.
+   ═══════════════════════════════════════ */
+select { color-scheme:dark; font-family:var(--f-ui); }
+select option {
+  background-color:var(--bg-1);
+  color:var(--t0);
+  font-weight:500;
+  padding:6px 10px;
+}
+select option:checked,
+select option:hover {
+  background-color:var(--bg-h);
+  color:var(--t0);
+}
+select option:disabled {
+  color:var(--t3);
+  background-color:var(--bg-1);
+}
+
 /* Theme transition — added by applyTheme(), removed after 400ms to avoid slowing hover/focus */
 .theme-transitioning *,.theme-transitioning *::before,.theme-transitioning *::after {
   transition:background-color .35s ease, color .35s ease, border-color .35s ease, fill .35s ease, stroke .35s ease !important;
@@ -495,8 +516,8 @@ button.ch-tree-vu-stream svg { width:14px;height:14px; }
 .sb-collapsed-btn { width:36px;height:36px;border:none;background:var(--bg-3);color:var(--t1);cursor:pointer;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .15s;position:relative; }
 .sb-collapsed-btn:hover { background:var(--bg-4);color:var(--t0); }
 .sb-collapsed-expand { background:transparent;font-size:13px; }
-.sb-collapsed-icon { width:30px;height:30px;border-radius:6px; }
-.sb-collapsed-dm { font-size:16px; }
+.sb-collapsed-icon { width:30px;height:30px;border-radius:6px;object-fit:cover; }
+.sb-collapsed-icon-fallback { width:30px;height:30px;border-radius:6px;background:var(--bg-4);color:var(--t0);font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center; }
 .sb-collapsed-badge { position:absolute;top:-3px;right:-3px;min-width:16px;height:16px;padding:0 4px;background:var(--red);color:#fff;font-size:10px;font-weight:700;border-radius:999px;display:flex;align-items:center;justify-content:center;line-height:1; }
 .sb-collapsed-spacer { flex:1; }
 .sb-collapsed-avatar { padding:4px 0; }

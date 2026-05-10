@@ -3,25 +3,26 @@
  * Clicking any icon expands the sidebar.
  */
 
-import { useTranslation } from "react-i18next";
 import { useSidebarStore } from "../../stores/sidebarStore";
 import { useAuthStore } from "../../stores/authStore";
-import { useDMStore } from "../../stores/dmStore";
+import { useServerStore } from "../../stores/serverStore";
 import { useReadStateStore } from "../../stores/readStateStore";
 import { useChannelStore } from "../../stores/channelStore";
 import Avatar from "../shared/Avatar";
-import { publicAsset } from "../../utils/constants";
+import { resolveAssetUrl } from "../../utils/constants";
 
 function CollapsedSidebar() {
-  const { t } = useTranslation("common");
   const expandSidebar = useSidebarStore((s) => s.expandSidebar);
   const user = useAuthStore((s) => s.user);
 
-  const totalDMUnread = useDMStore((s) => s.getTotalDMUnread());
+  const activeServerId = useServerStore((s) => s.activeServerId);
+  const servers = useServerStore((s) => s.servers);
+  const activeServer = servers.find((s) => s.id === activeServerId) ?? null;
+
   const unreadCounts = useReadStateStore((s) => s.unreadCounts);
   const mutedChannelIds = useChannelStore((s) => s.mutedChannelIds);
 
-  // Total channel unread count (excluding muted channels)
+  // Total channel unread for the active server (readStateStore is server-scoped)
   const totalChannelUnread = Object.entries(unreadCounts).reduce(
     (sum, [chId, c]) => mutedChannelIds.has(chId) ? sum : sum + c,
     0,
@@ -38,29 +39,29 @@ function CollapsedSidebar() {
         &#x276F;
       </button>
 
-      {/* Server icon */}
-      <button
-        className="sb-collapsed-btn sb-collapsed-server"
-        onClick={expandSidebar}
-        title={t("server")}
-      >
-        <img src={publicAsset("mqvi-icon.svg")} alt="mqvi" className="sb-collapsed-icon" />
-        {totalChannelUnread > 0 && (
-          <span className="sb-collapsed-badge">{totalChannelUnread}</span>
-        )}
-      </button>
-
-      {/* DM icon */}
-      <button
-        className="sb-collapsed-btn sb-collapsed-dm"
-        onClick={expandSidebar}
-        title={t("directMessages")}
-      >
-        &#x1F4AC;
-        {totalDMUnread > 0 && (
-          <span className="sb-collapsed-badge">{totalDMUnread}</span>
-        )}
-      </button>
+      {/* Active server icon */}
+      {activeServer && (
+        <button
+          className="sb-collapsed-btn sb-collapsed-server"
+          onClick={expandSidebar}
+          title={activeServer.name}
+        >
+          {activeServer.icon_url ? (
+            <img
+              src={resolveAssetUrl(activeServer.icon_url) ?? undefined}
+              alt={activeServer.name}
+              className="sb-collapsed-icon"
+            />
+          ) : (
+            <span className="sb-collapsed-icon-fallback">
+              {activeServer.name.charAt(0).toUpperCase()}
+            </span>
+          )}
+          {totalChannelUnread > 0 && (
+            <span className="sb-collapsed-badge">{totalChannelUnread}</span>
+          )}
+        </button>
+      )}
 
       {/* Spacer */}
       <div className="sb-collapsed-spacer" />
