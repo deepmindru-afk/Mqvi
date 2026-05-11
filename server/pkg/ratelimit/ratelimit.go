@@ -1,5 +1,5 @@
-// Package ratelimit provides IP-based login rate limiting
-// and user-based message rate limiting.
+// Package ratelimit provides IP-based login, user-based message, and
+// file endpoint rate limiting.
 package ratelimit
 
 import (

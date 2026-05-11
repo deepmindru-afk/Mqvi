@@ -121,7 +121,7 @@ func TestCheckFileTokenRejectsTokenVersionMismatch(t *testing.T) {
 	}
 	acl := fileacl.NewChecker(nil, nil, nil, nil, nil, nil, nil)
 
-	if checkFileToken(r, "file-token", "/api/files/avatars/u1/a.png", authSvc, userRepo, acl) {
+	if _, ok := checkFileToken(r, "file-token", "/api/files/avatars/u1/a.png", authSvc, userRepo, acl); ok {
 		t.Fatal("expected token_version mismatch to reject file token")
 	}
 }

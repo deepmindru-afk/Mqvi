@@ -14,6 +14,7 @@ type Config struct {
 	JWT             JWTConfig
 	LiveKit         LiveKitConfig
 	Upload          UploadConfig
+	FileRateLimit   FileRateLimitConfig
 	Email           EmailConfig
 	Klipy           KlipyConfig
 	EncryptionKey   string // AES-256 key (64 hex chars = 32 bytes) for LiveKit credential encryption
@@ -54,8 +55,8 @@ type LiveKitConfig struct {
 }
 
 type UploadConfig struct {
-	Dir              string
-	MaxSize          int64 // bytes (default: 500MB)
+	Dir               string
+	MaxSize           int64 // bytes (default: 500MB)
 	DefaultQuotaBytes int64 // per-user storage quota (default: 10GB)
 	// PublicURL is the absolute base URL prepended to file URLs when they need
 	// to be served cross-origin or via CDN, e.g. "https://files.mqvi.net".
@@ -67,6 +68,11 @@ type UploadConfig struct {
 	// SignedURLSecretPrev is the previous signing key, still accepted for verification
 	// during key rotation. URLs are only signed with the active key.
 	SignedURLSecretPrev string
+}
+
+type FileRateLimitConfig struct {
+	UserPerMin int
+	IPPerMin   int
 }
 
 // Load reads configuration from environment variables.
@@ -97,6 +103,16 @@ func Load() (*Config, error) {
 	defaultQuota, err := strconv.ParseInt(getEnv("MQVI_DEFAULT_QUOTA_BYTES", "10737418240"), 10, 64) // 10GB
 	if err != nil {
 		return nil, fmt.Errorf("invalid MQVI_DEFAULT_QUOTA_BYTES: %w", err)
+	}
+
+	fileRateUser, err := strconv.Atoi(getEnv("MQVI_FILE_RATE_USER_PER_MIN", "600"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid MQVI_FILE_RATE_USER_PER_MIN: %w", err)
+	}
+
+	fileRateIP, err := strconv.Atoi(getEnv("MQVI_FILE_RATE_IP_PER_MIN", "2000"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid MQVI_FILE_RATE_IP_PER_MIN: %w", err)
 	}
 
 	jwtSecret := getEnv("JWT_SECRET", "")
@@ -134,6 +150,10 @@ func Load() (*Config, error) {
 			PublicURL:           getEnv("MQVI_PUBLIC_FILE_URL", ""),
 			SignedURLSecret:     getEnv("MQVI_SIGNED_URL_SECRET", ""),
 			SignedURLSecretPrev: getEnv("MQVI_SIGNED_URL_SECRET_PREV", ""),
+		},
+		FileRateLimit: FileRateLimitConfig{
+			UserPerMin: fileRateUser,
+			IPPerMin:   fileRateIP,
 		},
 		Email: EmailConfig{
 			ResendAPIKey: getEnv("RESEND_API_KEY", ""),
