@@ -26,6 +26,8 @@ services:
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-devsecret}
       - UPLOAD_DIR=/data/uploads
       - UPLOAD_MAX_SIZE=26214400
+      - MQVI_SIGNED_URL_SECRET=${MQVI_SIGNED_URL_SECRET:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+      - MQVI_ANTIVIRUS_ENABLED=${MQVI_ANTIVIRUS_ENABLED:-false}
     volumes:
       - mqvi-data:/data
     depends_on:

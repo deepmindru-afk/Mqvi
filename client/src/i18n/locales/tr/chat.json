@@ -56,6 +56,11 @@
   "longPressForActions": "Mesaj işlemleri için uzun basın",
   "tooManyMessages": "Çok hızlı mesaj gönderiyorsunuz. Lütfen biraz bekleyin.",
   "messageTooLong": "Mesaj en fazla {{max}} karakter olmalı",
+  "sendFailed": "Mesaj gönderilemedi.",
+  "uploadRejectedInfected": "Bu dosya güvenlik taramasından geçemediği için gönderilemedi.",
+  "uploadScanUnavailable": "Dosya tarama geçici olarak kullanılamıyor. Lütfen kısa süre sonra tekrar deneyin.",
+  "uploadTooLargeScan": "Bu dosya yapılandırılmış güvenlik taraması için çok büyük.",
+  "uploadTooLarge": "Bu dosya yüklemek için çok büyük.",
 
   "gif": "GIF",
   "gifSearch": "GIF Ara",

@@ -4,11 +4,8 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"mime/multipart"
-	"os"
 	"strings"
 
 	"github.com/akinalp/mqvi/models"
@@ -24,18 +21,18 @@ type ReportUploadService interface {
 
 type reportUploadService struct {
 	reportRepo repository.ReportRepository
-	locator    *files.Locator
+	pipeline   UploadPipeline
 	maxSize    int64
 }
 
 func NewReportUploadService(
 	reportRepo repository.ReportRepository,
-	locator *files.Locator,
+	pipeline UploadPipeline,
 	maxSize int64,
 ) ReportUploadService {
 	return &reportUploadService{
 		reportRepo: reportRepo,
-		locator:    locator,
+		pipeline:   pipeline,
 		maxSize:    maxSize,
 	}
 }
@@ -63,35 +60,22 @@ func (s *reportUploadService) Upload(ctx context.Context, reportID string, file 
 		return nil, fmt.Errorf("%w: only images are allowed for report evidence (got: %s)", pkg.ErrBadRequest, mimeBase)
 	}
 
-	diskFilename, err := files.GenerateDiskFilename(header.Filename)
+	stored, err := s.pipeline.Store(ctx, files.KindReport, reportID, file, header, s.maxSize)
 	if err != nil {
 		return nil, err
 	}
 
-	relURL, err := s.locator.SaveFile(files.KindReport, reportID, diskFilename, func(dst *os.File) error {
-		if _, err := io.Copy(dst, file); err != nil {
-			return fmt.Errorf("failed to save file: %w", err)
-		}
-		return nil
-	})
-	if err != nil {
-		if errors.Is(err, files.ErrInvalidSegment) {
-			return nil, fmt.Errorf("%w: %v", pkg.ErrBadRequest, err)
-		}
-		return nil, err
-	}
-
-	fileSize := header.Size
+	fileSize := stored.Size
 	att := &models.ReportAttachment{
 		ReportID: reportID,
 		Filename: header.Filename,
-		FileURL:  relURL,
+		FileURL:  stored.RelativeURL,
 		FileSize: &fileSize,
 		MimeType: &mimeBase,
 	}
 
 	if err := s.reportRepo.CreateAttachment(ctx, att); err != nil {
-		s.locator.DeleteFromURL(relURL)
+		s.pipeline.DeleteFromURL(stored.RelativeURL)
 		return nil, fmt.Errorf("failed to create report attachment record: %w", err)
 	}
 

@@ -2,12 +2,9 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"log"
 	"mime/multipart"
-	"os"
 	"strings"
 
 	"github.com/akinalp/mqvi/models"
@@ -55,7 +52,7 @@ type soundboardService struct {
 	userRepo       repository.UserRepository
 	hub            ws.Broadcaster
 	voice          VoiceStateGetter
-	locator        *files.Locator
+	pipeline       UploadPipeline
 	maxSize        int64
 	urlSigner      FileURLSigner
 	storageService StorageService
@@ -66,7 +63,7 @@ func NewSoundboardService(
 	userRepo repository.UserRepository,
 	hub ws.Broadcaster,
 	voice VoiceStateGetter,
-	locator *files.Locator,
+	pipeline UploadPipeline,
 	maxSize int64,
 	urlSigner FileURLSigner,
 	storageService StorageService,
@@ -76,7 +73,7 @@ func NewSoundboardService(
 		userRepo:       userRepo,
 		hub:            hub,
 		voice:          voice,
-		locator:        locator,
+		pipeline:       pipeline,
 		maxSize:        maxSize,
 		urlSigner:      urlSigner,
 		storageService: storageService,
@@ -133,21 +130,8 @@ func (s *soundboardService) Create(
 		return nil, fmt.Errorf("%w: server has reached the maximum of %d sounds", pkg.ErrBadRequest, maxSoundsPerServer)
 	}
 
-	diskFilename, err := files.GenerateDiskFilename(header.Filename)
+	stored, err := s.pipeline.Store(ctx, files.KindSoundboard, serverID, file, header, s.maxSize)
 	if err != nil {
-		return nil, err
-	}
-
-	relURL, err := s.locator.SaveFile(files.KindSoundboard, serverID, diskFilename, func(dst *os.File) error {
-		if _, err := io.Copy(dst, file); err != nil {
-			return fmt.Errorf("save file: %w", err)
-		}
-		return nil
-	})
-	if err != nil {
-		if errors.Is(err, files.ErrInvalidSegment) {
-			return nil, fmt.Errorf("%w: %v", pkg.ErrBadRequest, err)
-		}
 		return nil, err
 	}
 
@@ -156,14 +140,14 @@ func (s *soundboardService) Create(
 		ServerID:   serverID,
 		Name:       strings.TrimSpace(req.Name),
 		Emoji:      req.Emoji,
-		FileURL:    relURL,
-		FileSize:   header.Size,
+		FileURL:    stored.RelativeURL,
+		FileSize:   stored.Size,
 		DurationMs: durationMs,
 		UploadedBy: userID,
 	}
 
 	if err := s.repo.Create(ctx, sound); err != nil {
-		s.locator.DeleteFromURL(relURL)
+		s.pipeline.DeleteFromURL(stored.RelativeURL)
 		return nil, fmt.Errorf("create sound record: %w", err)
 	}
 
@@ -227,7 +211,7 @@ func (s *soundboardService) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
-	s.locator.DeleteFromURL(sound.FileURL)
+	s.pipeline.DeleteFromURL(sound.FileURL)
 
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("delete sound: %w", err)

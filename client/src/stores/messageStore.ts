@@ -17,7 +17,7 @@ import type { Message, ReactionGroup } from "../types";
 import { DEFAULT_MESSAGE_LIMIT } from "../utils/constants";
 import {
   encryptFilesForE2EE,
-  handleRateLimitError,
+  handleSendError,
   createTypingHandler,
   updateMessageInRecord,
   deleteMessageFromRecord,
@@ -204,7 +204,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
             replyToId
           );
 
-          handleRateLimitError(res);
+          handleSendError(res);
           return res.success;
         } catch (err) {
           console.error("[messageStore] E2EE encryption failed:", err);
@@ -216,7 +216,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
 
     // Plaintext fallback
     const res = await messageApi.sendMessage(serverId, channelId, content, files, replyToId);
-    handleRateLimitError(res);
+    handleSendError(res);
     return res.success;
   },
 

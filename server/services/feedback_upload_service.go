@@ -2,11 +2,8 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"mime/multipart"
-	"os"
 	"strings"
 
 	"github.com/akinalp/mqvi/models"
@@ -22,18 +19,18 @@ type FeedbackUploadService interface {
 
 type feedbackUploadService struct {
 	feedbackRepo repository.FeedbackRepository
-	locator      *files.Locator
+	pipeline     UploadPipeline
 	maxSize      int64
 }
 
 func NewFeedbackUploadService(
 	feedbackRepo repository.FeedbackRepository,
-	locator *files.Locator,
+	pipeline UploadPipeline,
 	maxSize int64,
 ) FeedbackUploadService {
 	return &feedbackUploadService{
 		feedbackRepo: feedbackRepo,
-		locator:      locator,
+		pipeline:     pipeline,
 		maxSize:      maxSize,
 	}
 }
@@ -60,37 +57,24 @@ func (s *feedbackUploadService) Upload(ctx context.Context, ticketID string, rep
 		return nil, fmt.Errorf("%w: only images are allowed (got: %s)", pkg.ErrBadRequest, mimeBase)
 	}
 
-	diskFilename, err := files.GenerateDiskFilename(header.Filename)
+	stored, err := s.pipeline.Store(ctx, files.KindFeedback, ticketID, file, header, s.maxSize)
 	if err != nil {
 		return nil, err
 	}
 
-	relURL, err := s.locator.SaveFile(files.KindFeedback, ticketID, diskFilename, func(dst *os.File) error {
-		if _, err := io.Copy(dst, file); err != nil {
-			return fmt.Errorf("failed to save file: %w", err)
-		}
-		return nil
-	})
-	if err != nil {
-		if errors.Is(err, files.ErrInvalidSegment) {
-			return nil, fmt.Errorf("%w: %v", pkg.ErrBadRequest, err)
-		}
-		return nil, err
-	}
-
-	fileSize := header.Size
+	fileSize := stored.Size
 	att := &models.FeedbackAttachment{
 		ID:       uuid.New().String(),
 		TicketID: ticketID,
 		ReplyID:  replyID,
 		Filename: header.Filename,
-		FileURL:  relURL,
+		FileURL:  stored.RelativeURL,
 		FileSize: &fileSize,
 		MimeType: &mimeBase,
 	}
 
 	if err := s.feedbackRepo.CreateAttachment(ctx, att); err != nil {
-		s.locator.DeleteFromURL(relURL)
+		s.pipeline.DeleteFromURL(stored.RelativeURL)
 		return nil, fmt.Errorf("failed to create feedback attachment record: %w", err)
 	}
 

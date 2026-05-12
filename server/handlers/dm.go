@@ -12,6 +12,8 @@ import (
 	"github.com/akinalp/mqvi/services"
 )
 
+const maxDMUploadFiles = 10
+
 // DMHandler handles DM endpoints.
 // messageLimiter is shared with MessageHandler (user-based total rate).
 type DMHandler struct {
@@ -174,8 +176,13 @@ func (h *DMHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	var req models.CreateDMMessageRequest
 
 	if isMultipart(contentType) {
+		limitMultipartBody(w, r, h.maxUploadSize, maxDMUploadFiles)
 		if err := r.ParseMultipartForm(h.maxUploadSize); err != nil {
 			pkg.ErrorWithMessage(w, http.StatusBadRequest, "failed to parse multipart form")
+			return
+		}
+		if r.MultipartForm != nil && len(r.MultipartForm.File["files"]) > maxDMUploadFiles {
+			pkg.ErrorWithMessage(w, http.StatusBadRequest, "too many files")
 			return
 		}
 
@@ -243,10 +250,17 @@ func (h *DMHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 			attachment, err := h.dmUploadService.Upload(r.Context(), msg.ID, file, fileHeader, isEncrypted)
 			file.Close()
 			if err != nil {
-				continue
+				_ = h.dmService.DeleteMessage(r.Context(), user.ID, msg.ID)
+				if unused := reservedBytes - uploadedBytes; unused > 0 {
+					_ = h.storageService.Release(r.Context(), user.ID, unused)
+				}
+				pkg.Error(w, err)
+				return
 			}
 
-			uploadedBytes += fileHeader.Size
+			if attachment.FileSize != nil {
+				uploadedBytes += *attachment.FileSize
+			}
 			attachment.FileURL = h.urlSigner.SignURL(attachment.FileURL)
 			msg.Attachments = append(msg.Attachments, *attachment)
 		}

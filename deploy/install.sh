@@ -88,6 +88,93 @@ elif command -v dnf >/dev/null 2>&1;     then PKG="dnf"
 elif command -v yum >/dev/null 2>&1;     then PKG="yum"
 fi
 
+set_clamav_config_value() {
+    # $1 = file, $2 = key, $3 = value
+    local file="$1"
+    local key="$2"
+    local value="$3"
+    if [ ! -f "$file" ]; then
+        return 1
+    fi
+    if grep -Eq "^[#[:space:]]*${key}[[:space:]]+" "$file"; then
+        sed -i -E "s|^[#[:space:]]*${key}[[:space:]]+.*|${key} ${value}|" "$file"
+    else
+        printf '\n%s %s\n' "$key" "$value" >> "$file"
+    fi
+}
+
+configure_clamav_tcp() {
+    local configured=0
+    for conf in /etc/clamav/clamd.conf /etc/clamd.d/scan.conf /etc/clamd.conf; do
+        if [ -f "$conf" ]; then
+            set_clamav_config_value "$conf" TCPSocket 3310 || true
+            set_clamav_config_value "$conf" TCPAddr 127.0.0.1 || true
+            configured=1
+        fi
+    done
+
+    if [ "$configured" -eq 0 ]; then
+        warn "Could not find clamd.conf to enable TCP scanning. Set TCPSocket 3310 and TCPAddr 127.0.0.1 manually."
+        return 1
+    fi
+
+    return 0
+}
+
+ensure_env_value() {
+    # $1 = file, $2 = key, $3 = value
+    local file="$1"
+    local key="$2"
+    local value="$3"
+    if grep -Eq "^${key}=" "$file"; then
+        return
+    fi
+    printf '%s=%s\n' "$key" "$value" >> "$file"
+}
+
+install_clamav() {
+    if command -v clamd >/dev/null 2>&1 || command -v clamdscan >/dev/null 2>&1; then
+        log "ClamAV already installed."
+        configure_clamav_tcp || return 1
+        systemctl restart clamav-daemon >/dev/null 2>&1 || true
+        systemctl restart clamd@scan >/dev/null 2>&1 || true
+        return 0
+    fi
+
+    local mem_kb
+    mem_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+    if [ "${mem_kb:-0}" -gt 0 ] && [ "$mem_kb" -lt 1500000 ]; then
+        warn "This server has less than 1.5GB RAM. ClamAV may be too heavy; uploads will still work if the scanner is unavailable."
+    fi
+
+    log "Installing ClamAV scanner..."
+    case "$PKG" in
+        apt)
+            export DEBIAN_FRONTEND=noninteractive
+            if ! apt-get update -qq; then warn "Could not update apt metadata for ClamAV."; return 1; fi
+            if ! apt-get install -y clamav-daemon clamav-freshclam >/dev/null; then warn "Could not install ClamAV packages."; return 1; fi
+            configure_clamav_tcp || return 1
+            systemctl enable clamav-freshclam >/dev/null 2>&1 || true
+            systemctl restart clamav-freshclam >/dev/null 2>&1 || true
+            systemctl enable clamav-daemon >/dev/null 2>&1 || true
+            systemctl restart clamav-daemon >/dev/null 2>&1 || true
+            ;;
+        dnf|yum)
+            if ! "$PKG" install -y clamav clamd clamav-update >/dev/null; then warn "Could not install ClamAV packages."; return 1; fi
+            freshclam >/dev/null 2>&1 || true
+            configure_clamav_tcp || return 1
+            systemctl enable clamd@scan >/dev/null 2>&1 || true
+            systemctl restart clamd@scan >/dev/null 2>&1 || true
+            systemctl enable clamav-freshclam >/dev/null 2>&1 || true
+            systemctl restart clamav-freshclam >/dev/null 2>&1 || true
+            ;;
+        *)
+            warn "Cannot auto-install ClamAV on this distro. Set up clamd manually or set MQVI_ANTIVIRUS_ENABLED=false."
+            return 1
+            ;;
+    esac
+}
+
 # ─── Detect existing Caddy ───────────────────────────────────────────────────
 CADDY_PRESENT=0
 if [ "$EXISTING_CADDY_FLAG" -eq 1 ]; then
@@ -197,6 +284,15 @@ if [ ! -x "${INSTALL_DIR}/livekit-server" ]; then
     chmod +x "${INSTALL_DIR}/livekit-server"
 fi
 
+AV_ENABLED=true
+AV_SYSTEMD_UNITS=""
+if ! install_clamav; then
+    AV_ENABLED=false
+    warn "Antivirus disabled in generated .env. Set MQVI_ANTIVIRUS_ENABLED=true after installing and starting ClamAV manually."
+else
+    AV_SYSTEMD_UNITS=" clamav-daemon.service clamd@scan.service"
+fi
+
 # ─── Generate livekit.yaml (if absent) ───────────────────────────────────────
 LK_API_KEY=""
 LK_API_SECRET=""
@@ -261,6 +357,18 @@ UPLOAD_MAX_SIZE=524288000
 
 # HMAC secret for signed file URLs (base64-encoded, 32 bytes)
 MQVI_SIGNED_URL_SECRET=${SIGNED_URL_SECRET}
+
+MQVI_ANTIVIRUS_ENABLED=${AV_ENABLED}
+MQVI_CLAMAV_ADDR=127.0.0.1:3310
+MQVI_ANTIVIRUS_TIMEOUT_SECONDS=10
+MQVI_ANTIVIRUS_MAX_SCAN_SIZE_MB=25
+MQVI_ANTIVIRUS_UNAVAILABLE_POLICY=allow_with_log
+MQVI_ANTIVIRUS_TOO_LARGE_POLICY=skip_with_log
+MQVI_ANTIVIRUS_CLEAN_CACHE_TTL_HOURS=24
+MQVI_ANTIVIRUS_INFECTED_CACHE_TTL_DAYS=30
+MQVI_ANTIVIRUS_CIRCUIT_FAILURE_THRESHOLD=3
+MQVI_ANTIVIRUS_CIRCUIT_WINDOW_SECONDS=30
+MQVI_ANTIVIRUS_CIRCUIT_OPEN_SECONDS=10
 EOF
 
     if [ -n "$PUBLIC_URL" ]; then
@@ -279,6 +387,17 @@ EOF
     chmod 600 "${INSTALL_DIR}/.env"
 else
     log "Existing .env found — keeping it. (Flags --port/--domain do not modify it.)"
+    ensure_env_value "${INSTALL_DIR}/.env" "MQVI_ANTIVIRUS_ENABLED" "${AV_ENABLED}"
+    ensure_env_value "${INSTALL_DIR}/.env" "MQVI_CLAMAV_ADDR" "127.0.0.1:3310"
+    ensure_env_value "${INSTALL_DIR}/.env" "MQVI_ANTIVIRUS_TIMEOUT_SECONDS" "10"
+    ensure_env_value "${INSTALL_DIR}/.env" "MQVI_ANTIVIRUS_MAX_SCAN_SIZE_MB" "25"
+    ensure_env_value "${INSTALL_DIR}/.env" "MQVI_ANTIVIRUS_UNAVAILABLE_POLICY" "allow_with_log"
+    ensure_env_value "${INSTALL_DIR}/.env" "MQVI_ANTIVIRUS_TOO_LARGE_POLICY" "skip_with_log"
+    ensure_env_value "${INSTALL_DIR}/.env" "MQVI_ANTIVIRUS_CLEAN_CACHE_TTL_HOURS" "24"
+    ensure_env_value "${INSTALL_DIR}/.env" "MQVI_ANTIVIRUS_INFECTED_CACHE_TTL_DAYS" "30"
+    ensure_env_value "${INSTALL_DIR}/.env" "MQVI_ANTIVIRUS_CIRCUIT_FAILURE_THRESHOLD" "3"
+    ensure_env_value "${INSTALL_DIR}/.env" "MQVI_ANTIVIRUS_CIRCUIT_WINDOW_SECONDS" "30"
+    ensure_env_value "${INSTALL_DIR}/.env" "MQVI_ANTIVIRUS_CIRCUIT_OPEN_SECONDS" "10"
 fi
 
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "$INSTALL_DIR"
@@ -312,8 +431,8 @@ EOF
 cat > /etc/systemd/system/mqvi-server.service <<EOF
 [Unit]
 Description=mqvi — Application server
-After=network-online.target mqvi-livekit.service
-Wants=network-online.target
+After=network-online.target mqvi-livekit.service${AV_SYSTEMD_UNITS}
+Wants=network-online.target${AV_SYSTEMD_UNITS}
 Requires=mqvi-livekit.service
 
 [Service]

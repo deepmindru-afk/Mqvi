@@ -45,6 +45,7 @@ type Repositories struct {
 	Soundboard        repository.SoundboardRepository
 	Storage           repository.StorageRepository
 	Cleanup           repository.CleanupRepository
+	ScanHashCache     repository.ScanHashCacheRepository
 }
 
 // initRepositories creates all repositories from the shared DB connection pool.
@@ -87,5 +88,6 @@ func initRepositories(conn *sql.DB) *Repositories {
 		Soundboard:        repository.NewSQLiteSoundboardRepo(conn),
 		Storage:           repository.NewSQLiteStorageRepo(conn),
 		Cleanup:           repository.NewSQLiteCleanupRepo(conn),
+		ScanHashCache:     repository.NewSQLiteScanHashCacheRepo(conn),
 	}
 }

@@ -11,6 +11,7 @@ type APIResponse struct {
 	Success bool   `json:"success"`
 	Data    any    `json:"data,omitempty"`
 	Error   string `json:"error,omitempty"`
+	Code    string `json:"code,omitempty"`
 }
 
 func JSON(w http.ResponseWriter, status int, data any) {
@@ -37,6 +38,7 @@ func Error(w http.ResponseWriter, err error) {
 	resp := APIResponse{
 		Success: false,
 		Error:   err.Error(),
+		Code:    CodeOf(err),
 	}
 
 	if encErr := json.NewEncoder(w).Encode(resp); encErr != nil {

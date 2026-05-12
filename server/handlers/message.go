@@ -12,6 +12,8 @@ import (
 	"github.com/akinalp/mqvi/services"
 )
 
+const maxMessageUploadFiles = 10
+
 // MessageHandler handles message endpoints.
 // messageLimiter is shared with DMHandler (user-based, controls total message rate).
 type MessageHandler struct {
@@ -95,8 +97,13 @@ func (h *MessageHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req models.CreateMessageRequest
 
 	if isMultipart(contentType) {
+		limitMultipartBody(w, r, h.maxUploadSize, maxMessageUploadFiles)
 		if err := r.ParseMultipartForm(h.maxUploadSize); err != nil {
 			pkg.ErrorWithMessage(w, http.StatusBadRequest, "failed to parse multipart form")
+			return
+		}
+		if r.MultipartForm != nil && len(r.MultipartForm.File["files"]) > maxMessageUploadFiles {
+			pkg.ErrorWithMessage(w, http.StatusBadRequest, "too many files")
 			return
 		}
 
@@ -166,10 +173,17 @@ func (h *MessageHandler) Create(w http.ResponseWriter, r *http.Request) {
 			attachment, err := h.uploadService.Upload(r.Context(), message.ID, file, fileHeader, isEncrypted)
 			file.Close()
 			if err != nil {
-				continue
+				_ = h.messageService.Delete(r.Context(), message.ID, user.ID, models.PermManageMessages)
+				if unused := reservedBytes - uploadedBytes; unused > 0 {
+					_ = h.storageService.Release(r.Context(), user.ID, unused)
+				}
+				pkg.Error(w, err)
+				return
 			}
 
-			uploadedBytes += fileHeader.Size
+			if attachment.FileSize != nil {
+				uploadedBytes += *attachment.FileSize
+			}
 			attachment.FileURL = h.urlSigner.SignURL(attachment.FileURL)
 			message.Attachments = append(message.Attachments, *attachment)
 		}
@@ -233,7 +247,6 @@ func (h *MessageHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	pkg.JSON(w, http.StatusOK, map[string]string{"message": "message deleted"})
 }
-
 
 // PermissionsContextKey carries the user's effective permissions in request context.
 const PermissionsContextKey contextKey = "permissions"
