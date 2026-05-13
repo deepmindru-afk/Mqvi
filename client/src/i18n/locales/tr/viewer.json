@@ -1,0 +1,13 @@
+{
+  "download": "İndir",
+  "close": "Kapat",
+  "loading": "Önizleme yükleniyor…",
+  "previewFailed": "Önizleme yüklenemedi.",
+  "previewTooLarge": "Dosya önizleme için çok büyük ({{size}}). Açmak için indir.",
+  "previewUnsupported": "Bu dosya türü için uygulama içi önizleme yok. Açmak için indir.",
+  "page": "Sayfa {{current}} / {{total}}",
+  "zoomIn": "Yakınlaştır",
+  "zoomOut": "Uzaklaştır",
+  "zoomReset": "Sıfırla",
+  "sheet": "Sayfa"
+}

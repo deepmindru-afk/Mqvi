@@ -3914,3 +3914,278 @@ button.ch-tree-vu-stream svg { width:14px;height:14px; }
 }
 .sb-submit-btn:hover { opacity: 0.9; }
 .sb-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ═══════════════════════════════════════
+   FILE VIEWER OVERLAY (Phase 21)
+   ═══════════════════════════════════════ */
+.file-viewer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  animation: vpIn .15s ease;
+}
+
+.file-viewer-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+  background: rgba(0, 0, 0, 0.55);
+  border-bottom: 1px solid var(--b1);
+  color: var(--t0);
+}
+
+.file-viewer-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.file-viewer-filename {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--t0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60vw;
+}
+
+.file-viewer-size {
+  font-size: 13px;
+  color: var(--t2);
+}
+
+.file-viewer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-viewer-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--b2);
+  border-radius: 6px;
+  background: var(--bg-2);
+  color: var(--t0);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.file-viewer-btn:hover { background: var(--bg-3); border-color: var(--primary-m); }
+
+.file-viewer-close {
+  width: 34px;
+  padding: 0;
+  font-size: 14px;
+}
+
+.file-viewer-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  overflow: hidden;
+  padding: 12px;
+}
+
+.file-viewer-image-outer {
+  width: 100%;
+  height: 100%;
+  display: flex;
+}
+
+/* Image viewer — zoom-pan-pinch fills its parent */
+.file-viewer-image-wrap {
+  width: 100% !important;
+  height: 100% !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.file-viewer-image-content {
+  width: 100% !important;
+  height: 100% !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.file-viewer-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Video — center, contain */
+.file-viewer-video {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: black;
+  border-radius: 6px;
+}
+
+/* Audio — small centered panel */
+.file-viewer-audio-wrap {
+  margin: auto;
+  background: var(--bg-2);
+  padding: 24px 28px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  min-width: 320px;
+  max-width: 90vw;
+  border: 1px solid var(--b1);
+}
+.file-viewer-audio-title {
+  font-size: 14px;
+  color: var(--t0);
+  font-weight: 500;
+  text-align: center;
+  word-break: break-all;
+}
+.file-viewer-audio { width: 100%; }
+
+/* PDF — scrollable column of pages */
+.file-viewer-pdf {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background: var(--bg-1);
+  border-radius: 6px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.file-viewer-pdf canvas {
+  max-width: 100%;
+  height: auto !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+/* DOCX — scrollable HTML body */
+.file-viewer-docx {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  height: 100%;
+  overflow: auto;
+  background: #fff;
+  color: #111;
+  padding: 40px 56px;
+  border-radius: 6px;
+  font-family: var(--f-ui);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.file-viewer-docx h1, .file-viewer-docx h2, .file-viewer-docx h3 { margin: 1.2em 0 0.5em; line-height: 1.3; }
+.file-viewer-docx p { margin: 0 0 0.8em; }
+.file-viewer-docx table { border-collapse: collapse; margin: 1em 0; }
+.file-viewer-docx td, .file-viewer-docx th { border: 1px solid #ccc; padding: 6px 10px; }
+.file-viewer-docx img { max-width: 100%; height: auto; }
+
+/* XLSX */
+.file-viewer-xlsx {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.file-viewer-xlsx-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+  padding: 8px 8px 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--b1);
+  background: var(--bg-2);
+}
+.file-viewer-xlsx-tab {
+  padding: 6px 14px;
+  background: transparent;
+  border: none;
+  color: var(--t2);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px 4px 0 0;
+  white-space: nowrap;
+}
+.file-viewer-xlsx-tab:hover { color: var(--t0); background: var(--bg-3); }
+.file-viewer-xlsx-tab.active {
+  background: var(--bg-1);
+  color: var(--t0);
+  border: 1px solid var(--b1);
+  border-bottom: 1px solid var(--bg-1);
+  margin-bottom: -1px;
+}
+.file-viewer-xlsx-sheet {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  background: #fff;
+  color: #111;
+  font-family: var(--f-ui);
+  font-size: 13px;
+}
+.file-viewer-xlsx-sheet table { border-collapse: collapse; }
+.file-viewer-xlsx-sheet td, .file-viewer-xlsx-sheet th {
+  border: 1px solid #d0d0d0;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+/* Fallback panel (unsupported / too large) */
+.file-viewer-fallback-panel {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  background: var(--bg-2);
+  padding: 32px 36px;
+  border-radius: 12px;
+  border: 1px solid var(--b1);
+  max-width: 480px;
+}
+.file-viewer-fallback-msg {
+  margin: auto;
+  color: var(--t1);
+  font-size: 14px;
+  text-align: center;
+  line-height: 1.5;
+}
+.file-viewer-fallback-download { min-width: 160px; }
+
+/* Image button reset for inline thumbnails */
+.msg-attachment-imgbtn {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: zoom-in;
+  display: inline-block;
+}
+.msg-attachment-imgbtn:focus { outline: 2px solid var(--primary-m); outline-offset: 2px; }
