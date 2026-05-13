@@ -12,6 +12,7 @@ import { useSettingsStore } from "../../stores/settingsStore";
 import { useDMStore } from "../../stores/dmStore";
 import { useUIStore } from "../../stores/uiStore";
 import { listAdminReports, updateReportStatus, platformBanUser, hardDeleteUser } from "../../api/admin";
+import { useSettingsBadgeStore } from "../../stores/settingsBadgeStore";
 import { useContextMenu } from "../../hooks/useContextMenu";
 import ContextMenu from "../shared/ContextMenu";
 import Modal from "../shared/Modal";
@@ -173,6 +174,12 @@ function AdminReportList() {
   useEffect(() => {
     fetchReports();
   }, [fetchReports]);
+
+  // Clear the admin "new reports" badge once this panel is viewed.
+  const clearReportsBadge = useSettingsBadgeStore((s) => s.clearReports);
+  useEffect(() => {
+    clearReportsBadge();
+  }, [clearReportsBadge]);
 
   // --- Filtered + Sorted data ---
   const filteredReports = useMemo(() => {

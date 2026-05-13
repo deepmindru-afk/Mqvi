@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/akinalp/mqvi/models"
 )
@@ -20,4 +21,12 @@ type FeedbackRepository interface {
 
 	CreateAttachment(ctx context.Context, att *models.FeedbackAttachment) error
 	GetAttachmentsByTicketID(ctx context.Context, ticketID string) ([]models.FeedbackAttachment, error)
+
+	// LatestCreatedAt returns the newest ticket's created_at, or nil when the
+	// table is empty. Drives the admin "new feedback" badge.
+	LatestCreatedAt(ctx context.Context) (*time.Time, error)
+
+	// LatestAdminReplyForUser returns the newest admin-reply timestamp on any
+	// ticket owned by userID, or nil. Drives the user's own feedback badge.
+	LatestAdminReplyForUser(ctx context.Context, userID string) (*time.Time, error)
 }

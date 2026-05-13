@@ -3,7 +3,9 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/akinalp/mqvi/database"
 	"github.com/akinalp/mqvi/models"
@@ -242,4 +244,33 @@ func (r *sqliteFeedbackRepo) GetAttachmentsByTicketID(ctx context.Context, ticke
 		atts = append(atts, a)
 	}
 	return atts, nil
+}
+
+func (r *sqliteFeedbackRepo) LatestCreatedAt(ctx context.Context) (*time.Time, error) {
+	var ts sql.NullTime
+	err := r.db.QueryRowContext(ctx, `SELECT MAX(created_at) FROM feedback_tickets`).Scan(&ts)
+	if errors.Is(err, sql.ErrNoRows) || !ts.Valid {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("feedback latest created_at: %w", err)
+	}
+	return &ts.Time, nil
+}
+
+func (r *sqliteFeedbackRepo) LatestAdminReplyForUser(ctx context.Context, userID string) (*time.Time, error) {
+	var ts sql.NullTime
+	err := r.db.QueryRowContext(ctx,
+		`SELECT MAX(r.created_at) FROM feedback_replies r
+		 JOIN feedback_tickets t ON t.id = r.ticket_id
+		 WHERE t.user_id = ? AND r.is_admin = 1`,
+		userID,
+	).Scan(&ts)
+	if errors.Is(err, sql.ErrNoRows) || !ts.Valid {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("feedback latest admin reply: %w", err)
+	}
+	return &ts.Time, nil
 }

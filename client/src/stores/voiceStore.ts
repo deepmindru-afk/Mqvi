@@ -26,7 +26,13 @@ import { ensureMicPermission } from "../utils/devicePermissions";
 import { ensureFreshToken } from "../api/client";
 import { useServerStore } from "./serverStore";
 import { useAuthStore } from "./authStore";
-import { closeAudioContext } from "../utils/sounds";
+import {
+  closeAudioContext,
+  playMuteOnSound,
+  playMuteOffSound,
+  playDeafenOnSound,
+  playDeafenOffSound,
+} from "../utils/sounds";
 import { markVoiceActive, clearVoiceRecoveryMark } from "./shared/voiceRecovery";
 import {
   createVoiceSettingsSlice,
@@ -346,6 +352,8 @@ export const useVoiceStore = create<VoiceStore>((set, get, store) => ({
       }
     }
     saveMuteState({ isMuted: get().isMuted, isDeafened: get().isDeafened });
+    if (get().isMuted) playMuteOnSound();
+    else playMuteOffSound();
   },
 
   toggleDeafen: () => {
@@ -367,6 +375,8 @@ export const useVoiceStore = create<VoiceStore>((set, get, store) => ({
       }
     }
     saveMuteState({ isMuted: get().isMuted, isDeafened: get().isDeafened });
+    if (get().isDeafened) playDeafenOnSound();
+    else playDeafenOffSound();
   },
 
   setStreaming: (isStreaming: boolean) => {

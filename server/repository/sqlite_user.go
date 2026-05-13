@@ -56,7 +56,7 @@ func (r *sqliteUserRepo) GetByID(ctx context.Context, id string) (*models.User, 
 		SELECT id, username, display_name, avatar_url, wallpaper_url, password_hash, status, pref_status, custom_status,
 			email, language, dm_privacy, is_platform_admin, is_platform_banned, has_seen_download_prompt, has_seen_welcome,
 			platform_ban_reason, platform_banned_by, platform_banned_at,
-			deleted_at, deleted_by_admin, is_hard_deleted, token_version, created_at
+			deleted_at, deleted_by_admin, is_hard_deleted, token_version, feedback_last_seen_at, reports_last_seen_at, created_at
 		FROM users WHERE id = ?`
 
 	user := &models.User{}
@@ -66,6 +66,7 @@ func (r *sqliteUserRepo) GetByID(ctx context.Context, id string) (*models.User, 
 		&user.Language, &user.DMPrivacy, &user.IsPlatformAdmin, &user.IsPlatformBanned, &user.HasSeenDownloadPrompt, &user.HasSeenWelcome,
 		&user.PlatformBanReason, &user.PlatformBannedBy, &user.PlatformBannedAt,
 		&user.DeletedAt, &user.DeletedByAdmin, &user.IsHardDeleted, &user.TokenVersion,
+		&user.FeedbackLastSeenAt, &user.ReportsLastSeenAt,
 		&user.CreatedAt,
 	)
 
@@ -84,7 +85,7 @@ func (r *sqliteUserRepo) GetByUsername(ctx context.Context, username string) (*m
 		SELECT id, username, display_name, avatar_url, wallpaper_url, password_hash, status, pref_status, custom_status,
 			email, language, dm_privacy, is_platform_admin, is_platform_banned, has_seen_download_prompt, has_seen_welcome,
 			platform_ban_reason, platform_banned_by, platform_banned_at,
-			deleted_at, deleted_by_admin, is_hard_deleted, token_version, created_at
+			deleted_at, deleted_by_admin, is_hard_deleted, token_version, feedback_last_seen_at, reports_last_seen_at, created_at
 		FROM users WHERE username = ? COLLATE NOCASE`
 
 	user := &models.User{}
@@ -94,6 +95,7 @@ func (r *sqliteUserRepo) GetByUsername(ctx context.Context, username string) (*m
 		&user.Language, &user.DMPrivacy, &user.IsPlatformAdmin, &user.IsPlatformBanned, &user.HasSeenDownloadPrompt, &user.HasSeenWelcome,
 		&user.PlatformBanReason, &user.PlatformBannedBy, &user.PlatformBannedAt,
 		&user.DeletedAt, &user.DeletedByAdmin, &user.IsHardDeleted, &user.TokenVersion,
+		&user.FeedbackLastSeenAt, &user.ReportsLastSeenAt,
 		&user.CreatedAt,
 	)
 
@@ -114,7 +116,7 @@ func (r *sqliteUserRepo) GetActiveByID(ctx context.Context, id string) (*models.
 		SELECT id, username, display_name, avatar_url, wallpaper_url, password_hash, status, pref_status, custom_status,
 			email, language, dm_privacy, is_platform_admin, is_platform_banned, has_seen_download_prompt, has_seen_welcome,
 			platform_ban_reason, platform_banned_by, platform_banned_at,
-			deleted_at, deleted_by_admin, is_hard_deleted, token_version, created_at
+			deleted_at, deleted_by_admin, is_hard_deleted, token_version, feedback_last_seen_at, reports_last_seen_at, created_at
 		FROM users WHERE id = ? AND deleted_at IS NULL`
 
 	user := &models.User{}
@@ -124,6 +126,7 @@ func (r *sqliteUserRepo) GetActiveByID(ctx context.Context, id string) (*models.
 		&user.Language, &user.DMPrivacy, &user.IsPlatformAdmin, &user.IsPlatformBanned, &user.HasSeenDownloadPrompt, &user.HasSeenWelcome,
 		&user.PlatformBanReason, &user.PlatformBannedBy, &user.PlatformBannedAt,
 		&user.DeletedAt, &user.DeletedByAdmin, &user.IsHardDeleted, &user.TokenVersion,
+		&user.FeedbackLastSeenAt, &user.ReportsLastSeenAt,
 		&user.CreatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -141,7 +144,7 @@ func (r *sqliteUserRepo) GetActiveByUsername(ctx context.Context, username strin
 		SELECT id, username, display_name, avatar_url, wallpaper_url, password_hash, status, pref_status, custom_status,
 			email, language, dm_privacy, is_platform_admin, is_platform_banned, has_seen_download_prompt, has_seen_welcome,
 			platform_ban_reason, platform_banned_by, platform_banned_at,
-			deleted_at, deleted_by_admin, is_hard_deleted, token_version, created_at
+			deleted_at, deleted_by_admin, is_hard_deleted, token_version, feedback_last_seen_at, reports_last_seen_at, created_at
 		FROM users WHERE username = ? COLLATE NOCASE AND deleted_at IS NULL`
 
 	user := &models.User{}
@@ -151,6 +154,7 @@ func (r *sqliteUserRepo) GetActiveByUsername(ctx context.Context, username strin
 		&user.Language, &user.DMPrivacy, &user.IsPlatformAdmin, &user.IsPlatformBanned, &user.HasSeenDownloadPrompt, &user.HasSeenWelcome,
 		&user.PlatformBanReason, &user.PlatformBannedBy, &user.PlatformBannedAt,
 		&user.DeletedAt, &user.DeletedByAdmin, &user.IsHardDeleted, &user.TokenVersion,
+		&user.FeedbackLastSeenAt, &user.ReportsLastSeenAt,
 		&user.CreatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -167,7 +171,7 @@ func (r *sqliteUserRepo) GetAll(ctx context.Context) ([]models.User, error) {
 		SELECT id, username, display_name, avatar_url, wallpaper_url, password_hash, status, pref_status, custom_status,
 			email, language, dm_privacy, is_platform_admin, is_platform_banned, has_seen_download_prompt, has_seen_welcome,
 			platform_ban_reason, platform_banned_by, platform_banned_at,
-			deleted_at, deleted_by_admin, is_hard_deleted, token_version, created_at
+			deleted_at, deleted_by_admin, is_hard_deleted, token_version, feedback_last_seen_at, reports_last_seen_at, created_at
 		FROM users ORDER BY username`
 
 	rows, err := r.db.QueryContext(ctx, query)
@@ -185,6 +189,7 @@ func (r *sqliteUserRepo) GetAll(ctx context.Context) ([]models.User, error) {
 			&user.Language, &user.DMPrivacy, &user.IsPlatformAdmin, &user.IsPlatformBanned, &user.HasSeenDownloadPrompt, &user.HasSeenWelcome,
 			&user.PlatformBanReason, &user.PlatformBannedBy, &user.PlatformBannedAt,
 			&user.DeletedAt, &user.DeletedByAdmin, &user.IsHardDeleted, &user.TokenVersion,
+			&user.FeedbackLastSeenAt, &user.ReportsLastSeenAt,
 			&user.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan user row: %w", err)
@@ -388,7 +393,7 @@ func (r *sqliteUserRepo) GetByEmail(ctx context.Context, email string) (*models.
 		SELECT id, username, display_name, avatar_url, wallpaper_url, password_hash, status, pref_status, custom_status,
 			email, language, dm_privacy, is_platform_admin, is_platform_banned, has_seen_download_prompt, has_seen_welcome,
 			platform_ban_reason, platform_banned_by, platform_banned_at,
-			deleted_at, deleted_by_admin, is_hard_deleted, token_version, created_at
+			deleted_at, deleted_by_admin, is_hard_deleted, token_version, feedback_last_seen_at, reports_last_seen_at, created_at
 		FROM users WHERE email = ?`
 
 	user := &models.User{}
@@ -398,6 +403,7 @@ func (r *sqliteUserRepo) GetByEmail(ctx context.Context, email string) (*models.
 		&user.Language, &user.DMPrivacy, &user.IsPlatformAdmin, &user.IsPlatformBanned, &user.HasSeenDownloadPrompt, &user.HasSeenWelcome,
 		&user.PlatformBanReason, &user.PlatformBannedBy, &user.PlatformBannedAt,
 		&user.DeletedAt, &user.DeletedByAdmin, &user.IsHardDeleted, &user.TokenVersion,
+		&user.FeedbackLastSeenAt, &user.ReportsLastSeenAt,
 		&user.CreatedAt,
 	)
 
@@ -1040,7 +1046,7 @@ func (r *sqliteUserRepo) ListSoftDeletedExpired(ctx context.Context, ttlDays int
 		SELECT id, username, display_name, avatar_url, wallpaper_url, password_hash, status, pref_status, custom_status,
 			email, language, dm_privacy, is_platform_admin, is_platform_banned, has_seen_download_prompt, has_seen_welcome,
 			platform_ban_reason, platform_banned_by, platform_banned_at,
-			deleted_at, deleted_by_admin, is_hard_deleted, token_version, created_at
+			deleted_at, deleted_by_admin, is_hard_deleted, token_version, feedback_last_seen_at, reports_last_seen_at, created_at
 		FROM users
 		WHERE deleted_at IS NOT NULL
 		  AND is_hard_deleted = 0
@@ -1061,6 +1067,7 @@ func (r *sqliteUserRepo) ListSoftDeletedExpired(ctx context.Context, ttlDays int
 			&u.Language, &u.DMPrivacy, &u.IsPlatformAdmin, &u.IsPlatformBanned, &u.HasSeenDownloadPrompt, &u.HasSeenWelcome,
 			&u.PlatformBanReason, &u.PlatformBannedBy, &u.PlatformBannedAt,
 			&u.DeletedAt, &u.DeletedByAdmin, &u.IsHardDeleted, &u.TokenVersion,
+			&u.FeedbackLastSeenAt, &u.ReportsLastSeenAt,
 			&u.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan expired user: %w", err)
@@ -1090,6 +1097,50 @@ func (r *sqliteUserRepo) SetWelcomeSeen(ctx context.Context, userID string) erro
 		return fmt.Errorf("failed to set welcome seen: %w", err)
 	}
 	return nil
+}
+
+func (r *sqliteUserRepo) MarkFeedbackSeen(ctx context.Context, userID string) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE users SET feedback_last_seen_at = CURRENT_TIMESTAMP WHERE id = ?",
+		userID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to mark feedback seen: %w", err)
+	}
+	return nil
+}
+
+func (r *sqliteUserRepo) MarkReportsSeen(ctx context.Context, userID string) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE users SET reports_last_seen_at = CURRENT_TIMESTAMP WHERE id = ?",
+		userID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to mark reports seen: %w", err)
+	}
+	return nil
+}
+
+// ListPlatformAdminEmails returns the active platform admins that have an
+// email address set. Used for admin-only notification emails.
+func (r *sqliteUserRepo) ListPlatformAdminEmails(ctx context.Context) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT email FROM users
+		 WHERE is_platform_admin = 1 AND deleted_at IS NULL AND email IS NOT NULL AND email != ''`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list platform admin emails: %w", err)
+	}
+	defer rows.Close()
+	var emails []string
+	for rows.Next() {
+		var e string
+		if err := rows.Scan(&e); err != nil {
+			return nil, fmt.Errorf("scan admin email: %w", err)
+		}
+		emails = append(emails, e)
+	}
+	return emails, rows.Err()
 }
 
 func (r *sqliteUserRepo) SetPlatformAdmin(ctx context.Context, userID string, isAdmin bool) error {

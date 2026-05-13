@@ -173,6 +173,8 @@ func initRoutes(
 	// Feedback
 	mux.Handle("POST /api/feedback", auth(h.Feedback.CreateTicket))
 	mux.Handle("GET /api/feedback", auth(h.Feedback.ListMyTickets))
+	mux.Handle("GET /api/feedback/badge", auth(h.Feedback.GetMyBadge))
+	mux.Handle("POST /api/feedback/mark-seen", auth(h.Feedback.MarkMySeen))
 	mux.Handle("GET /api/feedback/{id}", auth(h.Feedback.GetTicket))
 	mux.Handle("POST /api/feedback/{id}/reply", auth(h.Feedback.AddReply))
 	mux.Handle("DELETE /api/feedback/{id}", auth(h.Feedback.DeleteTicket))
@@ -241,12 +243,17 @@ func initRoutes(
 	// Platform Admin — Reports
 	mux.Handle("GET /api/admin/reports", authAdmin(h.Admin.ListReports))
 	mux.Handle("PATCH /api/admin/reports/{id}/status", authAdmin(h.Admin.UpdateReportStatus))
+	mux.Handle("POST /api/admin/reports/mark-seen", authAdmin(h.Admin.MarkReportsSeen))
+
+	// Platform Admin — Badge indicators (new feedback / new reports)
+	mux.Handle("GET /api/admin/badges", authAdmin(h.Admin.GetBadges))
 
 	// Platform Admin — Feedback
 	mux.Handle("GET /api/admin/feedback", authAdmin(h.Feedback.AdminListTickets))
 	mux.Handle("GET /api/admin/feedback/{id}", authAdmin(h.Feedback.AdminGetTicket))
 	mux.Handle("POST /api/admin/feedback/{id}/reply", authAdmin(h.Feedback.AdminReply))
 	mux.Handle("PATCH /api/admin/feedback/{id}/status", authAdmin(h.Feedback.AdminUpdateStatus))
+	mux.Handle("POST /api/admin/feedback/mark-seen", authAdmin(h.Admin.MarkFeedbackSeen))
 
 	// Platform Admin — Users
 	mux.Handle("GET /api/admin/users", authAdmin(h.Admin.ListUsers))

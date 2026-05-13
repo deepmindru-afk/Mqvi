@@ -48,6 +48,14 @@ export async function deleteFeedbackTicket(id: string) {
   return apiClient<{ message: string }>(`/feedback/${id}`, { method: "DELETE" });
 }
 
+export async function getMyFeedbackBadge() {
+  return apiClient<{ has_new_replies: boolean }>("/feedback/badge");
+}
+
+export async function markMyFeedbackSeen() {
+  return apiClient<void>("/feedback/mark-seen", { method: "POST" });
+}
+
 // ─── Admin Endpoints ───
 
 export async function adminListFeedbackTickets(

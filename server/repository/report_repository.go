@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/akinalp/mqvi/models"
 )
@@ -20,4 +21,8 @@ type ReportRepository interface {
 	// CreateAttachment adds an evidence file to a report.
 	CreateAttachment(ctx context.Context, att *models.ReportAttachment) error
 	GetAttachmentsByReportID(ctx context.Context, reportID string) ([]models.ReportAttachment, error)
+
+	// LatestCreatedAt returns the newest report's created_at, or nil when the
+	// table is empty. Drives the admin "new report" badge.
+	LatestCreatedAt(ctx context.Context) (*time.Time, error)
 }

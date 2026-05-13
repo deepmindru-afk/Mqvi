@@ -245,3 +245,20 @@ export async function listAppLogs(params?: {
 export async function clearAppLogs() {
   return apiClient<{ status: string }>("/admin/logs", { method: "DELETE" });
 }
+
+export type AdminBadgesResponse = {
+  has_new_feedback: boolean;
+  has_new_reports: boolean;
+};
+
+export async function getAdminBadges() {
+  return apiClient<AdminBadgesResponse>("/admin/badges");
+}
+
+export async function markFeedbackSeen() {
+  return apiClient<void>("/admin/feedback/mark-seen", { method: "POST" });
+}
+
+export async function markReportsSeen() {
+  return apiClient<void>("/admin/reports/mark-seen", { method: "POST" });
+}

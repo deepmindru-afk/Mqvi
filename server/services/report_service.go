@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/akinalp/mqvi/models"
 	"github.com/akinalp/mqvi/pkg"
+	"github.com/akinalp/mqvi/pkg/email"
 	"github.com/akinalp/mqvi/repository"
 
 	"github.com/google/uuid"
@@ -20,20 +22,23 @@ type ReportService interface {
 }
 
 type reportService struct {
-	reportRepo repository.ReportRepository
-	userRepo   repository.UserRepository
-	urlSigner  FileURLSigner
+	reportRepo  repository.ReportRepository
+	userRepo    repository.UserRepository
+	urlSigner   FileURLSigner
+	emailSender email.EmailSender
 }
 
 func NewReportService(
 	reportRepo repository.ReportRepository,
 	userRepo repository.UserRepository,
 	urlSigner FileURLSigner,
+	emailSender email.EmailSender,
 ) ReportService {
 	return &reportService{
-		reportRepo: reportRepo,
-		userRepo:   userRepo,
-		urlSigner:  urlSigner,
+		reportRepo:  reportRepo,
+		userRepo:    userRepo,
+		urlSigner:   urlSigner,
+		emailSender: emailSender,
 	}
 }
 
@@ -77,7 +82,40 @@ func (s *reportService) CreateReport(ctx context.Context, reporterID, targetID s
 		return nil, fmt.Errorf("failed to create report: %w", err)
 	}
 
+	s.notifyAdmins(report)
+
 	return report, nil
+}
+
+// notifyAdmins emails platform admins about the new report in a detached
+// goroutine — failures must never affect the user-facing response.
+func (s *reportService) notifyAdmins(report *models.Report) {
+	if s.emailSender == nil || s.userRepo == nil {
+		return
+	}
+	go func() {
+		bg := context.Background()
+		reporter, err := s.userRepo.GetByID(bg, report.ReporterID)
+		if err != nil {
+			log.Printf("[report] lookup reporter %s: %v", report.ReporterID, err)
+			return
+		}
+		reported, err := s.userRepo.GetByID(bg, report.ReportedUserID)
+		if err != nil {
+			log.Printf("[report] lookup reported %s: %v", report.ReportedUserID, err)
+			return
+		}
+		emails, err := s.userRepo.ListPlatformAdminEmails(bg)
+		if err != nil {
+			log.Printf("[report] list admin emails: %v", err)
+			return
+		}
+		for _, addr := range emails {
+			if err := s.emailSender.SendNewReportNotification(bg, addr, reporter.Username, reported.Username, string(report.Reason)); err != nil {
+				log.Printf("[report] notify admin %s: %v", addr, err)
+			}
+		}
+	}()
 }
 
 // ListReports returns reports with attachments. Filters by status if provided.

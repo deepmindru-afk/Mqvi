@@ -3,7 +3,9 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/akinalp/mqvi/database"
 	"github.com/akinalp/mqvi/models"
@@ -258,4 +260,16 @@ func (r *sqliteReportRepo) GetAttachmentsByReportID(ctx context.Context, reportI
 		attachments = []models.ReportAttachment{}
 	}
 	return attachments, nil
+}
+
+func (r *sqliteReportRepo) LatestCreatedAt(ctx context.Context) (*time.Time, error) {
+	var ts sql.NullTime
+	err := r.db.QueryRowContext(ctx, `SELECT MAX(created_at) FROM reports`).Scan(&ts)
+	if errors.Is(err, sql.ErrNoRows) || !ts.Valid {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("report latest created_at: %w", err)
+	}
+	return &ts.Time, nil
 }

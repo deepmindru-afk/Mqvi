@@ -7,6 +7,7 @@ import (
 
 	"github.com/akinalp/mqvi/models"
 	"github.com/akinalp/mqvi/pkg"
+	"github.com/akinalp/mqvi/pkg/email"
 	"github.com/akinalp/mqvi/repository"
 	"github.com/google/uuid"
 )
@@ -23,15 +24,25 @@ type FeedbackService interface {
 
 type feedbackService struct {
 	feedbackRepo   repository.FeedbackRepository
+	userRepo       repository.UserRepository
 	fileDeleter    FileDeleter
 	storageService StorageService
+	emailSender    email.EmailSender
 }
 
-func NewFeedbackService(feedbackRepo repository.FeedbackRepository, fileDeleter FileDeleter, storageService StorageService) FeedbackService {
+func NewFeedbackService(
+	feedbackRepo repository.FeedbackRepository,
+	userRepo repository.UserRepository,
+	fileDeleter FileDeleter,
+	storageService StorageService,
+	emailSender email.EmailSender,
+) FeedbackService {
 	return &feedbackService{
 		feedbackRepo:   feedbackRepo,
+		userRepo:       userRepo,
 		fileDeleter:    fileDeleter,
 		storageService: storageService,
+		emailSender:    emailSender,
 	}
 }
 
@@ -61,7 +72,31 @@ func (s *feedbackService) CreateTicket(ctx context.Context, userID string, req *
 	ticket.CreatedAt = created.CreatedAt
 	ticket.UpdatedAt = created.UpdatedAt
 
+	s.notifyAdmins(ticket, created.Username)
+
 	return ticket, nil
+}
+
+// notifyAdmins fires off admin notification emails in a detached goroutine.
+// The ticket has already been persisted; email failures should never block
+// the user response or leak into the request lifecycle.
+func (s *feedbackService) notifyAdmins(ticket *models.FeedbackTicket, fromUsername string) {
+	if s.emailSender == nil || s.userRepo == nil {
+		return
+	}
+	go func() {
+		bg := context.Background()
+		emails, err := s.userRepo.ListPlatformAdminEmails(bg)
+		if err != nil {
+			log.Printf("[feedback] list admin emails: %v", err)
+			return
+		}
+		for _, addr := range emails {
+			if err := s.emailSender.SendNewFeedbackNotification(bg, addr, string(ticket.Type), ticket.Subject, fromUsername); err != nil {
+				log.Printf("[feedback] notify admin %s: %v", addr, err)
+			}
+		}
+	}()
 }
 
 func (s *feedbackService) GetTicketByID(ctx context.Context, id, userID string, isAdmin bool) (*models.FeedbackTicketWithUser, []models.FeedbackReplyWithUser, error) {

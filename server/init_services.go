@@ -57,6 +57,8 @@ type Services struct {
 	Soundboard        services.SoundboardService
 	Storage           services.StorageService
 	Cleanup           services.CleanupService
+	SettingsBadge     services.SettingsBadgeService
+	EmailSender       email.EmailSender
 }
 
 type RateLimiters struct {
@@ -146,7 +148,7 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 	reactionService := services.NewReactionService(repos.Reaction, repos.Message, repos.Channel, hub, channelPermService)
 	serverMuteService := services.NewServerMuteService(repos.ServerMute)
 	channelMuteService := services.NewChannelMuteService(repos.ChannelMute)
-	reportService := services.NewReportService(repos.Report, repos.User, urlSigner)
+	reportService := services.NewReportService(repos.Report, repos.User, urlSigner, emailSender)
 	reportUploadService := services.NewReportUploadService(repos.Report, uploadPipeline, cfg.Upload.MaxSize)
 
 	deviceService := services.NewDeviceService(repos.Device, hub)
@@ -159,7 +161,8 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 	badgeService := services.NewBadgeService(repos.Badge, hub)
 	preferencesService := services.NewPreferencesService(repos.Preferences)
 	metricsHistoryService := services.NewMetricsHistoryService(repos.MetricsHistory, repos.LiveKit)
-	feedbackService := services.NewFeedbackService(repos.Feedback, fileLocator, storageService)
+	feedbackService := services.NewFeedbackService(repos.Feedback, repos.User, fileLocator, storageService, emailSender)
+	settingsBadgeService := services.NewSettingsBadgeService(repos.User, repos.Feedback, repos.Report)
 	feedbackUploadService := services.NewFeedbackUploadService(repos.Feedback, uploadPipeline, cfg.Upload.MaxSize)
 	soundboardService := services.NewSoundboardService(
 		repos.Soundboard, repos.User, hub, voiceService, uploadPipeline, cfg.Upload.MaxSize, urlSigner, storageService,
@@ -231,6 +234,8 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 		Soundboard:        soundboardService,
 		Storage:           storageService,
 		Cleanup:           cleanupService,
+		SettingsBadge:     settingsBadgeService,
+		EmailSender:       emailSender,
 	}
 
 	limiters := &RateLimiters{

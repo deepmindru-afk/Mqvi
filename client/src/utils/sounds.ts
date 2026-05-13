@@ -121,6 +121,37 @@ export function playWatchStopSound(): void {
   playTone(480, 320, 0.1, volume, "triangle");
 }
 
+// Local-only SFX for the user's own mute/deafen toggles. NOT broadcast to
+// other voice participants — like Discord, only the actor hears them.
+
+export function playMuteOnSound(): void {
+  const { soundsEnabled, masterVolume } = useVoiceStore.getState();
+  if (!soundsEnabled) return;
+  const volume = masterVolume / 100;
+  playTone(520, 380, 0.08, volume);
+}
+
+export function playMuteOffSound(): void {
+  const { soundsEnabled, masterVolume } = useVoiceStore.getState();
+  if (!soundsEnabled) return;
+  const volume = masterVolume / 100;
+  playTone(380, 540, 0.08, volume);
+}
+
+export function playDeafenOnSound(): void {
+  const { soundsEnabled, masterVolume } = useVoiceStore.getState();
+  if (!soundsEnabled) return;
+  const volume = masterVolume / 100;
+  playTone(420, 280, 0.1, volume, "triangle");
+}
+
+export function playDeafenOffSound(): void {
+  const { soundsEnabled, masterVolume } = useVoiceStore.getState();
+  if (!soundsEnabled) return;
+  const volume = masterVolume / 100;
+  playTone(280, 440, 0.1, volume, "triangle");
+}
+
 /** Notification sound — skipped in DND and invisible mode. */
 export function playNotificationSound(): void {
   const manualStatus = useAuthStore.getState().manualStatus;

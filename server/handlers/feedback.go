@@ -19,14 +19,44 @@ type FeedbackHandler struct {
 	service        services.FeedbackService
 	uploadService  services.FeedbackUploadService
 	storageService services.StorageService
+	badgeService   services.SettingsBadgeService
 	maxUploadSize  int64
 	limiter        *ratelimit.MessageRateLimiter
 	appLog         services.AppLogService
 	urlSigner      services.FileURLSigner
 }
 
-func NewFeedbackHandler(service services.FeedbackService, uploadService services.FeedbackUploadService, storageService services.StorageService, maxUploadSize int64, limiter *ratelimit.MessageRateLimiter, appLog services.AppLogService, urlSigner services.FileURLSigner) *FeedbackHandler {
-	return &FeedbackHandler{service: service, uploadService: uploadService, storageService: storageService, maxUploadSize: maxUploadSize, limiter: limiter, appLog: appLog, urlSigner: urlSigner}
+func NewFeedbackHandler(service services.FeedbackService, uploadService services.FeedbackUploadService, storageService services.StorageService, badgeService services.SettingsBadgeService, maxUploadSize int64, limiter *ratelimit.MessageRateLimiter, appLog services.AppLogService, urlSigner services.FileURLSigner) *FeedbackHandler {
+	return &FeedbackHandler{service: service, uploadService: uploadService, storageService: storageService, badgeService: badgeService, maxUploadSize: maxUploadSize, limiter: limiter, appLog: appLog, urlSigner: urlSigner}
+}
+
+// GetMyBadge -- GET /api/feedback/badge
+func (h *FeedbackHandler) GetMyBadge(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(UserContextKey).(*models.User)
+	if !ok {
+		pkg.ErrorWithMessage(w, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+	hasNew, err := h.badgeService.GetUserFeedbackBadge(r.Context(), user)
+	if err != nil {
+		pkg.Error(w, err)
+		return
+	}
+	pkg.JSON(w, http.StatusOK, map[string]bool{"has_new_replies": hasNew})
+}
+
+// MarkMySeen -- POST /api/feedback/mark-seen
+func (h *FeedbackHandler) MarkMySeen(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(UserContextKey).(*models.User)
+	if !ok {
+		pkg.ErrorWithMessage(w, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+	if err := h.badgeService.MarkFeedbackSeen(r.Context(), user.ID); err != nil {
+		pkg.Error(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // CreateTicket -- POST /api/feedback

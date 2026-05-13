@@ -49,6 +49,9 @@ type User struct {
 	DeletedByAdmin    bool       `json:"-"`
 	IsHardDeleted     bool       `json:"is_hard_deleted,omitempty"`
 	TokenVersion      int        `json:"-"` // bumped to invalidate every prior JWT
+	// Platform-admin badge watermarks. NULL = never visited.
+	FeedbackLastSeenAt *time.Time `json:"-"`
+	ReportsLastSeenAt  *time.Time `json:"-"`
 	CreatedAt         time.Time  `json:"created_at"`
 }
 
