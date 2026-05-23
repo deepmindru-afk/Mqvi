@@ -51,6 +51,7 @@ type VoiceService interface {
 	JoinChannel(userID, username, displayName, avatarURL, channelID string, isMuted, isDeafened bool) error
 	LeaveChannel(userID string) error
 	UpdateState(userID string, isMuted, isDeafened, isStreaming *bool) error
+	UpdateUserProfile(userID, username, displayName, avatarURL string)
 	GetChannelParticipants(channelID string) []models.VoiceState
 	GetUserVoiceState(userID string) *models.VoiceState
 	GetAllVoiceStates() []models.VoiceState

@@ -264,6 +264,22 @@ func (s *voiceService) UpdateState(userID string, isMuted, isDeafened, isStreami
 	return nil
 }
 
+// UpdateUserProfile refreshes the cached profile of a user's active voice state
+// after a profile change, so voice_states_sync on reconnect serves the current
+// avatar/name instead of a now-deleted old avatar file. No-op if not in voice.
+func (s *voiceService) UpdateUserProfile(userID, username, displayName, avatarURL string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, ok := s.states[userID]
+	if !ok {
+		return
+	}
+	state.Username = username
+	state.DisplayName = displayName
+	state.AvatarURL = avatarURL // unsigned — signed at broadcast egress
+}
+
 // ─── Query Methods ───
 
 func (s *voiceService) GetChannelParticipants(channelID string) []models.VoiceState {

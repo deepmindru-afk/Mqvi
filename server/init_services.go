@@ -120,7 +120,7 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 		hub, channelPermService, urlSigner, fileLocator, storageService,
 	)
 	uploadService := services.NewUploadService(repos.Attachment, uploadPipeline, cfg.Upload.MaxSize)
-	memberService := services.NewMemberService(repos.User, repos.Role, repos.Ban, repos.Server, hub, voiceService, urlSigner)
+	memberService := services.NewMemberService(repos.User, repos.Role, repos.Ban, repos.Server, hub, voiceService, voiceService, urlSigner)
 	roleService := services.NewRoleService(repos.Role, repos.User, hub)
 	serverService := services.NewServerService(
 		db, repos.Server, repos.LiveKit, repos.Role, repos.Channel,

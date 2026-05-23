@@ -34,14 +34,21 @@ type VoiceDisconnecter interface {
 	DisconnectUser(userID string)
 }
 
+// VoiceProfileSyncer refreshes a user's cached voice-state profile after a
+// profile change, so a voice reconnect doesn't serve a stale (deleted) avatar (ISP).
+type VoiceProfileSyncer interface {
+	UpdateUserProfile(userID, username, displayName, avatarURL string)
+}
+
 type memberService struct {
-	userRepo   repository.UserRepository
-	roleRepo   repository.RoleRepository
-	banRepo    repository.BanRepository
-	serverRepo repository.ServerRepository
-	hub        ws.BroadcastAndManage
-	voiceKick  VoiceDisconnecter
-	urlSigner  FileURLSigner
+	userRepo     repository.UserRepository
+	roleRepo     repository.RoleRepository
+	banRepo      repository.BanRepository
+	serverRepo   repository.ServerRepository
+	hub          ws.BroadcastAndManage
+	voiceKick    VoiceDisconnecter
+	voiceProfile VoiceProfileSyncer
+	urlSigner    FileURLSigner
 }
 
 func NewMemberService(
@@ -51,16 +58,18 @@ func NewMemberService(
 	serverRepo repository.ServerRepository,
 	hub ws.BroadcastAndManage,
 	voiceKick VoiceDisconnecter,
+	voiceProfile VoiceProfileSyncer,
 	urlSigner FileURLSigner,
 ) MemberService {
 	return &memberService{
-		userRepo:   userRepo,
-		roleRepo:   roleRepo,
-		banRepo:    banRepo,
-		serverRepo: serverRepo,
-		hub:        hub,
-		voiceKick:  voiceKick,
-		urlSigner:  urlSigner,
+		userRepo:     userRepo,
+		roleRepo:     roleRepo,
+		banRepo:      banRepo,
+		serverRepo:   serverRepo,
+		hub:          hub,
+		voiceKick:    voiceKick,
+		voiceProfile: voiceProfile,
+		urlSigner:    urlSigner,
 	}
 }
 
@@ -183,6 +192,20 @@ func (s *memberService) UpdateProfile(ctx context.Context, userID string, req *m
 
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to update user profile: %w", err)
+	}
+
+	// Keep the in-memory voice state fresh so a voice reconnect doesn't reload
+	// the old (now-deleted) avatar. Live clients get the change via OpMemberUpdate below.
+	if s.voiceProfile != nil {
+		display := ""
+		if user.DisplayName != nil {
+			display = *user.DisplayName
+		}
+		avatar := ""
+		if user.AvatarURL != nil {
+			avatar = *user.AvatarURL
+		}
+		s.voiceProfile.UpdateUserProfile(userID, user.Username, display, avatar)
 	}
 
 	// Broadcast to all servers the user belongs to (not BroadcastToAll)
