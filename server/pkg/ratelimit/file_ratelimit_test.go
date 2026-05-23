@@ -71,6 +71,29 @@ func TestFileRateLimiterDoesNotConsumeUserTokenWhenIPRejects(t *testing.T) {
 	}
 }
 
+func TestFileRateLimiterRefillsAfterFlood(t *testing.T) {
+	// High IP limit so the user bucket is the only constraint.
+	rl := NewFileRateLimiter(600, 1000000)
+	defer rl.Stop()
+
+	for i := 0; i < rl.userBurst; i++ {
+		if ok, _ := rl.Allow("u1", "203.0.113.50"); !ok {
+			t.Fatalf("burst request %d rejected", i+1)
+		}
+	}
+
+	// Flood of denied requests must not consume future refill tokens.
+	for i := 0; i < 500; i++ {
+		rl.Allow("u1", "203.0.113.50")
+	}
+
+	// At 600/min the bucket refills 10 tokens/sec; 300ms must free at least one.
+	time.Sleep(300 * time.Millisecond)
+	if ok, retry := rl.Allow("u1", "203.0.113.50"); !ok {
+		t.Fatalf("expected refill to allow request after flood; retry=%d", retry)
+	}
+}
+
 func TestFileRateLimiterRejectsMissingIdentity(t *testing.T) {
 	rl := NewFileRateLimiter(600, 2000)
 	defer rl.Stop()

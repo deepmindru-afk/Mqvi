@@ -83,9 +83,10 @@ func (rl *FileRateLimiter) Allow(userID, ip string) (bool, int) {
 		b := rl.bucketLocked(key, rl.userPerMin, rl.userBurst, now)
 		res := b.limiter.ReserveN(now, 1)
 		if !reservationAllowed(res, now) {
+			retryAfter = reservationRetryAfter(res, now)
+			res.CancelAt(now) // release the future token, else denied floods starve refill
 			deniedBucket = b
 			deniedKey = key
-			retryAfter = reservationRetryAfter(res, now)
 		} else {
 			reservations = append(reservations, res)
 		}
@@ -96,9 +97,10 @@ func (rl *FileRateLimiter) Allow(userID, ip string) (bool, int) {
 		b := rl.bucketLocked(key, rl.ipPerMin, rl.ipBurst, now)
 		res := b.limiter.ReserveN(now, 1)
 		if !reservationAllowed(res, now) {
+			retryAfter = reservationRetryAfter(res, now)
+			res.CancelAt(now) // release the future token, else denied floods starve refill
 			deniedBucket = b
 			deniedKey = key
-			retryAfter = reservationRetryAfter(res, now)
 		} else {
 			reservations = append(reservations, res)
 		}
