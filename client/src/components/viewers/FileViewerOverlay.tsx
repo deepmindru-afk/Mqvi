@@ -18,6 +18,26 @@ import { useLocation } from "react-router-dom";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import DOMPurify from "dompurify";
 import { useFileViewerStore, type FileViewerItem } from "../../stores/fileViewerStore";
+import { useToastStore } from "../../stores/toastStore";
+
+// Copies an image URL to the clipboard as PNG (the only format browsers
+// reliably accept). Decodes via canvas so JPEG/WebP/GIF all work.
+async function copyImageToClipboard(src: string): Promise<boolean> {
+  try {
+    const blob = await fetch(src).then((r) => r.blob());
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
+    const png = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!png) return false;
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const PREVIEW_SIZE_LIMIT = 10 * 1024 * 1024; // 10 MB
 
@@ -101,9 +121,15 @@ type ShellProps = { item: FileViewerItem; onClose: () => void };
 
 function OverlayShell({ item, onClose }: ShellProps) {
   const { t } = useTranslation("viewer");
+  const addToast = useToastStore((s) => s.addToast);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const kind = classifyMime(item.mime, item.filename);
+
+  async function handleCopyImage() {
+    const ok = await copyImageToClipboard(item.src);
+    addToast(ok ? "success" : "error", ok ? t("copied") : t("copyFailed"));
+  }
   const downloadHref = item.downloadHref ?? item.src;
   const tooLargeForPreview =
     (kind === "pdf" || kind === "docx" || kind === "xlsx") &&
@@ -196,6 +222,11 @@ function OverlayShell({ item, onClose }: ShellProps) {
           <span className="file-viewer-size">{formatBytes(item.size)}</span>
         </div>
         <div className="file-viewer-actions">
+          {kind === "image" && (
+            <button className="file-viewer-btn" onClick={handleCopyImage}>
+              {t("copy")}
+            </button>
+          )}
           <a
             href={downloadHref}
             download={item.filename}

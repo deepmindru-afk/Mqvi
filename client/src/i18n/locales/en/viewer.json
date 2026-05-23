@@ -1,5 +1,8 @@
 {
   "download": "Download",
+  "copy": "Copy",
+  "copied": "Image copied to clipboard",
+  "copyFailed": "Could not copy image",
   "close": "Close",
   "loading": "Loading preview…",
   "previewFailed": "Failed to load preview.",

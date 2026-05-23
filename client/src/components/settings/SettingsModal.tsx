@@ -70,19 +70,19 @@ function SettingsModal() {
       {/* Nav sidebar */}
       <SettingsNav />
 
-      {/* Content area */}
-      <div className="settings-content">
-        <SettingsContent activeTab={activeTab} />
+      {/* Content area — close button anchored to the panel's top-right corner */}
+      <div className="settings-panel">
+        <button
+          onClick={closeSettings}
+          className="settings-close"
+          title={t("title") + " — ESC"}
+        >
+          ✕
+        </button>
+        <div className="settings-content">
+          <SettingsContent activeTab={activeTab} />
+        </div>
       </div>
-
-      {/* Close button */}
-      <button
-        onClick={closeSettings}
-        className="settings-close"
-        title={t("title") + " — ESC"}
-      >
-        ✕
-      </button>
     </div>
   );
 }

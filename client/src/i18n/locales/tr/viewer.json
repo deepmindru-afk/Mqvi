@@ -1,5 +1,8 @@
 {
   "download": "İndir",
+  "copy": "Kopyala",
+  "copied": "Görsel panoya kopyalandı",
+  "copyFailed": "Görsel kopyalanamadı",
   "close": "Kapat",
   "loading": "Önizleme yükleniyor…",
   "previewFailed": "Önizleme yüklenemedi.",
