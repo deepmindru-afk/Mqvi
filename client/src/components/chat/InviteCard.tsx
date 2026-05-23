@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useServerStore } from "../../stores/serverStore";
 import { useToastStore } from "../../stores/toastStore";
-import { resolveAssetUrl } from "../../utils/constants";
+import { resolveAssetUrl, getInviteUrl, copyToClipboard } from "../../utils/constants";
 import { getInvitePreview, type InvitePreview } from "../../api/invites";
 import * as serversApi from "../../api/servers";
 import Avatar from "../shared/Avatar";
@@ -37,6 +37,11 @@ function InviteCard({ code }: InviteCardProps) {
     load();
     return () => { cancelled = true; };
   }, [code]);
+
+  async function handleCopy() {
+    await copyToClipboard(getInviteUrl(code));
+    addToast("success", t("inviteLinkCopied"));
+  }
 
   async function handleJoin() {
     if (isJoining || joined) return;
@@ -110,14 +115,27 @@ function InviteCard({ code }: InviteCardProps) {
         </span>
       </span>
 
-      {/* Join button */}
-      <button
-        className="invite-card-btn"
-        onClick={handleJoin}
-        disabled={isJoining || joined}
-      >
-        {joined ? "\u2713" : isJoining ? "..." : t("joinInvite")}
-      </button>
+      {/* Actions: copy link + join */}
+      <span className="invite-card-actions">
+        <button
+          className="invite-card-copy"
+          onClick={handleCopy}
+          title={t("copyInviteLink")}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+          </svg>
+          {t("copyLink")}
+        </button>
+        <button
+          className="invite-card-btn"
+          onClick={handleJoin}
+          disabled={isJoining || joined}
+        >
+          {joined ? "\u2713" : isJoining ? "..." : t("joinInvite")}
+        </button>
+      </span>
     </span>
   );
 }

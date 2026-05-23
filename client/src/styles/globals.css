@@ -2565,6 +2565,10 @@ button.ch-tree-vu-stream svg { width:21px;height:21px; }
 .invite-card-btn { padding:6px 14px;border:none;border-radius:6px;background:var(--primary);color:var(--text-white, #fff);font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0;transition:opacity .1s; }
 .invite-card-btn:hover:not(:disabled) { opacity:.9; }
 .invite-card-btn:disabled { opacity:.5;cursor:default; }
+.invite-card-actions { display:flex;align-items:center;gap:8px;flex-shrink:0; }
+.invite-card-copy { display:flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--panel-border);border-radius:6px;background:transparent;color:var(--t1);font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0;transition:background .1s,border-color .1s; }
+.invite-card-copy:hover { background:var(--bg-h);border-color:var(--primary-m); }
+.invite-card-copy svg { width:15px;height:15px;flex-shrink:0; }
 
 /* ═══════════════════════════════════════
    INVITE JOIN PAGE — /invite/:code
