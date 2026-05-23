@@ -40,6 +40,18 @@ func NewClamAVScanner(addr string, timeout time.Duration) *ClamAVScanner {
 	return &ClamAVScanner{addr: addr, timeout: timeout}
 }
 
+// parseClamAVAddr maps a config address to a (network, address) pair.
+// "unix:/path" or a bare "/path" → unix socket; anything else → tcp.
+func parseClamAVAddr(addr string) (network, address string) {
+	if strings.HasPrefix(addr, "unix:") {
+		return "unix", strings.TrimPrefix(addr, "unix:")
+	}
+	if strings.HasPrefix(addr, "/") {
+		return "unix", addr
+	}
+	return "tcp", addr
+}
+
 func (s *ClamAVScanner) Scan(ctx context.Context, path string) Result {
 	start := time.Now()
 	if s.timeout > 0 {
@@ -48,8 +60,9 @@ func (s *ClamAVScanner) Scan(ctx context.Context, path string) Result {
 		defer cancel()
 	}
 
+	network, addr := parseClamAVAddr(s.addr)
 	var dialer net.Dialer
-	conn, err := dialer.DialContext(ctx, "tcp", s.addr)
+	conn, err := dialer.DialContext(ctx, network, addr)
 	if err != nil {
 		return Result{Status: StatusUnavailable, Duration: time.Since(start), Err: err}
 	}

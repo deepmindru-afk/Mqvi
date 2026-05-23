@@ -128,28 +128,32 @@ export function playMuteOnSound(): void {
   const { soundsEnabled, masterVolume } = useVoiceStore.getState();
   if (!soundsEnabled) return;
   const volume = masterVolume / 100;
-  playTone(520, 380, 0.08, volume);
+  // Single descending blip — square wave for distinct "click" character.
+  playTone(240, 180, 0.06, volume, "square");
 }
 
 export function playMuteOffSound(): void {
   const { soundsEnabled, masterVolume } = useVoiceStore.getState();
   if (!soundsEnabled) return;
   const volume = masterVolume / 100;
-  playTone(380, 540, 0.08, volume);
+  playTone(180, 260, 0.06, volume, "square");
 }
 
 export function playDeafenOnSound(): void {
   const { soundsEnabled, masterVolume } = useVoiceStore.getState();
   if (!soundsEnabled) return;
   const volume = masterVolume / 100;
-  playTone(420, 280, 0.1, volume, "triangle");
+  // Two-tone descending — distinct from mute's single blip.
+  playTone(320, 320, 0.05, volume, "sine");
+  setTimeout(() => playTone(200, 200, 0.07, volume, "sine"), 55);
 }
 
 export function playDeafenOffSound(): void {
   const { soundsEnabled, masterVolume } = useVoiceStore.getState();
   if (!soundsEnabled) return;
   const volume = masterVolume / 100;
-  playTone(280, 440, 0.1, volume, "triangle");
+  playTone(200, 200, 0.05, volume, "sine");
+  setTimeout(() => playTone(320, 320, 0.07, volume, "sine"), 55);
 }
 
 /** Notification sound — skipped in DND and invisible mode. */

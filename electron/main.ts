@@ -364,6 +364,23 @@ function createWindow(): void {
     }
   });
 
+  // Right-click on images shows Copy/Save options. Other targets get no menu.
+  mainWindow.webContents.on("context-menu", (_event, params) => {
+    if (params.mediaType !== "image" || !mainWindow) return;
+    const win = mainWindow;
+    const menu = Menu.buildFromTemplate([
+      {
+        label: "Copy image",
+        click: () => win.webContents.copyImageAt(params.x, params.y),
+      },
+      {
+        label: "Save image as…",
+        click: () => win.webContents.downloadURL(params.srcURL),
+      },
+    ]);
+    menu.popup({ window: win });
+  });
+
   // ─── Close-to-Tray ───
   // isQuitting=true always closes; otherwise hide if closeToTray is enabled
   mainWindow.on("close", (e) => {

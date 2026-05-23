@@ -263,13 +263,13 @@ func (r *sqliteReportRepo) GetAttachmentsByReportID(ctx context.Context, reportI
 }
 
 func (r *sqliteReportRepo) LatestCreatedAt(ctx context.Context) (*time.Time, error) {
-	var ts sql.NullTime
-	err := r.db.QueryRowContext(ctx, `SELECT MAX(created_at) FROM reports`).Scan(&ts)
-	if errors.Is(err, sql.ErrNoRows) || !ts.Valid {
+	var s sql.NullString
+	err := r.db.QueryRowContext(ctx, `SELECT MAX(created_at) FROM reports`).Scan(&s)
+	if errors.Is(err, sql.ErrNoRows) || !s.Valid {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("report latest created_at: %w", err)
 	}
-	return &ts.Time, nil
+	return parseSQLiteTimestamp(s.String)
 }

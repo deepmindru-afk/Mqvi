@@ -181,6 +181,15 @@ select option:disabled {
 }
 .titlebar-btn:hover { background:var(--bg-h);color:var(--t0); }
 .titlebar-btn.close:hover { background:var(--red);color:#fff; }
+.titlebar-text-btn {
+  display:flex;align-items:center;
+  height:32px;padding:0 14px;
+  background:transparent;border:none;
+  color:var(--t2);font-size:13px;font-weight:500;cursor:pointer;
+  -webkit-app-region:no-drag;
+  transition:background 0.1s,color 0.1s;
+}
+.titlebar-text-btn:hover { background:var(--bg-h);color:var(--t0); }
 .titlebar-update-btn {
   display:flex;align-items:center;gap:5px;
   padding:0 10px;height:32px;
@@ -604,7 +613,7 @@ button.ch-tree-vu-stream svg { width:14px;height:14px; }
 .msg-attachment-file-name:hover { text-decoration:underline; }
 .msg-attachment-file-size { font-size:13px;color:var(--t3); }
 .msg-attachment-video { max-width:100%;max-height:360px;border-radius:8px; }
-.msg-attachment-audio { width:100%;max-width:400px;height:36px;margin:4px 0; }
+.msg-attachment-audio { width:320px;min-width:280px;max-width:100%;height:40px;margin:4px 0; }
 
 /* Reactions */
 .msg-reactions { display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;align-items:center; }
@@ -753,6 +762,19 @@ button.ch-tree-vu-stream svg { width:14px;height:14px; }
 .reply-bar-close { width:20px;height:20px;border:none;background:transparent;color:var(--t3);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;border-radius:4px; }
 .reply-bar-close:hover { color:var(--t1);background:var(--bg-h); }
 .reply-bar + .input-box { border-radius:0 0 10px 10px; }
+
+.input-sending-status {
+  display:flex;align-items:center;gap:10px;
+  padding:8px 12px;margin:4px 0;
+  background:var(--bg-2);border:1px solid var(--b1);border-radius:8px;
+  color:var(--t1);font-size:13px;
+}
+.input-sending-spinner {
+  width:14px;height:14px;flex-shrink:0;
+  border:2px solid var(--b2);border-top-color:var(--primary);border-radius:50%;
+  animation:spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
 
 .input-box { background:var(--panel-bg);backdrop-filter:var(--panel-backdrop);-webkit-backdrop-filter:var(--panel-backdrop);border:1px solid var(--panel-border);border-radius:var(--panel-radius);box-shadow:var(--panel-inset),var(--panel-shadow);display:flex;align-items:flex-end;padding:4px;transition:border-color .15s; }
 .input-box:focus-within { border-color:var(--primary); }

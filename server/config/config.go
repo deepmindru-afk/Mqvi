@@ -111,7 +111,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid JWT_REFRESH_EXPIRY_DAYS: %w", err)
 	}
 
-	maxSize, err := strconv.ParseInt(getEnv("UPLOAD_MAX_SIZE", "524288000"), 10, 64) // 500MB
+	maxSize, err := strconv.ParseInt(getEnv("UPLOAD_MAX_SIZE", "104857600"), 10, 64) // 100 MB — Cloudflare body limit
 	if err != nil {
 		return nil, fmt.Errorf("invalid UPLOAD_MAX_SIZE: %w", err)
 	}
@@ -216,7 +216,7 @@ func Load() (*Config, error) {
 		},
 		Antivirus: AntivirusConfig{
 			Enabled:                 avEnabled,
-			ClamAVAddr:              getEnv("MQVI_CLAMAV_ADDR", "127.0.0.1:3310"),
+			ClamAVAddr:              getEnv("MQVI_CLAMAV_ADDR", "unix:/run/clamav/clamd.ctl"),
 			TimeoutSeconds:          avTimeout,
 			MaxScanSizeBytes:        avMaxScanMB * 1024 * 1024,
 			UnavailablePolicy:       avUnavailablePolicy,

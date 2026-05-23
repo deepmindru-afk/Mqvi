@@ -352,14 +352,16 @@ JWT_REFRESH_EXPIRY_DAYS=7
 ENCRYPTION_KEY=${ENCRYPTION_KEY}
 
 UPLOAD_DIR=${DATA_DIR}/uploads
-UPLOAD_MAX_SIZE=524288000
+# Cloudflare free/Pro caps request bodies at 100 MB.
+UPLOAD_MAX_SIZE=104857600
 # MQVI_DEFAULT_QUOTA_BYTES=10737418240
 
 # HMAC secret for signed file URLs (base64-encoded, 32 bytes)
 MQVI_SIGNED_URL_SECRET=${SIGNED_URL_SECRET}
 
 MQVI_ANTIVIRUS_ENABLED=${AV_ENABLED}
-MQVI_CLAMAV_ADDR=127.0.0.1:3310
+# Debian/Ubuntu clamav-daemon listens on this Unix socket by default.
+MQVI_CLAMAV_ADDR=unix:/run/clamav/clamd.ctl
 MQVI_ANTIVIRUS_TIMEOUT_SECONDS=10
 MQVI_ANTIVIRUS_MAX_SCAN_SIZE_MB=25
 MQVI_ANTIVIRUS_UNAVAILABLE_POLICY=allow_with_log
@@ -388,7 +390,7 @@ EOF
 else
     log "Existing .env found — keeping it. (Flags --port/--domain do not modify it.)"
     ensure_env_value "${INSTALL_DIR}/.env" "MQVI_ANTIVIRUS_ENABLED" "${AV_ENABLED}"
-    ensure_env_value "${INSTALL_DIR}/.env" "MQVI_CLAMAV_ADDR" "127.0.0.1:3310"
+    ensure_env_value "${INSTALL_DIR}/.env" "MQVI_CLAMAV_ADDR" "unix:/run/clamav/clamd.ctl"
     ensure_env_value "${INSTALL_DIR}/.env" "MQVI_ANTIVIRUS_TIMEOUT_SECONDS" "10"
     ensure_env_value "${INSTALL_DIR}/.env" "MQVI_ANTIVIRUS_MAX_SCAN_SIZE_MB" "25"
     ensure_env_value "${INSTALL_DIR}/.env" "MQVI_ANTIVIRUS_UNAVAILABLE_POLICY" "allow_with_log"
@@ -486,12 +488,17 @@ install_caddy() {
 
 write_caddyfile() {
     # Single-site Caddyfile owned by us. If you have other sites, use --existing-caddy instead.
+    # The "managed by mqvi" marker lets start.sh safely sync max_size from .env.
+    local size_bytes
+    size_bytes="$(grep -E '^UPLOAD_MAX_SIZE=' "${INSTALL_DIR:-.}/.env" 2>/dev/null | tail -n 1 | cut -d= -f2-)"
+    [ -z "$size_bytes" ] && size_bytes="104857600"
     cat > /etc/caddy/Caddyfile <<EOF
+# managed by mqvi (max_size synced from .env UPLOAD_MAX_SIZE on every start)
 ${DOMAIN} {
     reverse_proxy 127.0.0.1:${MQVI_PORT}
     encode zstd gzip
     request_body {
-        max_size 30MB
+        max_size ${size_bytes}
     }
 }
 EOF
@@ -510,7 +517,7 @@ ${DOMAIN:-yourdomain.example} {
     reverse_proxy 127.0.0.1:${MQVI_PORT}
     encode zstd gzip
     request_body {
-        max_size 30MB
+        max_size 500MB
     }
 }
 EOF

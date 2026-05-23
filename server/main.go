@@ -215,8 +215,10 @@ func main() {
 	srv := &http.Server{
 		Addr:         cfg.Server.Addr(),
 		Handler:      securedHandler,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		// 5 min accommodates large file uploads on slow connections.
+		// MaxBytesReader on multipart endpoints still caps the body size.
+		ReadTimeout:  5 * time.Minute,
+		WriteTimeout: 5 * time.Minute,
 		IdleTimeout:  60 * time.Second,
 	}
 

@@ -111,6 +111,7 @@ function OverlayShell({ item, onClose }: ShellProps) {
     item.size > PREVIEW_SIZE_LIMIT;
 
   function onBackdropClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
     if (e.target === e.currentTarget) onClose();
   }
 
@@ -232,7 +233,7 @@ function ImageViewer({ src, filename, onClose }: { src: string; filename: string
     const start = startRef.current;
     startRef.current = null;
     if (!start) return;
-    // Treat as click only if pointer barely moved (else it was a pan/pinch).
+    if (e.button !== 0) return;
     const moved = Math.hypot(e.clientX - start.x, e.clientY - start.y);
     if (moved < 5 && (e.target as HTMLElement).tagName !== "IMG") {
       onClose();
@@ -243,10 +244,10 @@ function ImageViewer({ src, filename, onClose }: { src: string; filename: string
     <div className="file-viewer-image-outer" onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
       <TransformWrapper
         doubleClick={{ mode: "reset" }}
-        wheel={{ step: 0.2 }}
-        pinch={{ step: 5 }}
-        minScale={0.5}
-        maxScale={8}
+        minScale={1}
+        maxScale={6}
+        initialScale={1}
+        centerOnInit
       >
         <TransformComponent
           wrapperClass="file-viewer-image-wrap"
