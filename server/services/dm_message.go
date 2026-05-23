@@ -106,8 +106,10 @@ func (s *dmService) SendMessage(ctx context.Context, userID, channelID string, r
 			}
 		}
 
-		// First message on an accepted channel from a non-friend → transition to pending
-		if channel.Status == models.DMStatusAccepted && s.friendChecker != nil {
+		// Only a never-requested channel (InitiatedBy==nil) starts the request flow.
+		// Once a request was accepted InitiatedBy stays set, so messages flow freely
+		// even before the recipient replies — otherwise the initiator gets stuck on 403.
+		if channel.Status == models.DMStatusAccepted && channel.InitiatedBy == nil && s.friendChecker != nil {
 			recipient, _ := s.userRepo.GetByID(ctx, otherUserID)
 			if recipient != nil && recipient.DMPrivacy == "message_request" {
 				friends, err := s.friendChecker.AreFriends(ctx, userID, otherUserID)
