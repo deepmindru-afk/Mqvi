@@ -55,6 +55,7 @@ type VoiceService interface {
 	GetChannelParticipants(channelID string) []models.VoiceState
 	GetUserVoiceState(userID string) *models.VoiceState
 	GetAllVoiceStates() []models.VoiceState
+	GetActiveChannelTimers() map[string]int64 // channelID → start time (Unix ms)
 	DisconnectUser(userID string)
 	GetStreamCount(channelID string) int
 	AdminUpdateState(ctx context.Context, adminUserID, targetUserID string, isServerMuted, isServerDeafened *bool) error
@@ -95,6 +96,7 @@ type voiceService struct {
 	screenShareViewers map[string]map[string]bool    // streamerUserID -> set of viewerUserIDs
 	forceMoveGrants    map[string]forceMoveGrant     // userID -> one-time bypass (consumed on token gen)
 	offlineSince       map[string]time.Time          // userID -> first seen offline (grace period tracking)
+	channelStartedAt   map[string]time.Time          // channelID -> moment the channel went from 0→1 participant
 	mu                 sync.RWMutex
 
 	channelGetter    ChannelGetter
@@ -124,6 +126,7 @@ func NewVoiceService(
 		screenShareViewers: make(map[string]map[string]bool),
 		forceMoveGrants:    make(map[string]forceMoveGrant),
 		offlineSince:       make(map[string]time.Time),
+		channelStartedAt:   make(map[string]time.Time),
 		channelGetter:      channelGetter,
 		livekitGetter:      livekitGetter,
 		permResolver:       permResolver,

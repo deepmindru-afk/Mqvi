@@ -117,6 +117,9 @@ type VoiceCoreState = {
   /** Set when another session takes over voice — prevents auto-rejoin loop */
   wasReplaced: boolean;
 
+  /** channelId → call start time (Unix ms). Populated by server; empty when channel has no participants. */
+  channelTimers: Record<string, number>;
+
   /** Tab close voice leave callback — registered by useVoice hook */
   _onLeaveCallback: (() => void) | null;
   /** Generic WS send callback — avoids prop drilling for deep components */
@@ -167,6 +170,7 @@ export const useVoiceStore = create<VoiceStore>((set, get, store) => ({
   e2eePassphrase: null,
   _joinGeneration: 0,
   activeSpeakers: {},
+  channelTimers: {},
   rtt: 0,
   wasReplaced: false,
   _onLeaveCallback: null,

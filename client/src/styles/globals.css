@@ -334,6 +334,7 @@ select option:disabled {
 .ch-tree-badge { min-width:18px;height:18px;padding:0 5px;background:var(--primary);color:#fff;font-size:13px;font-weight:700;border-radius:999px;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1; }
 /* Unread dot (no count, small dot) */
 .ch-tree-unread-dot { width:8px;height:8px;border-radius:999px;background:var(--primary);flex-shrink:0;margin-left:auto; }
+.ch-tree-voice-duration { margin-left:auto;font-size:13px;color:var(--t3);font-variant-numeric:tabular-nums;flex-shrink:0; }
 
 /* Voice users inside voice channel */
 .ch-tree-voice-users { padding:2px 0 2px 42px; }

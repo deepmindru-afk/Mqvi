@@ -67,9 +67,10 @@ export async function handleVoiceEvent(
     }
 
     case "voice_states_sync": {
-      const syncData = msg.d as { states: VoiceState[] };
+      const syncData = msg.d as { states: VoiceState[]; channel_timers?: Record<string, number> };
       const vs = useVoiceStore.getState();
       vs.handleVoiceStatesSync(syncData.states);
+      vs.applyChannelTimers(syncData.channel_timers ?? {});
 
       const myId = useAuthStore.getState().user?.id;
       if (!myId) return true;
@@ -125,6 +126,18 @@ export async function handleVoiceEvent(
           }
         })();
       }
+      return true;
+    }
+
+    case "voice_channel_timer_start": {
+      const d = msg.d as { channel_id: string; started_at: number };
+      useVoiceStore.getState().handleVoiceChannelTimerStart(d.channel_id, d.started_at);
+      return true;
+    }
+
+    case "voice_channel_timer_stop": {
+      const d = msg.d as { channel_id: string };
+      useVoiceStore.getState().handleVoiceChannelTimerStop(d.channel_id);
       return true;
     }
 

@@ -25,6 +25,7 @@ type BanChecker interface {
 // VoiceStatesProvider returns all active voice states for the ready event.
 type VoiceStatesProvider interface {
 	GetAllVoiceStates() []models.VoiceState
+	GetActiveChannelTimers() map[string]int64
 }
 
 // UserInfoProvider fetches user profile from DB for Hub cache.
@@ -300,6 +301,7 @@ func (h *Handler) HandleConnection(w http.ResponseWriter, r *http.Request) {
 
 		allStates := h.voiceStatesProvider.GetAllVoiceStates()
 		items := make([]VoiceStateItem, 0, len(allStates))
+		visibleChannels := make(map[string]struct{})
 		for _, s := range allStates {
 			if !userServers[s.ServerID] {
 				continue
@@ -317,10 +319,19 @@ func (h *Handler) HandleConnection(w http.ResponseWriter, r *http.Request) {
 				IsServerMuted:    s.IsServerMuted,
 				IsServerDeafened: s.IsServerDeafened,
 			})
+			visibleChannels[s.ChannelID] = struct{}{}
+		}
+		// Filter timers to channels the user can actually see (server scoping).
+		allTimers := h.voiceStatesProvider.GetActiveChannelTimers()
+		timers := make(map[string]int64, len(visibleChannels))
+		for cid := range visibleChannels {
+			if t, ok := allTimers[cid]; ok {
+				timers[cid] = t
+			}
 		}
 		client.sendEvent(Event{
 			Op:   OpVoiceStatesSync,
-			Data: VoiceStatesSyncData{States: items},
+			Data: VoiceStatesSyncData{States: items, ChannelTimers: timers},
 		})
 	}
 

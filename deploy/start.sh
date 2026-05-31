@@ -18,8 +18,14 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
-# ─── Check / download LiveKit binary ───
-if [ ! -f ./livekit-server ]; then
+# ─── LiveKit: only run locally if livekit.yaml exists (otherwise a remote SFU is assumed) ───
+RUN_LIVEKIT=false
+if [ -f livekit.yaml ]; then
+    RUN_LIVEKIT=true
+fi
+
+# ─── Check / download LiveKit binary (only when we'll actually run it) ───
+if [ "$RUN_LIVEKIT" = true ] && [ ! -f ./livekit-server ]; then
     echo "LiveKit server not found. Downloading..."
     ARCH=$(uname -m)
     case "$ARCH" in
@@ -159,10 +165,15 @@ echo "  Starting mqvi server..."
 echo "========================================="
 echo ""
 
-# ─── Start LiveKit in the background ───
-echo "[start] Starting LiveKit SFU (port 7880)..."
-./livekit-server --config livekit.yaml &
-LIVEKIT_PID=$!
+# ─── Start LiveKit in the background (skipped when no livekit.yaml — remote SFU mode) ───
+LIVEKIT_PID=""
+if [ "$RUN_LIVEKIT" = true ]; then
+    echo "[start] Starting LiveKit SFU (port 7880)..."
+    ./livekit-server --config livekit.yaml &
+    LIVEKIT_PID=$!
+else
+    echo "[start] No livekit.yaml found — skipping local LiveKit (assuming remote SFU)."
+fi
 
 # ─── Cleanup trap — stop both on Ctrl+C or SIGTERM ───
 cleanup() {
@@ -192,11 +203,17 @@ echo ""
 echo "========================================="
 echo "  mqvi is running!"
 echo "  Web UI:  http://$(hostname -I | awk '{print $1}'):9090"
-echo "  LiveKit: ws://localhost:7880"
+if [ "$RUN_LIVEKIT" = true ]; then
+    echo "  LiveKit: ws://localhost:7880"
+fi
 echo "  Stop with: Ctrl+C"
 echo "========================================="
 echo ""
 
 # Wait for either process — if one dies, stop both
-wait -n $LIVEKIT_PID $MQVI_PID 2>/dev/null || true
+if [ -n "$LIVEKIT_PID" ]; then
+    wait -n $LIVEKIT_PID $MQVI_PID 2>/dev/null || true
+else
+    wait $MQVI_PID 2>/dev/null || true
+fi
 cleanup

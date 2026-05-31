@@ -17,6 +17,16 @@ func (m *mockLiveKitGetter) GetByServerID(_ context.Context, _ string) (*models.
 	return nil, fmt.Errorf("no livekit instance in test")
 }
 
+func filterBroadcasts(events []ws.Event, op string) []ws.Event {
+	out := make([]ws.Event, 0, len(events))
+	for _, e := range events {
+		if e.Op == op {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 func newTestVoiceService() (VoiceService, *testutil.MockBroadcaster) {
 	hub := &testutil.MockBroadcaster{}
 	svc := NewVoiceService(
@@ -61,12 +71,10 @@ func TestVoiceJoinChannel(t *testing.T) {
 		t.Errorf("username = %q, want %q", state.Username, "alice")
 	}
 
-	// Verify broadcast
-	if len(broadcasts) != 1 {
-		t.Fatalf("expected 1 broadcast, got %d", len(broadcasts))
-	}
-	if broadcasts[0].Op != ws.OpVoiceStateUpdate {
-		t.Errorf("op = %q, want %q", broadcasts[0].Op, ws.OpVoiceStateUpdate)
+	// Verify voice state broadcast (channel timer events are separate concern)
+	stateUpdates := filterBroadcasts(broadcasts, ws.OpVoiceStateUpdate)
+	if len(stateUpdates) != 1 {
+		t.Fatalf("expected 1 state-update broadcast, got %d", len(stateUpdates))
 	}
 }
 
@@ -91,9 +99,11 @@ func TestVoiceJoinChannel_SwitchChannels(t *testing.T) {
 		t.Errorf("channelID = %q, want %q", state.ChannelID, "ch2")
 	}
 
-	// Should have: join ch1, leave ch1, join ch2 = 3 broadcasts
-	if len(broadcasts) != 3 {
-		t.Fatalf("expected 3 broadcasts (join+leave+join), got %d", len(broadcasts))
+	// Should have: join ch1, leave ch1, join ch2 = 3 state-update broadcasts
+	// (channel timer start/stop/start also fire but are a separate concern).
+	stateUpdates := filterBroadcasts(broadcasts, ws.OpVoiceStateUpdate)
+	if len(stateUpdates) != 3 {
+		t.Fatalf("expected 3 state-update broadcasts (join+leave+join), got %d", len(stateUpdates))
 	}
 }
 

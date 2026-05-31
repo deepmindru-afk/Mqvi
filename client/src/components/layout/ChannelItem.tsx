@@ -1,6 +1,7 @@
 import type { ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { IconSpeaker } from "../shared/Icons";
+import VoiceChannelDuration from "./VoiceChannelDuration";
 import type { Channel } from "../../types";
 
 type ChannelItemProps = {
@@ -127,6 +128,7 @@ function ChannelItem({
         ) : (
           <span className="ch-tree-label">{channel.name}</span>
         )}
+        {!isText && !isRenaming && <VoiceChannelDuration channelId={channel.id} />}
         {unread > 0 && !isEffectivelyMuted && (
           <span className="ch-tree-unread-dot" title={`${unread}`} />
         )}
