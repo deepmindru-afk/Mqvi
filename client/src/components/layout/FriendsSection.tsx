@@ -42,6 +42,15 @@ function FriendsSection({ onShowUserCard }: FriendsSectionProps) {
     closeAllDrawers();
   }
 
+  async function handleFriendClick(friend: FriendshipWithUser) {
+    const name = friend.display_name ?? friend.username;
+    const channelId = await useDMStore.getState().createOrGetChannel(friend.user_id);
+    if (channelId) {
+      openTab(channelId, "dm", name);
+      closeAllDrawers();
+    }
+  }
+
   function handleFriendContextMenu(e: React.MouseEvent, friend: FriendshipWithUser) {
     const name = friend.display_name ?? friend.username;
     const items: ContextMenuItem[] = [
@@ -132,7 +141,7 @@ function FriendsSection({ onShowUserCard }: FriendsSectionProps) {
                 <button
                   key={friend.user_id}
                   className="ch-tree-item"
-                  onClick={() => handleFriendsClick()}
+                  onClick={() => { void handleFriendClick(friend); }}
                   onContextMenu={(e) => handleFriendContextMenu(e, friend)}
                 >
                   <Avatar
