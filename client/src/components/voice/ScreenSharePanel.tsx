@@ -64,12 +64,15 @@ function ScreenSharePanel({ trackRef }: ScreenSharePanelProps) {
 
   const displayName = trackRef.participant.name || realUserId;
 
-  // Double-click to focus a single stream when multiple are visible
+  // Double-click toggles fullscreen. When multiple streams are visible, also
+  // focus this one so the fullscreen view is on the stream the user picked.
+  // While fullscreen, double-click just exits (no focus change).
   const handleDoubleClick = useCallback(() => {
-    if (watchingCount > 1) {
+    if (!isFullscreen && watchingCount > 1) {
       focusScreenShare(realUserId);
     }
-  }, [watchingCount, focusScreenShare, realUserId]);
+    handleFullscreenToggle();
+  }, [isFullscreen, watchingCount, focusScreenShare, realUserId, handleFullscreenToggle]);
 
   // Skip context menu for own screen share
   const handleContextMenu = useCallback(
