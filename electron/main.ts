@@ -17,6 +17,7 @@ import {
   desktopCapturer,
   powerMonitor,
   safeStorage,
+  shell,
 } from "electron";
 import { autoUpdater } from "electron-updater";
 import { uIOhook, UiohookKey } from "uiohook-napi";
@@ -362,6 +363,34 @@ function createWindow(): void {
   mainWindow.webContents.on("before-input-event", (_event, input) => {
     if (input.key === "F12") {
       mainWindow?.webContents.toggleDevTools();
+    }
+  });
+
+  // Open external links (http/https/mailto/tel) in the OS default browser
+  // instead of inside the Electron window. SPA routing uses history.pushState
+  // which doesn't fire will-navigate, so app navigation is unaffected.
+  const isExternalUrl = (url: string): boolean => {
+    try {
+      const u = new URL(url);
+      if (!["http:", "https:", "mailto:", "tel:"].includes(u.protocol)) return false;
+      if (isDev && u.origin === "http://localhost:3030") return false;
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isExternalUrl(url)) {
+      shell.openExternal(url).catch(() => {});
+    }
+    return { action: "deny" };
+  });
+
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (isExternalUrl(url)) {
+      event.preventDefault();
+      shell.openExternal(url).catch(() => {});
     }
   });
 
