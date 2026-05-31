@@ -2,6 +2,10 @@
  * VoiceChannelDuration — shows live call duration ("0:14", "1:23:45") next to
  * a voice channel in the sidebar. Self-ticking 1s interval so re-renders are
  * scoped to this leaf and don't repaint the whole channel tree.
+ *
+ * Elapsed time is computed from Date.now() at render time (not from stored
+ * state) so any re-render between ticks always shows the true elapsed —
+ * a stale state value can't cause the display to jump or lag.
  */
 
 import { useEffect, useState } from "react";
@@ -23,17 +27,22 @@ function formatDuration(ms: number): string {
 
 function VoiceChannelDuration({ channelId }: Props) {
   const startedAt = useVoiceStore((s) => s.channelTimers[channelId]);
-  const [now, setNow] = useState(() => Date.now());
+  // Tick counter — value is unused, it just triggers re-renders every second.
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     if (!startedAt) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    // Force an immediate re-render so the first frame after startedAt arrives
+    // is computed against current Date.now(), not whatever value happened to
+    // be in scope from the previous render.
+    setTick((t) => t + 1);
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(id);
   }, [startedAt]);
 
   if (!startedAt) return null;
 
-  return <span className="ch-tree-voice-duration">{formatDuration(now - startedAt)}</span>;
+  return <span className="ch-tree-voice-duration">{formatDuration(Date.now() - startedAt)}</span>;
 }
 
 export default VoiceChannelDuration;
