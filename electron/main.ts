@@ -15,6 +15,7 @@ import {
   Menu,
   nativeImage,
   desktopCapturer,
+  powerMonitor,
   safeStorage,
 } from "electron";
 import { autoUpdater } from "electron-updater";
@@ -537,6 +538,10 @@ function setupFileAuthInjection(): void {
 function setupIPC(): void {
   // App version from package.json
   ipcMain.handle("get-version", () => app.getVersion());
+
+  // Seconds since last OS-level input (mouse/keyboard anywhere on the system).
+  // Lets idle detection respect activity in other apps (games, browsers, etc.).
+  ipcMain.handle("get-system-idle-time", () => powerMonitor.getSystemIdleTime());
 
   // Relaunch app — used by ConnectionSettings
   ipcMain.handle("relaunch", () => {
