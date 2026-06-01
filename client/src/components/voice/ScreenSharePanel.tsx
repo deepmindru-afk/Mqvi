@@ -74,11 +74,13 @@ function ScreenSharePanel({ trackRef }: ScreenSharePanelProps) {
     handleFullscreenToggle();
   }, [isFullscreen, watchingCount, focusScreenShare, realUserId, handleFullscreenToggle]);
 
-  // Skip context menu for own screen share
+  // Always suppress the browser/native context menu on the video — even for
+  // own stream where we don't open ours. Without this, fullscreen <video>
+  // shows the browser's media menu (Save as…, Picture-in-Picture, etc.).
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
-      if (isLocalUser) return;
       e.preventDefault();
+      if (isLocalUser) return;
       setCtxMenu({ x: e.clientX, y: e.clientY });
     },
     [isLocalUser]

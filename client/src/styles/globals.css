@@ -1529,7 +1529,7 @@ button.ch-tree-vu-stream svg { width:21px;height:21px; }
 .role-list-item.active .platform-instance-capacity { color:var(--t2); }
 
 /* ── Admin Logs Panel ── */
-.settings-content:has(.admin-logs-panel) { max-width:none; }
+.settings-panel:has(.admin-logs-panel) { max-width:none; }
 .admin-logs-panel { display:flex;flex-direction:column;height:100%;padding:24px;gap:16px; }
 .admin-logs-header { display:flex;align-items:center;justify-content:space-between; }
 .admin-logs-header .settings-section-title { margin:0; }
@@ -1558,7 +1558,7 @@ button.ch-tree-vu-stream svg { width:21px;height:21px; }
 .admin-logs-page-info { font-size:13px;color:var(--t2); }
 
 /* ── LiveKit Edit Layout — form (left) + monitoring (right) ── */
-.settings-content:has(.lk-edit-layout) { max-width:none; }
+.settings-panel:has(.lk-edit-layout) { max-width:none; }
 .lk-edit-layout { display:flex;height:100%;min-height:0; }
 .lk-edit-form { width:400px;min-width:400px;overflow-y:auto;padding:24px 20px 24px 24px;border-right:1px solid var(--bg3); }
 .lk-edit-monitoring { flex:1;min-width:0;overflow-y:auto;padding:24px; }
@@ -1604,7 +1604,7 @@ button.ch-tree-vu-stream svg { width:21px;height:21px; }
 .metrics-chart-tooltip-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
 
 /* Admin server list — full-width content area for wide table */
-.settings-content:has(.admin-server-list) { max-width:none; }
+.settings-panel:has(.admin-server-list) { max-width:none; }
 
 .admin-server-list {
   display:flex;flex-direction:column;gap:16px;height:100%;
@@ -1718,7 +1718,7 @@ button.ch-tree-vu-stream svg { width:21px;height:21px; }
    Admin User List Table
    ═══════════════════════════════════════════════════════════════ */
 
-.settings-content:has(.admin-user-list) { max-width:none; }
+.settings-panel:has(.admin-user-list) { max-width:none; }
 
 .admin-user-list {
   display:flex;flex-direction:column;gap:16px;height:100%;
@@ -1876,7 +1876,7 @@ button.ch-tree-vu-stream svg { width:21px;height:21px; }
 /* ═══════════════════════════════════════════════════════════════
    Admin Report List Table
    ═══════════════════════════════════════════════════════════════ */
-.settings-content:has(.admin-report-list) { max-width:none; }
+.settings-panel:has(.admin-report-list) { max-width:none; }
 
 .admin-report-list {
   display:flex;flex-direction:column;gap:16px;
