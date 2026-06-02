@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"time"
@@ -58,6 +59,7 @@ type Services struct {
 	Storage           services.StorageService
 	Cleanup           services.CleanupService
 	SettingsBadge     services.SettingsBadgeService
+	VoiceMessage      services.VoiceMessageService
 	EmailSender       email.EmailSender
 }
 
@@ -163,6 +165,14 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 	metricsHistoryService := services.NewMetricsHistoryService(repos.MetricsHistory, repos.LiveKit)
 	feedbackService := services.NewFeedbackService(repos.Feedback, repos.User, fileLocator, storageService, emailSender)
 	settingsBadgeService := services.NewSettingsBadgeService(repos.User, repos.Feedback, repos.Report)
+	voiceMessageService := services.NewVoiceMessageService(repos.VoiceMessage, voiceService, hub, urlSigner, fileLocator)
+	// Wipe ephemeral voice chat when the last participant leaves the channel.
+	// 5-minute timeout so a hung DB call can't leak the goroutine indefinitely.
+	voiceService.SetOnChannelEmpty(func(channelID string) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		voiceMessageService.CleanupChannel(ctx, channelID)
+	})
 	feedbackUploadService := services.NewFeedbackUploadService(repos.Feedback, uploadPipeline, cfg.Upload.MaxSize)
 	soundboardService := services.NewSoundboardService(
 		repos.Soundboard, repos.User, hub, voiceService, uploadPipeline, cfg.Upload.MaxSize, urlSigner, storageService,
@@ -235,6 +245,7 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 		Storage:           storageService,
 		Cleanup:           cleanupService,
 		SettingsBadge:     settingsBadgeService,
+		VoiceMessage:      voiceMessageService,
 		EmailSender:       emailSender,
 	}
 

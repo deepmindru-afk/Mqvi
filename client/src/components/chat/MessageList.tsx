@@ -221,8 +221,8 @@ function MessageList() {
     );
   }
 
-  // Welcome icon: "#" for channels, "@" for DMs
-  const welcomeIcon = mode === "dm" ? "@" : "#";
+  // Welcome icon: "#" for channels, "@" for DMs, speaker for voice
+  const welcomeIcon = mode === "dm" ? "@" : mode === "voice" ? "🔊" : "#";
 
   return (
     <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -247,12 +247,16 @@ function MessageList() {
             <h2>
               {mode === "dm"
                 ? t("welcomeDM", { user: channelName })
-                : t("welcomeChannel", { channel: channelName })}
+                : mode === "voice"
+                  ? t("welcomeVoice", { channel: channelName })
+                  : t("welcomeChannel", { channel: channelName })}
             </h2>
             <p>
               {mode === "dm"
                 ? t("dmStart", { user: channelName })
-                : t("channelStart", { channel: channelName })}
+                : mode === "voice"
+                  ? t("voiceStart")
+                  : t("channelStart", { channel: channelName })}
             </p>
           </div>
         ) : (

@@ -47,6 +47,7 @@ type Handlers struct {
 	Soundboard        *handlers.SoundboardHandler
 	Storage           *handlers.StorageHandler
 	LiveKitWebhook    *handlers.LiveKitWebhookHandler
+	VoiceMessage      *handlers.VoiceMessageHandler
 	WS                *ws.Handler
 }
 
@@ -88,6 +89,7 @@ func initHandlers(svcs *Services, repos *Repositories, limiters *RateLimiters, h
 		Soundboard:        handlers.NewSoundboardHandler(svcs.Soundboard, svcs.Storage, cfg.Upload.MaxSize, urlSigner),
 		Storage:           handlers.NewStorageHandler(svcs.Storage),
 		LiveKitWebhook:    handlers.NewLiveKitWebhookHandler(repos.LiveKit, encryptionKey, svcs.AppLog),
+		VoiceMessage:      handlers.NewVoiceMessageHandler(svcs.VoiceMessage, svcs.UploadPipeline, urlSigner, limiters.Message, cfg.Upload.MaxSize),
 		WS:                ws.NewHandler(hub, svcs.Auth, nil, svcs.Voice, repos.User, repos.Server, svcs.ServerMute, svcs.ChannelMute, urlSigner),
 	}
 }

@@ -52,6 +52,7 @@ const (
 	KindServerIcon Kind = "server-icons"
 	KindFeedback   Kind = "feedback"
 	KindReport     Kind = "reports"
+	KindVoiceMsg   Kind = "voice-messages"
 )
 
 // validKinds is used by the serve endpoint to reject unknown path segments.
@@ -65,6 +66,7 @@ var validKinds = map[Kind]bool{
 	KindServerIcon: true,
 	KindFeedback:   true,
 	KindReport:     true,
+	KindVoiceMsg:   true,
 }
 
 // IsValidKind reports whether s is a recognized upload kind.

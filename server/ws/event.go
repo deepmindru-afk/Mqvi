@@ -79,6 +79,9 @@ const (
 	OpVoiceStatesSync             = "voice_states_sync"
 	OpVoiceChannelTimerStart      = "voice_channel_timer_start" // first user joined → call started
 	OpVoiceChannelTimerStop       = "voice_channel_timer_stop"  // last user left → call ended
+	OpVoiceMessageCreate          = "voice_message_create"      // ephemeral voice chat message sent
+	OpVoiceMessageUpdate          = "voice_message_update"      // ephemeral voice chat message edited
+	OpVoiceMessageDelete          = "voice_message_delete"      // ephemeral voice chat message deleted
 	OpScreenShareViewerUpdate     = "screen_share_viewer_update"
 
 	// Friend operations
@@ -247,6 +250,12 @@ type VoiceChannelTimerStartData struct {
 
 // VoiceChannelTimerStopData — channel emptied; clients clear the duration display.
 type VoiceChannelTimerStopData struct {
+	ChannelID string `json:"channel_id"`
+}
+
+// VoiceMessageDeleteData — id + channel_id so clients can locate the row.
+type VoiceMessageDeleteData struct {
+	ID        string `json:"id"`
 	ChannelID string `json:"channel_id"`
 }
 

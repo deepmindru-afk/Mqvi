@@ -375,6 +375,12 @@ func initRoutes(
 	mux.Handle("POST /api/servers/{serverId}/voice/screen-token", authServer(h.Voice.ScreenShareToken))
 	mux.Handle("GET /api/servers/{serverId}/voice/states", authServer(h.Voice.VoiceStates))
 
+	// Voice channel ephemeral chat — membership check (must be in voice) lives in the service
+	mux.Handle("GET /api/voice-channels/{channelId}/messages", auth(h.VoiceMessage.List))
+	mux.Handle("POST /api/voice-channels/{channelId}/messages", auth(h.VoiceMessage.Create))
+	mux.Handle("PATCH /api/voice-channels/{channelId}/messages/{messageId}", auth(h.VoiceMessage.Update))
+	mux.Handle("DELETE /api/voice-channels/{channelId}/messages/{messageId}", auth(h.VoiceMessage.Delete))
+
 	// Soundboard
 	mux.Handle("GET /api/servers/{serverId}/soundboard/sounds", authServer(h.Soundboard.List))
 	mux.Handle("POST /api/servers/{serverId}/soundboard/sounds", authServerPerm(models.PermManageSoundboard, h.Soundboard.Create))

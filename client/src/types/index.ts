@@ -136,6 +136,27 @@ export type Attachment = {
   mime_type: string | null;
 };
 
+/** Ephemeral voice channel chat message. Wiped server-side on N→0. */
+export type VoiceMessage = {
+  id: string;
+  channel_id: string;
+  user_id: string;
+  content: string | null;
+  edited_at: string | null;
+  created_at: string;
+  author: User;
+  attachments: VoiceMessageAttachment[];
+};
+
+export type VoiceMessageAttachment = {
+  id: string;
+  voice_message_id: string;
+  filename: string;
+  file_url: string;
+  file_size: number;
+  mime_type: string | null;
+};
+
 /** Cursor-based pagination response. */
 export type MessagePage = {
   messages: Message[];

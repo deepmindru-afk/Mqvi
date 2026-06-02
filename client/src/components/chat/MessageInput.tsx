@@ -437,7 +437,9 @@ function MessageInput({ openSearch }: MessageInputProps) {
 
   const placeholder = mode === "dm"
     ? t("dmPlaceholder", { user: channelName })
-    : t("messagePlaceholder", { channel: channelName });
+    : mode === "voice"
+      ? t("voicePlaceholder", { channel: channelName })
+      : t("messagePlaceholder", { channel: channelName });
 
   return (
     <div className="input-area">

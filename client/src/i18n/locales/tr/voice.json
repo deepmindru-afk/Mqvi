@@ -13,6 +13,8 @@
   "screenShareVolume": "Ekran Paylaşımı Sesi",
   "voiceChannelFull": "Bu ses kanalı dolu",
   "connectingToVoice": "Bağlanıyor...",
+  "chatShow": "Ses sohbetini göster",
+  "chatHide": "Ses sohbetini gizle",
   "reconnectingToVoice": "Yeniden bağlanıyor...",
   "voiceDisconnected": "Ses bağlantısı koptu",
   "joinVoicePrompt": "Bu ses kanalına katılmak için tıklayın",

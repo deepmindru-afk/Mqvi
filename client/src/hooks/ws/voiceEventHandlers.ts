@@ -8,8 +8,9 @@ import { useChannelStore } from "../../stores/channelStore";
 import { useServerStore } from "../../stores/serverStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useUIStore } from "../../stores/uiStore";
+import { useVoiceMessageStore } from "../../stores/voiceMessageStore";
 import { playJoinSound, playLeaveSound } from "../../utils/sounds";
-import type { WSMessage, VoiceState, VoiceStateUpdateData } from "../../types";
+import type { WSMessage, VoiceState, VoiceStateUpdateData, VoiceMessage } from "../../types";
 import type { WSHandlerContext } from "./types";
 import { isVoiceRecoveryAllowed } from "../../stores/shared/voiceRecovery";
 
@@ -138,6 +139,26 @@ export async function handleVoiceEvent(
     case "voice_channel_timer_stop": {
       const d = msg.d as { channel_id: string };
       useVoiceStore.getState().handleVoiceChannelTimerStop(d.channel_id);
+      // Channel is now empty → ephemeral chat for it is wiped server-side, mirror locally.
+      useVoiceMessageStore.getState().wipeChannel(d.channel_id);
+      return true;
+    }
+
+    case "voice_message_create": {
+      const d = msg.d as VoiceMessage;
+      useVoiceMessageStore.getState().append(d);
+      return true;
+    }
+
+    case "voice_message_update": {
+      const d = msg.d as VoiceMessage;
+      useVoiceMessageStore.getState().update(d);
+      return true;
+    }
+
+    case "voice_message_delete": {
+      const d = msg.d as { id: string; channel_id: string };
+      useVoiceMessageStore.getState().remove(d.channel_id, d.id);
       return true;
     }
 

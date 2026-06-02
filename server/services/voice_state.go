@@ -325,7 +325,8 @@ func (s *voiceService) startChannelTimerLocked(channelID, serverID string, now t
 }
 
 // stopChannelTimerLocked clears an active timer and broadcasts the stop event.
-// No-op if no timer was running.
+// No-op if no timer was running. Also fires the channel-empty callback (async)
+// so dependent state — e.g. ephemeral voice chat — can be cleaned up.
 func (s *voiceService) stopChannelTimerLocked(channelID, serverID string) {
 	if _, exists := s.channelStartedAt[channelID]; !exists {
 		return
@@ -335,6 +336,9 @@ func (s *voiceService) stopChannelTimerLocked(channelID, serverID string) {
 		Op: ws.OpVoiceChannelTimerStop,
 		Data: ws.VoiceChannelTimerStopData{ChannelID: channelID},
 	})
+	if s.onChannelEmpty != nil {
+		go s.onChannelEmpty(channelID)
+	}
 }
 
 // GetActiveChannelTimers returns a snapshot of active channel start times (Unix ms).

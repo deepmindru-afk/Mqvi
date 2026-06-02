@@ -251,17 +251,17 @@ function Message({ message, isCompact }: MessageProps) {
   function handleContextMenu(e: React.MouseEvent) {
     const items: ContextMenuItem[] = [];
 
-    // Reply — everyone
-    items.push({
-      label: t("replyMessage"),
-      onClick: handleReply,
-    });
-
-    // Add Reaction — everyone
-    items.push({
-      label: t("addReaction"),
-      onClick: () => setPickerSource("bar"),
-    });
+    // Reply / Reactions / Pin — not available in voice chat MVP
+    if (mode !== "voice") {
+      items.push({
+        label: t("replyMessage"),
+        onClick: handleReply,
+      });
+      items.push({
+        label: t("addReaction"),
+        onClick: () => setPickerSource("bar"),
+      });
+    }
 
     // Copy Message — everyone
     items.push({
@@ -271,8 +271,8 @@ function Message({ message, isCompact }: MessageProps) {
       },
     });
 
-    // Pin/Unpin — requires ManageMessages
-    if (canManageMessages) {
+    // Pin/Unpin — requires ManageMessages, not in voice chat MVP
+    if (mode !== "voice" && canManageMessages) {
       items.push({
         label: isPinned ? t("unpinMessage") : t("pinMessage"),
         onClick: handlePinToggle,
@@ -594,14 +594,16 @@ function Message({ message, isCompact }: MessageProps) {
           {/* Attachments */}
           <MessageAttachments message={message} />
 
-          {/* Reactions */}
-          <MessageReactions
-            message={message}
-            pickerSource={pickerSource}
-            onPickerOpen={() => setPickerSource("bar")}
-            onPickerClose={() => setPickerSource(null)}
-            onReaction={handleReaction}
-          />
+          {/* Reactions — voice chat MVP has no reactions */}
+          {mode !== "voice" && (
+            <MessageReactions
+              message={message}
+              pickerSource={pickerSource}
+              onPickerOpen={() => setPickerSource("bar")}
+              onPickerClose={() => setPickerSource(null)}
+              onReaction={handleReaction}
+            />
+          )}
         </div>
 
         {!isEditing && (
@@ -620,6 +622,9 @@ function Message({ message, isCompact }: MessageProps) {
               setIsEditing(true);
             }}
             onDelete={handleDelete}
+            showReply={mode !== "voice"}
+            showReactions={mode !== "voice"}
+            showPin={mode !== "voice"}
           />
         )}
       </div>

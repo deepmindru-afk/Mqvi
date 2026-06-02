@@ -47,7 +47,7 @@ export type ChatMessage = {
 // ─── Context Value ───
 
 export type ChatContextValue = {
-  mode: "channel" | "dm";
+  mode: "channel" | "dm" | "voice";
   channelId: string;
   channelName: string;
   /** Server ID this channel belongs to (undefined for DMs) */
