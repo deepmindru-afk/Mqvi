@@ -45,6 +45,10 @@ export type VoiceSettings = {
   masterVolume: number;
   inputVolume: number;
   soundsEnabled: boolean;
+  /** Multiplier applied on top of masterVolume for notification sounds (messages, DMs, calls, mentions). */
+  notificationVolume: number;
+  /** Multiplier applied on top of masterVolume for in-app SFX (mute/deafen, join/leave, watch start/stop). */
+  appSoundVolume: number;
   localMutedUsers: Record<string, boolean>;
   noiseReduction: boolean;
   screenShareVolumes: Record<string, number>;
@@ -66,6 +70,8 @@ export const DEFAULT_SETTINGS: VoiceSettings = {
   masterVolume: 100,
   inputVolume: 100,
   soundsEnabled: true,
+  notificationVolume: 100,
+  appSoundVolume: 100,
   localMutedUsers: {},
   noiseReduction: true,
   screenShareVolumes: {},
@@ -108,6 +114,8 @@ function currentSettings(s: VoiceSettings): VoiceSettings {
     masterVolume: s.masterVolume,
     inputVolume: s.inputVolume,
     soundsEnabled: s.soundsEnabled,
+    notificationVolume: s.notificationVolume,
+    appSoundVolume: s.appSoundVolume,
     localMutedUsers: s.localMutedUsers,
     noiseReduction: s.noiseReduction,
     screenShareVolumes: s.screenShareVolumes,
@@ -132,6 +140,8 @@ export type VoiceSettingsSlice = VoiceSettings & {
   setMasterVolume: (value: number) => void;
   setInputVolume: (value: number) => void;
   setSoundsEnabled: (enabled: boolean) => void;
+  setNotificationVolume: (value: number) => void;
+  setAppSoundVolume: (value: number) => void;
   setScreenShareAudio: (enabled: boolean) => void;
   setScreenShareQuality: (quality: ScreenShareQuality) => void;
   setNoiseReduction: (enabled: boolean) => void;
@@ -159,6 +169,8 @@ export const createVoiceSettingsSlice: StateCreator<
     masterVolume: initial.masterVolume,
     inputVolume: initial.inputVolume,
     soundsEnabled: initial.soundsEnabled,
+    notificationVolume: initial.notificationVolume,
+    appSoundVolume: initial.appSoundVolume,
     localMutedUsers: initial.localMutedUsers,
     noiseReduction: initial.noiseReduction,
     screenShareVolumes: initial.screenShareVolumes,
@@ -215,6 +227,16 @@ export const createVoiceSettingsSlice: StateCreator<
 
     setSoundsEnabled: (enabled) => {
       set({ soundsEnabled: enabled });
+      saveSettings(currentSettings(get()));
+    },
+
+    setNotificationVolume: (value) => {
+      set({ notificationVolume: value });
+      saveSettings(currentSettings(get()));
+    },
+
+    setAppSoundVolume: (value) => {
+      set({ appSoundVolume: value });
       saveSettings(currentSettings(get()));
     },
 
@@ -299,6 +321,8 @@ export const createVoiceSettingsSlice: StateCreator<
         masterVolume: merged.masterVolume,
         inputVolume: merged.inputVolume,
         soundsEnabled: merged.soundsEnabled,
+        notificationVolume: merged.notificationVolume,
+        appSoundVolume: merged.appSoundVolume,
         screenShareAudio: merged.screenShareAudio,
         screenShareQuality: merged.screenShareQuality,
         localMutedUsers: merged.localMutedUsers,

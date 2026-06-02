@@ -85,6 +85,8 @@ function VoiceSettings() {
   const inputVolume = useVoiceStore((s) => s.inputVolume);
   const soundsEnabled = useVoiceStore((s) => s.soundsEnabled);
   const noiseReduction = useVoiceStore((s) => s.noiseReduction);
+  const notificationVolume = useVoiceStore((s) => s.notificationVolume);
+  const appSoundVolume = useVoiceStore((s) => s.appSoundVolume);
 
   const setInputMode = useVoiceStore((s) => s.setInputMode);
   const setPTTKey = useVoiceStore((s) => s.setPTTKey);
@@ -95,6 +97,8 @@ function VoiceSettings() {
   const setInputVolume = useVoiceStore((s) => s.setInputVolume);
   const setSoundsEnabled = useVoiceStore((s) => s.setSoundsEnabled);
   const setNoiseReduction = useVoiceStore((s) => s.setNoiseReduction);
+  const setNotificationVolume = useVoiceStore((s) => s.setNotificationVolume);
+  const setAppSoundVolume = useVoiceStore((s) => s.setAppSoundVolume);
 
   const muteShortcut = useVoiceStore((s) => s.muteShortcut);
   const deafenShortcut = useVoiceStore((s) => s.deafenShortcut);
@@ -558,6 +562,42 @@ function VoiceSettings() {
             style={sliderTrackStyle(masterVolume, 100)}
           />
           <span className="vs-slider-value">{masterVolume}%</span>
+        </div>
+      </div>
+
+      {/* ─── Notification Volume ─── */}
+      <div className="vs-section">
+        <div className="vs-label">{t("notificationVolume")}</div>
+        <div className="vs-desc">{t("notificationVolumeDesc")}</div>
+        <div className="vs-slider-row">
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={notificationVolume}
+            onChange={(e) => setNotificationVolume(Number(e.target.value))}
+            className="vs-range"
+            style={sliderTrackStyle(notificationVolume, 100)}
+          />
+          <span className="vs-slider-value">{notificationVolume}%</span>
+        </div>
+      </div>
+
+      {/* ─── App Sound Volume ─── */}
+      <div className="vs-section">
+        <div className="vs-label">{t("appSoundVolume")}</div>
+        <div className="vs-desc">{t("appSoundVolumeDesc")}</div>
+        <div className="vs-slider-row">
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={appSoundVolume}
+            onChange={(e) => setAppSoundVolume(Number(e.target.value))}
+            className="vs-range"
+            style={sliderTrackStyle(appSoundVolume, 100)}
+          />
+          <span className="vs-slider-value">{appSoundVolume}%</span>
         </div>
       </div>
 

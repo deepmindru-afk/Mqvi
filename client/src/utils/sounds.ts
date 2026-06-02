@@ -88,36 +88,36 @@ function playTone(
   }
 }
 
-export function playJoinSound(): void {
-  const { soundsEnabled, masterVolume } = useVoiceStore.getState();
-  if (!soundsEnabled) return;
+/** Returns the final 0..1 volume for a sound category (master × category), or null when sounds are off. */
+function sfxVolume(category: "notification" | "app"): number | null {
+  const { soundsEnabled, masterVolume, notificationVolume, appSoundVolume } = useVoiceStore.getState();
+  if (!soundsEnabled) return null;
+  const cat = category === "notification" ? notificationVolume : appSoundVolume;
+  return (masterVolume / 100) * (cat / 100);
+}
 
-  const volume = masterVolume / 100;
+export function playJoinSound(): void {
+  const volume = sfxVolume("app");
+  if (volume === null) return;
   playTone(350, 600, 0.15, volume);
 }
 
 export function playLeaveSound(): void {
-  const { soundsEnabled, masterVolume } = useVoiceStore.getState();
-  if (!soundsEnabled) return;
-
-  const volume = masterVolume / 100;
+  const volume = sfxVolume("app");
+  if (volume === null) return;
   playTone(400, 200, 0.12, volume);
 }
 
 export function playWatchStartSound(): void {
-  const { soundsEnabled, masterVolume } = useVoiceStore.getState();
-  if (!soundsEnabled) return;
-
-  const volume = masterVolume / 100;
+  const volume = sfxVolume("app");
+  if (volume === null) return;
   playTone(380, 500, 0.08, volume, "triangle");
   setTimeout(() => playTone(500, 620, 0.08, volume, "triangle"), 90);
 }
 
 export function playWatchStopSound(): void {
-  const { soundsEnabled, masterVolume } = useVoiceStore.getState();
-  if (!soundsEnabled) return;
-
-  const volume = masterVolume / 100;
+  const volume = sfxVolume("app");
+  if (volume === null) return;
   playTone(480, 320, 0.1, volume, "triangle");
 }
 
@@ -125,33 +125,29 @@ export function playWatchStopSound(): void {
 // other voice participants — like Discord, only the actor hears them.
 
 export function playMuteOnSound(): void {
-  const { soundsEnabled, masterVolume } = useVoiceStore.getState();
-  if (!soundsEnabled) return;
-  const volume = masterVolume / 100;
+  const volume = sfxVolume("app");
+  if (volume === null) return;
   // Single descending blip — square wave for distinct "click" character.
   playTone(240, 180, 0.06, volume, "square");
 }
 
 export function playMuteOffSound(): void {
-  const { soundsEnabled, masterVolume } = useVoiceStore.getState();
-  if (!soundsEnabled) return;
-  const volume = masterVolume / 100;
+  const volume = sfxVolume("app");
+  if (volume === null) return;
   playTone(180, 260, 0.06, volume, "square");
 }
 
 export function playDeafenOnSound(): void {
-  const { soundsEnabled, masterVolume } = useVoiceStore.getState();
-  if (!soundsEnabled) return;
-  const volume = masterVolume / 100;
+  const volume = sfxVolume("app");
+  if (volume === null) return;
   // Two-tone descending — distinct from mute's single blip.
   playTone(320, 320, 0.05, volume, "sine");
   setTimeout(() => playTone(200, 200, 0.07, volume, "sine"), 55);
 }
 
 export function playDeafenOffSound(): void {
-  const { soundsEnabled, masterVolume } = useVoiceStore.getState();
-  if (!soundsEnabled) return;
-  const volume = masterVolume / 100;
+  const volume = sfxVolume("app");
+  if (volume === null) return;
   playTone(200, 200, 0.05, volume, "sine");
   setTimeout(() => playTone(320, 320, 0.07, volume, "sine"), 55);
 }
@@ -161,10 +157,10 @@ export function playNotificationSound(): void {
   const manualStatus = useAuthStore.getState().manualStatus;
   if (manualStatus === "dnd" || manualStatus === "offline") return;
 
-  const { soundsEnabled, masterVolume } = useVoiceStore.getState();
-  if (!soundsEnabled) return;
-
-  const volume = (masterVolume / 100) * 0.6;
+  const base = sfxVolume("notification");
+  if (base === null) return;
+  // Notifications use 0.6 of the computed volume so they're a touch quieter than other SFX.
+  const volume = base * 0.6;
   playTone(800, 900, 0.06, volume);
   setTimeout(() => playTone(900, 1000, 0.06, volume), 70);
 }
