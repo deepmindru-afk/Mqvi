@@ -3626,6 +3626,9 @@ button.ch-tree-vu-stream svg { width:14px;height:14px; }
   .channel-settings-wrapper { flex-direction:column;height:auto; }
   .role-list { width:100%;border-right:none;border-bottom:1px solid var(--b1);max-height:180px; }
   .channel-settings-right { padding:16px; }
+  .lk-edit-layout { flex-direction:column;height:auto; }
+  .lk-edit-form { width:100%;min-width:0;padding:16px;border-right:none;border-bottom:1px solid var(--bg3); }
+  .lk-edit-monitoring { padding:16px; }
   .metrics-grid { grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px; }
   .metrics-card { padding:10px; }
   .metrics-card-value { font-size:17px; }
