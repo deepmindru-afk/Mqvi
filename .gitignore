@@ -58,6 +58,7 @@ native/*.obj
 # OS
 # ========================
 .DS_Store
+Icon?
 Thumbs.db
 desktop.ini
 
