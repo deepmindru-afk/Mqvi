@@ -95,7 +95,6 @@ function LandingPage() {
           <div className="lp-text-frost lp-text-frost--center lp-hero-copy">
             {totalUsers > 0 && (
               <div className="lp-hero-user-count">
-                <div className="lp-hero-user-dot" />
                 {t("hero_userCount", { count: totalUsers })}
               </div>
             )}

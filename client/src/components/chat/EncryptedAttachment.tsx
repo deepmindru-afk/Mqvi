@@ -1,13 +1,17 @@
 /**
  * EncryptedAttachment — displays E2EE encrypted file attachments.
  * Downloads encrypted file from server, decrypts with AES-256-GCM.
- * Images auto-decrypt on mount; files decrypt on click.
+ * Images auto-decrypt on mount so the thumbnail can render inline; clicking
+ * any attachment opens the in-app FileViewerOverlay with the decrypted blob
+ * URL. The component owns the blob URL lifecycle: it stays mounted while the
+ * surrounding message is rendered, and revokes on unmount.
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { decryptFile } from "../../crypto/fileEncryption";
 import { resolveAssetUrl } from "../../utils/constants";
+import { useFileViewerStore } from "../../stores/fileViewerStore";
 import type { EncryptedFileMeta } from "../../crypto/fileEncryption";
 import type { ChatAttachment } from "../../hooks/useChatContext";
 
@@ -21,6 +25,7 @@ type EncryptedAttachmentProps = {
 
 function EncryptedAttachment({ attachment, fileMeta }: EncryptedAttachmentProps) {
   const { t } = useTranslation("e2ee");
+  const openViewer = useFileViewerStore((s) => s.open);
   const [state, setState] = useState<DecryptState>("idle");
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const revokeRef = useRef<string | null>(null);
@@ -37,17 +42,16 @@ function EncryptedAttachment({ attachment, fileMeta }: EncryptedAttachmentProps)
     };
   }, []);
 
-  const doDecrypt = useCallback(async () => {
-    if (state === "loading" || state === "ready") return;
+  const doDecrypt = useCallback(async (): Promise<string | null> => {
+    if (state === "ready" && objectUrl) return objectUrl;
+    if (state === "loading") return null;
 
     setState("loading");
     try {
       const url = resolveAssetUrl(attachment.file_url);
       const decryptedFile = await decryptFile(url, fileMeta);
-
       const blobUrl = URL.createObjectURL(decryptedFile);
 
-      // Revoke previous URL
       if (revokeRef.current) {
         URL.revokeObjectURL(revokeRef.current);
       }
@@ -55,18 +59,31 @@ function EncryptedAttachment({ attachment, fileMeta }: EncryptedAttachmentProps)
 
       setObjectUrl(blobUrl);
       setState("ready");
+      return blobUrl;
     } catch (err) {
       console.error("[EncryptedAttachment] Decrypt failed:", err);
       setState("error");
+      return null;
     }
-  }, [attachment.file_url, fileMeta, state]);
+  }, [attachment.file_url, fileMeta, state, objectUrl]);
 
-  // Auto-decrypt images on mount
+  // Auto-decrypt images on mount for inline thumbnail.
   useEffect(() => {
     if (isImage && state === "idle") {
       doDecrypt();
     }
   }, [isImage, state, doDecrypt]);
+
+  const openInViewer = useCallback(async () => {
+    const url = state === "ready" && objectUrl ? objectUrl : await doDecrypt();
+    if (!url) return;
+    openViewer({
+      src: url,
+      filename: fileMeta.filename,
+      mime: fileMeta.mimeType,
+      size: fileMeta.originalSize,
+    });
+  }, [state, objectUrl, doDecrypt, openViewer, fileMeta]);
 
   // ─── Image rendering ───
   if (isImage) {
@@ -96,56 +113,29 @@ function EncryptedAttachment({ attachment, fileMeta }: EncryptedAttachmentProps)
       );
     }
 
-    // ready — show decrypted image
+    // ready — show decrypted image, click opens viewer
     return (
-      <a href={objectUrl!} target="_blank" rel="noopener noreferrer">
+      <button
+        type="button"
+        className="msg-attachment-imgbtn"
+        onClick={openInViewer}
+        aria-label={fileMeta.filename}
+      >
         <img
           src={objectUrl!}
           alt={fileMeta.filename}
           className="msg-attachment-img"
           loading="lazy"
         />
-      </a>
+      </button>
     );
   }
 
   // ─── File rendering ───
-  const handleFileClick = async (e: React.MouseEvent) => {
-    e.preventDefault();
-
-    if (state === "ready" && objectUrl) {
-      // Already decrypted — start download
-      triggerDownload(objectUrl, fileMeta.filename);
-      return;
-    }
-
-    if (state === "loading") return;
-
-    // Decrypt and download
-    setState("loading");
-    try {
-      const url = resolveAssetUrl(attachment.file_url);
-      const decryptedFile = await decryptFile(url, fileMeta);
-      const blobUrl = URL.createObjectURL(decryptedFile);
-
-      if (revokeRef.current) {
-        URL.revokeObjectURL(revokeRef.current);
-      }
-      revokeRef.current = blobUrl;
-
-      setObjectUrl(blobUrl);
-      setState("ready");
-      triggerDownload(blobUrl, fileMeta.filename);
-    } catch (err) {
-      console.error("[EncryptedAttachment] Decrypt failed:", err);
-      setState("error");
-    }
-  };
-
   return (
-    <a
-      href="#"
-      onClick={handleFileClick}
+    <button
+      type="button"
+      onClick={openInViewer}
       className="msg-attachment-file"
     >
       <EncryptedFileIcon />
@@ -159,7 +149,7 @@ function EncryptedAttachment({ attachment, fileMeta }: EncryptedAttachmentProps)
               : formatFileSize(fileMeta.originalSize)}
         </p>
       </div>
-    </a>
+    </button>
   );
 }
 
@@ -182,16 +172,6 @@ function EncryptedFileIcon() {
       />
     </svg>
   );
-}
-
-/** Programmatic file download */
-function triggerDownload(url: string, filename: string) {
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
 }
 
 /** Format file size to human-readable string (1024 → "1.0 KB") */

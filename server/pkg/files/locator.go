@@ -8,6 +8,7 @@
 //	dm/<dmMessageID>/<filename>
 //	avatars/<userID>/<filename>
 //	wallpapers/<userID>/<filename>
+//	badges/global/<filename>
 //	soundboards/<serverID>/<filename>
 //	server-icons/<serverID>/<filename>
 //	feedback/<ticketID>/<filename>
@@ -46,10 +47,12 @@ const (
 	KindDM         Kind = "dm"
 	KindAvatar     Kind = "avatars"
 	KindWallpaper  Kind = "wallpapers"
+	KindBadge      Kind = "badges"
 	KindSoundboard Kind = "soundboards"
 	KindServerIcon Kind = "server-icons"
 	KindFeedback   Kind = "feedback"
 	KindReport     Kind = "reports"
+	KindVoiceMsg   Kind = "voice-messages"
 )
 
 // validKinds is used by the serve endpoint to reject unknown path segments.
@@ -58,10 +61,12 @@ var validKinds = map[Kind]bool{
 	KindDM:         true,
 	KindAvatar:     true,
 	KindWallpaper:  true,
+	KindBadge:      true,
 	KindSoundboard: true,
 	KindServerIcon: true,
 	KindFeedback:   true,
 	KindReport:     true,
+	KindVoiceMsg:   true,
 }
 
 // IsValidKind reports whether s is a recognized upload kind.

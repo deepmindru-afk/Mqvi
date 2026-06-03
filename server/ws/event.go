@@ -75,9 +75,14 @@ const (
 	OpUserUnblock = "user_unblock"
 
 	// Voice operations
-	OpVoiceStateUpdate       = "voice_state_update"
-	OpVoiceStatesSync        = "voice_states_sync"
-	OpScreenShareViewerUpdate = "screen_share_viewer_update"
+	OpVoiceStateUpdate            = "voice_state_update"
+	OpVoiceStatesSync             = "voice_states_sync"
+	OpVoiceChannelTimerStart      = "voice_channel_timer_start" // first user joined → call started
+	OpVoiceChannelTimerStop       = "voice_channel_timer_stop"  // last user left → call ended
+	OpVoiceMessageCreate          = "voice_message_create"      // ephemeral voice chat message sent
+	OpVoiceMessageUpdate          = "voice_message_update"      // ephemeral voice chat message edited
+	OpVoiceMessageDelete          = "voice_message_delete"      // ephemeral voice chat message deleted
+	OpScreenShareViewerUpdate     = "screen_share_viewer_update"
 
 	// Friend operations
 	OpFriendRequestCreate  = "friend_request_create"
@@ -233,7 +238,25 @@ type VoiceStateUpdateBroadcast struct {
 
 // VoiceStatesSyncData — bulk voice state sync sent on connection.
 type VoiceStatesSyncData struct {
-	States []VoiceStateItem `json:"states"`
+	States        []VoiceStateItem `json:"states"`
+	ChannelTimers map[string]int64 `json:"channel_timers"` // channelID → start time (Unix ms)
+}
+
+// VoiceChannelTimerStartData — channel went from 0 → 1 participant; clients render duration from started_at.
+type VoiceChannelTimerStartData struct {
+	ChannelID string `json:"channel_id"`
+	StartedAt int64  `json:"started_at"` // Unix ms
+}
+
+// VoiceChannelTimerStopData — channel emptied; clients clear the duration display.
+type VoiceChannelTimerStopData struct {
+	ChannelID string `json:"channel_id"`
+}
+
+// VoiceMessageDeleteData — id + channel_id so clients can locate the row.
+type VoiceMessageDeleteData struct {
+	ID        string `json:"id"`
+	ChannelID string `json:"channel_id"`
 }
 
 // VoiceStateItem mirrors models.VoiceState without creating a ws -> models dependency.

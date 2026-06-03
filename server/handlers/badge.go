@@ -2,18 +2,13 @@
 package handlers
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/akinalp/mqvi/models"
 	"github.com/akinalp/mqvi/pkg"
+	"github.com/akinalp/mqvi/pkg/files"
 	"github.com/akinalp/mqvi/services"
 )
 
@@ -22,12 +17,12 @@ const badgeIconMaxSize = 2 << 20 // 2MB
 // BadgeHandler handles badge management endpoints.
 type BadgeHandler struct {
 	badgeService services.BadgeService
-	uploadDir    string
+	pipeline     services.UploadPipeline
 }
 
 // NewBadgeHandler creates a new BadgeHandler.
-func NewBadgeHandler(badgeService services.BadgeService, uploadDir string) *BadgeHandler {
-	return &BadgeHandler{badgeService: badgeService, uploadDir: uploadDir}
+func NewBadgeHandler(badgeService services.BadgeService, pipeline services.UploadPipeline) *BadgeHandler {
+	return &BadgeHandler{badgeService: badgeService, pipeline: pipeline}
 }
 
 // ListBadges handles GET /api/badges
@@ -190,6 +185,7 @@ func (h *BadgeHandler) UploadBadgeIcon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	limitMultipartBody(w, r, badgeIconMaxSize, 1)
 	if err := r.ParseMultipartForm(badgeIconMaxSize); err != nil {
 		pkg.ErrorWithMessage(w, http.StatusBadRequest, "failed to parse multipart form")
 		return
@@ -209,40 +205,16 @@ func (h *BadgeHandler) UploadBadgeIcon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate filename
-	randBytes := make([]byte, 8)
-	_, _ = rand.Read(randBytes)
-	ext := filepath.Ext(header.Filename)
-	if ext == "" {
-		ext = mimeToExt(mime)
+	if !strings.Contains(header.Filename, ".") {
+		header.Filename += mimeToExt(mime)
 	}
-	filename := fmt.Sprintf("badge_%s%s", hex.EncodeToString(randBytes), ext)
-
-	// Ensure badges subdirectory exists
-	badgesDir := filepath.Join(h.uploadDir, "badges")
-	if err := os.MkdirAll(badgesDir, 0o755); err != nil {
-		pkg.ErrorWithMessage(w, http.StatusInternalServerError, "failed to create badges directory")
-		return
-	}
-
-	// Write file
-	destPath := filepath.Join(badgesDir, filename)
-	dest, err := os.Create(destPath)
+	stored, err := h.pipeline.Store(r.Context(), files.KindBadge, "global", file, header, badgeIconMaxSize)
 	if err != nil {
-		pkg.ErrorWithMessage(w, http.StatusInternalServerError, "failed to save icon")
-		return
-	}
-	defer dest.Close()
-
-	if _, err := io.Copy(dest, file); err != nil {
-		pkg.ErrorWithMessage(w, http.StatusInternalServerError, "failed to write icon")
+		pkg.Error(w, err)
 		return
 	}
 
-	// Return URL path relative to upload dir (served by static file handler)
-	urlPath := "/uploads/badges/" + filename
-
-	pkg.JSON(w, http.StatusCreated, map[string]string{"url": urlPath})
+	pkg.JSON(w, http.StatusCreated, map[string]string{"url": stored.RelativeURL})
 }
 
 var allowedBadgeIconMimes = map[string]bool{

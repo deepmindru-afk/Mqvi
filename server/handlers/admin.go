@@ -26,6 +26,7 @@ type AdminHandler struct {
 	adminServerService    services.AdminServerService
 	reportService         services.ReportService
 	appLogService         services.AppLogService
+	badgeService          services.SettingsBadgeService
 	screenShareStats      ScreenShareStatsProvider
 }
 
@@ -36,6 +37,7 @@ func NewAdminHandler(
 	adminServerService services.AdminServerService,
 	reportService services.ReportService,
 	appLogService services.AppLogService,
+	badgeService services.SettingsBadgeService,
 	screenShareStats ScreenShareStatsProvider,
 ) *AdminHandler {
 	return &AdminHandler{
@@ -45,8 +47,53 @@ func NewAdminHandler(
 		adminServerService:    adminServerService,
 		reportService:         reportService,
 		appLogService:         appLogService,
+		badgeService:          badgeService,
 		screenShareStats:      screenShareStats,
 	}
+}
+
+// GetBadges -- GET /api/admin/badges
+// Returns whether the current admin has unseen feedback or reports.
+func (h *AdminHandler) GetBadges(w http.ResponseWriter, r *http.Request) {
+	admin, ok := r.Context().Value(UserContextKey).(*models.User)
+	if !ok {
+		pkg.ErrorWithMessage(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	state, err := h.badgeService.GetAdminBadges(r.Context(), admin)
+	if err != nil {
+		pkg.Error(w, err)
+		return
+	}
+	pkg.JSON(w, http.StatusOK, state)
+}
+
+// MarkFeedbackSeen -- POST /api/admin/feedback/mark-seen
+func (h *AdminHandler) MarkFeedbackSeen(w http.ResponseWriter, r *http.Request) {
+	admin, ok := r.Context().Value(UserContextKey).(*models.User)
+	if !ok {
+		pkg.ErrorWithMessage(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if err := h.badgeService.MarkFeedbackSeen(r.Context(), admin.ID); err != nil {
+		pkg.Error(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// MarkReportsSeen -- POST /api/admin/reports/mark-seen
+func (h *AdminHandler) MarkReportsSeen(w http.ResponseWriter, r *http.Request) {
+	admin, ok := r.Context().Value(UserContextKey).(*models.User)
+	if !ok {
+		pkg.ErrorWithMessage(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if err := h.badgeService.MarkReportsSeen(r.Context(), admin.ID); err != nil {
+		pkg.Error(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ListAppLogs -- GET /api/admin/logs

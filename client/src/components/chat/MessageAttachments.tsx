@@ -2,7 +2,8 @@
 
 import { resolveAssetUrl } from "../../utils/constants";
 import EncryptedAttachment from "./EncryptedAttachment";
-import type { ChatMessage } from "../../hooks/useChatContext";
+import { useFileViewerStore } from "../../stores/fileViewerStore";
+import type { ChatAttachment, ChatMessage } from "../../hooks/useChatContext";
 
 type MessageAttachmentsProps = {
   message: ChatMessage;
@@ -10,7 +11,17 @@ type MessageAttachmentsProps = {
 
 function MessageAttachments({ message }: MessageAttachmentsProps) {
   const attachments = message.attachments;
+  const openViewer = useFileViewerStore((s) => s.open);
   if (!attachments || attachments.length === 0) return null;
+
+  function open(att: ChatAttachment) {
+    openViewer({
+      src: resolveAssetUrl(att.file_url),
+      filename: att.filename,
+      mime: att.mime_type ?? "",
+      size: att.file_size ?? null,
+    });
+  }
 
   return (
     <div className="msg-attachments">
@@ -38,11 +49,12 @@ function MessageAttachments({ message }: MessageAttachmentsProps) {
 
         if (isImage) {
           return (
-            <a
+            <button
               key={attachment.id}
-              href={resolveAssetUrl(attachment.file_url)}
-              target="_blank"
-              rel="noopener noreferrer"
+              type="button"
+              className="msg-attachment-imgbtn"
+              onClick={() => open(attachment)}
+              aria-label={attachment.filename}
             >
               <img
                 src={resolveAssetUrl(attachment.file_url)}
@@ -50,11 +62,13 @@ function MessageAttachments({ message }: MessageAttachmentsProps) {
                 className="msg-attachment-img"
                 loading="lazy"
               />
-            </a>
+            </button>
           );
         }
 
         if (isVideo) {
+          // Inline player: plays in place, no new tab. Native controls expose
+          // fullscreen + "save video as" so an overlay handoff is unnecessary.
           return (
             <video
               key={attachment.id}
@@ -79,10 +93,10 @@ function MessageAttachments({ message }: MessageAttachmentsProps) {
         }
 
         return (
-          <a
+          <button
             key={attachment.id}
-            href={resolveAssetUrl(attachment.file_url)}
-            download={attachment.filename}
+            type="button"
+            onClick={() => open(attachment)}
             className="msg-attachment-file"
           >
             <svg
@@ -108,7 +122,7 @@ function MessageAttachments({ message }: MessageAttachmentsProps) {
                 </p>
               )}
             </div>
-          </a>
+          </button>
         );
       })}
     </div>

@@ -2,11 +2,8 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"mime/multipart"
-	"os"
 	"strings"
 
 	"github.com/akinalp/mqvi/models"
@@ -24,18 +21,18 @@ type UploadService interface {
 
 type uploadService struct {
 	attachmentRepo repository.AttachmentRepository
-	locator        *files.Locator
+	pipeline       UploadPipeline
 	maxSize        int64
 }
 
 func NewUploadService(
 	attachmentRepo repository.AttachmentRepository,
-	locator *files.Locator,
+	pipeline UploadPipeline,
 	maxSize int64,
 ) UploadService {
 	return &uploadService{
 		attachmentRepo: attachmentRepo,
-		locator:        locator,
+		pipeline:       pipeline,
 		maxSize:        maxSize,
 	}
 }
@@ -58,35 +55,22 @@ func (s *uploadService) Upload(ctx context.Context, messageID string, file multi
 	// No upload-time MIME restriction — serve-time handles XSS prevention.
 	_ = isEncrypted
 
-	diskFilename, err := files.GenerateDiskFilename(header.Filename)
+	stored, err := s.pipeline.Store(ctx, files.KindMessage, messageID, file, header, s.maxSize)
 	if err != nil {
 		return nil, err
 	}
 
-	relURL, err := s.locator.SaveFile(files.KindMessage, messageID, diskFilename, func(dst *os.File) error {
-		if _, err := io.Copy(dst, file); err != nil {
-			return fmt.Errorf("failed to save file: %w", err)
-		}
-		return nil
-	})
-	if err != nil {
-		if errors.Is(err, files.ErrInvalidSegment) {
-			return nil, fmt.Errorf("%w: %v", pkg.ErrBadRequest, err)
-		}
-		return nil, err
-	}
-
-	fileSize := header.Size
+	fileSize := stored.Size
 	attachment := &models.Attachment{
 		MessageID: messageID,
 		Filename:  header.Filename,
-		FileURL:   relURL,
+		FileURL:   stored.RelativeURL,
 		FileSize:  &fileSize,
 		MimeType:  &mimeBase,
 	}
 
 	if err := s.attachmentRepo.Create(ctx, attachment); err != nil {
-		s.locator.DeleteFromURL(relURL)
+		s.pipeline.DeleteFromURL(stored.RelativeURL)
 		return nil, fmt.Errorf("failed to create attachment record: %w", err)
 	}
 

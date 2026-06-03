@@ -2,11 +2,8 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"mime/multipart"
-	"os"
 	"strings"
 
 	"github.com/akinalp/mqvi/models"
@@ -21,20 +18,20 @@ type DMUploadService interface {
 }
 
 type dmUploadService struct {
-	dmRepo  repository.DMRepository
-	locator *files.Locator
-	maxSize int64
+	dmRepo   repository.DMRepository
+	pipeline UploadPipeline
+	maxSize  int64
 }
 
 func NewDMUploadService(
 	dmRepo repository.DMRepository,
-	locator *files.Locator,
+	pipeline UploadPipeline,
 	maxSize int64,
 ) DMUploadService {
 	return &dmUploadService{
-		dmRepo:  dmRepo,
-		locator: locator,
-		maxSize: maxSize,
+		dmRepo:   dmRepo,
+		pipeline: pipeline,
+		maxSize:  maxSize,
 	}
 }
 
@@ -53,35 +50,22 @@ func (s *dmUploadService) Upload(ctx context.Context, dmMessageID string, file m
 	// No upload-time MIME restriction — serve-time handles XSS prevention.
 	_ = isEncrypted
 
-	diskFilename, err := files.GenerateDiskFilename(header.Filename)
+	stored, err := s.pipeline.Store(ctx, files.KindDM, dmMessageID, file, header, s.maxSize)
 	if err != nil {
 		return nil, err
 	}
 
-	relURL, err := s.locator.SaveFile(files.KindDM, dmMessageID, diskFilename, func(dst *os.File) error {
-		if _, err := io.Copy(dst, file); err != nil {
-			return fmt.Errorf("failed to save file: %w", err)
-		}
-		return nil
-	})
-	if err != nil {
-		if errors.Is(err, files.ErrInvalidSegment) {
-			return nil, fmt.Errorf("%w: %v", pkg.ErrBadRequest, err)
-		}
-		return nil, err
-	}
-
-	fileSize := header.Size
+	fileSize := stored.Size
 	attachment := &models.DMAttachment{
 		DMMessageID: dmMessageID,
 		Filename:    header.Filename,
-		FileURL:     relURL,
+		FileURL:     stored.RelativeURL,
 		FileSize:    &fileSize,
 		MimeType:    &mimeBase,
 	}
 
 	if err := s.dmRepo.CreateAttachment(ctx, attachment); err != nil {
-		s.locator.DeleteFromURL(relURL)
+		s.pipeline.DeleteFromURL(stored.RelativeURL)
 		return nil, fmt.Errorf("failed to create DM attachment record: %w", err)
 	}
 

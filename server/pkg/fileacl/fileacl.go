@@ -102,7 +102,7 @@ func (c *Checker) Check(ctx context.Context, user *models.User, filePath string)
 	scopeID := parts[1]
 
 	switch files.Kind(kind) {
-	case files.KindAvatar, files.KindWallpaper, files.KindServerIcon:
+	case files.KindAvatar, files.KindWallpaper, files.KindServerIcon, files.KindBadge:
 		// Accessible to any authenticated user
 		return nil
 

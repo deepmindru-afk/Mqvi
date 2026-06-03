@@ -14,6 +14,8 @@ type EmailSender interface {
 	SendPlatformBanNotification(ctx context.Context, toEmail, reason string) error
 	SendAccountDeleteNotification(ctx context.Context, toEmail, reason string) error
 	SendServerDeleteNotification(ctx context.Context, toEmail, serverName, reason string) error
+	SendNewFeedbackNotification(ctx context.Context, toEmail, ticketType, subject, fromUsername string) error
+	SendNewReportNotification(ctx context.Context, toEmail, reporterUsername, reportedUsername, reason string) error
 }
 
 type resendSender struct {
@@ -254,5 +256,81 @@ func (s *resendSender) SendServerDeleteNotification(ctx context.Context, toEmail
 		return fmt.Errorf("failed to send server delete notification: %w", err)
 	}
 
+	return nil
+}
+
+func (s *resendSender) SendNewFeedbackNotification(ctx context.Context, toEmail, ticketType, subject, fromUsername string) error {
+	adminLink := s.appURL + "/channels"
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background-color:#1a1a2e;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%%" cellpadding="0" cellspacing="0" style="background-color:#1a1a2e;padding:40px 0;"><tr><td align="center">
+    <table width="480" cellpadding="0" cellspacing="0" style="background-color:#16213e;border-radius:8px;padding:40px;"><tr><td>
+      <h1 style="color:#e2e8f0;font-size:24px;margin:0 0 8px 0;">mqvi</h1>
+      <h2 style="color:#e2e8f0;font-size:18px;margin:0 0 24px 0;">New Feedback Received</h2>
+      <table cellpadding="0" cellspacing="0" style="width:100%%;margin:0 0 16px 0;">
+        <tr><td style="background-color:#1e293b;border-radius:6px;padding:16px;border-left:4px solid #3b82f6;">
+          <p style="color:#64748b;font-size:13px;margin:0 0 4px 0;font-weight:600;">Type</p>
+          <p style="color:#e2e8f0;font-size:15px;line-height:1.6;margin:0 0 12px 0;">%s</p>
+          <p style="color:#64748b;font-size:13px;margin:0 0 4px 0;font-weight:600;">Subject</p>
+          <p style="color:#e2e8f0;font-size:15px;line-height:1.6;margin:0 0 12px 0;">%s</p>
+          <p style="color:#64748b;font-size:13px;margin:0 0 4px 0;font-weight:600;">From</p>
+          <p style="color:#e2e8f0;font-size:15px;line-height:1.6;margin:0;">@%s</p>
+        </td></tr>
+      </table>
+      <p style="color:#94a3b8;font-size:13px;line-height:1.6;margin:0;">
+        Open <a href="%s" style="color:#6366f1;">mqvi</a> and check the Feedback panel in admin settings.
+      </p>
+    </td></tr></table>
+  </td></tr></table>
+</body></html>`, ticketType, subject, fromUsername, adminLink)
+
+	params := &resend.SendEmailRequest{
+		From:    fmt.Sprintf("mqvi <%s>", s.fromEmail),
+		To:      []string{toEmail},
+		Subject: "New Feedback — mqvi",
+		Html:    html,
+	}
+	_, err := s.client.Emails.SendWithContext(ctx, params)
+	if err != nil {
+		return fmt.Errorf("send feedback notification: %w", err)
+	}
+	return nil
+}
+
+func (s *resendSender) SendNewReportNotification(ctx context.Context, toEmail, reporterUsername, reportedUsername, reason string) error {
+	adminLink := s.appURL + "/channels"
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background-color:#1a1a2e;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%%" cellpadding="0" cellspacing="0" style="background-color:#1a1a2e;padding:40px 0;"><tr><td align="center">
+    <table width="480" cellpadding="0" cellspacing="0" style="background-color:#16213e;border-radius:8px;padding:40px;"><tr><td>
+      <h1 style="color:#e2e8f0;font-size:24px;margin:0 0 8px 0;">mqvi</h1>
+      <h2 style="color:#e2e8f0;font-size:18px;margin:0 0 24px 0;">New User Report</h2>
+      <table cellpadding="0" cellspacing="0" style="width:100%%;margin:0 0 16px 0;">
+        <tr><td style="background-color:#1e293b;border-radius:6px;padding:16px;border-left:4px solid #ef4444;">
+          <p style="color:#64748b;font-size:13px;margin:0 0 4px 0;font-weight:600;">Reporter</p>
+          <p style="color:#e2e8f0;font-size:15px;line-height:1.6;margin:0 0 12px 0;">@%s</p>
+          <p style="color:#64748b;font-size:13px;margin:0 0 4px 0;font-weight:600;">Reported User</p>
+          <p style="color:#e2e8f0;font-size:15px;line-height:1.6;margin:0 0 12px 0;">@%s</p>
+          <p style="color:#64748b;font-size:13px;margin:0 0 4px 0;font-weight:600;">Reason</p>
+          <p style="color:#e2e8f0;font-size:15px;line-height:1.6;margin:0;">%s</p>
+        </td></tr>
+      </table>
+      <p style="color:#94a3b8;font-size:13px;line-height:1.6;margin:0;">
+        Open <a href="%s" style="color:#6366f1;">mqvi</a> and check the Reports panel in admin settings.
+      </p>
+    </td></tr></table>
+  </td></tr></table>
+</body></html>`, reporterUsername, reportedUsername, reason, adminLink)
+
+	params := &resend.SendEmailRequest{
+		From:    fmt.Sprintf("mqvi <%s>", s.fromEmail),
+		To:      []string{toEmail},
+		Subject: "New User Report — mqvi",
+		Html:    html,
+	}
+	_, err := s.client.Emails.SendWithContext(ctx, params)
+	if err != nil {
+		return fmt.Errorf("send report notification: %w", err)
+	}
 	return nil
 }

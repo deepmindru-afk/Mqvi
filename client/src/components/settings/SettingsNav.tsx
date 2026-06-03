@@ -1,9 +1,11 @@
 /** Settings sidebar navigation. Server Settings visible only to authorized users. */
 
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useActiveMembers } from "../../stores/memberStore";
+import { useSettingsBadgeStore } from "../../stores/settingsBadgeStore";
 import { hasPermission, Permissions } from "../../utils/permissions";
 import { useIsMobile } from "../../hooks/useMediaQuery";
 import { isElectron } from "../../utils/constants";
@@ -61,6 +63,16 @@ function SettingsNav() {
 
   const isPlatformAdmin = user?.is_platform_admin ?? false;
 
+  const hasNewFeedback = useSettingsBadgeStore((s) => s.hasNewFeedback);
+  const hasNewReports = useSettingsBadgeStore((s) => s.hasNewReports);
+  const hasNewMyFeedbackReply = useSettingsBadgeStore((s) => s.hasNewMyFeedbackReply);
+  const refreshAdmin = useSettingsBadgeStore((s) => s.refreshAdmin);
+  const refreshMyFeedback = useSettingsBadgeStore((s) => s.refreshMyFeedback);
+  useEffect(() => {
+    if (isPlatformAdmin) refreshAdmin();
+    refreshMyFeedback();
+  }, [isPlatformAdmin, refreshAdmin, refreshMyFeedback]);
+
   const canSeeServerSettings =
     hasPermission(perms, Permissions.Admin) ||
     hasPermission(perms, Permissions.ManageChannels) ||
@@ -72,15 +84,19 @@ function SettingsNav() {
     <nav className="settings-nav">
       {/* User Settings */}
       <h3 className="settings-nav-label">{t("userSettings")}</h3>
-      {USER_ITEMS.map((item) => (
-        <button
-          key={item.id}
-          className={`settings-nav-item${activeTab === item.id ? " active" : ""}`}
-          onClick={() => setActiveTab(item.id)}
-        >
-          {t(item.labelKey)}
-        </button>
-      ))}
+      {USER_ITEMS.map((item) => {
+        const showDot = item.id === "feedback" && hasNewMyFeedbackReply;
+        return (
+          <button
+            key={item.id}
+            className={`settings-nav-item${activeTab === item.id ? " active" : ""}`}
+            onClick={() => setActiveTab(item.id)}
+          >
+            <span className="settings-nav-item-label">{t(item.labelKey)}</span>
+            {showDot && <span className="settings-nav-badge-dot" aria-hidden="true" />}
+          </button>
+        );
+      })}
       {/* General (Desktop Settings) — Electron only */}
       {isElectron() && (
         <button
@@ -115,15 +131,21 @@ function SettingsNav() {
           <h3 className="settings-nav-label">{t("platformSettings")}</h3>
           {PLATFORM_ITEMS
             .filter((item) => item.id !== "platform-connections" || isElectron())
-            .map((item) => (
-              <button
-                key={item.id}
-                className={`settings-nav-item${activeTab === item.id ? " active" : ""}`}
-                onClick={() => setActiveTab(item.id)}
-              >
-                {t(item.labelKey)}
-              </button>
-            ))}
+            .map((item) => {
+              const showDot =
+                (item.id === "platform-reports" && hasNewReports) ||
+                (item.id === "platform-feedback" && hasNewFeedback);
+              return (
+                <button
+                  key={item.id}
+                  className={`settings-nav-item${activeTab === item.id ? " active" : ""}`}
+                  onClick={() => setActiveTab(item.id)}
+                >
+                  <span className="settings-nav-item-label">{t(item.labelKey)}</span>
+                  {showDot && <span className="settings-nav-badge-dot" aria-hidden="true" />}
+                </button>
+              );
+            })}
         </>
       )}
 
@@ -138,7 +160,7 @@ function SettingsNav() {
 
       {/* App Version — desktop only */}
       {!isMobile && (
-        <p className="settings-nav-version">mqvi v2.12.0</p>
+        <p className="settings-nav-version">mqvi v2.15.0</p>
       )}
     </nav>
   );

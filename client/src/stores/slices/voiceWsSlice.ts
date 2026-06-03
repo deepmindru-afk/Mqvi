@@ -16,6 +16,12 @@ export type VoiceWsSlice = {
 
   handleVoiceStateUpdate: (data: VoiceStateUpdateData) => void;
   handleVoiceStatesSync: (states: VoiceState[]) => void;
+  /** Replace all channel timers (called on voice_states_sync to populate fresh state). */
+  applyChannelTimers: (timers: Record<string, number>) => void;
+  /** Server says channel went 0 → 1 participant. */
+  handleVoiceChannelTimerStart: (channelId: string, startedAt: number) => void;
+  /** Server says channel went to 0 participants. */
+  handleVoiceChannelTimerStop: (channelId: string) => void;
   updateUserInfo: (userId: string, displayName: string, avatarUrl: string) => void;
   handleForceDisconnect: () => void;
   handleAFKKick: (channelName: string, serverName: string) => void;
@@ -119,6 +125,25 @@ export const createVoiceWsSlice: StateCreator<
     }
 
     set({ voiceStates: grouped });
+  },
+
+  applyChannelTimers: (timers: Record<string, number>) => {
+    set({ channelTimers: { ...timers } });
+  },
+
+  handleVoiceChannelTimerStart: (channelId, startedAt) => {
+    set((state) => ({
+      channelTimers: { ...state.channelTimers, [channelId]: startedAt },
+    }));
+  },
+
+  handleVoiceChannelTimerStop: (channelId) => {
+    set((state) => {
+      if (!(channelId in state.channelTimers)) return state;
+      const next = { ...state.channelTimers };
+      delete next[channelId];
+      return { channelTimers: next };
+    });
   },
 
   updateUserInfo: (userId, displayName, avatarUrl) => {

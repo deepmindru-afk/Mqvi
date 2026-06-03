@@ -35,8 +35,11 @@ func TestVerify_TamperedSig(t *testing.T) {
 	s := NewSigner(testKey(), nil)
 	signed := s.Sign("/api/files/messages/m1/a.png", time.Hour)
 
-	// Flip last char of sig
-	tampered := signed[:len(signed)-1] + "X"
+	idx := strings.Index(signed, "&sig=")
+	if idx < 0 {
+		t.Fatalf("expected signed URL to contain &sig=, got %q", signed)
+	}
+	tampered := signed[:idx+len("&sig=")] + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 	if err := s.VerifyURL(tampered); !errors.Is(err, ErrInvalidSig) {
 		t.Fatalf("tampered sig accepted: %v", err)
 	}

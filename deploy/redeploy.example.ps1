@@ -63,16 +63,17 @@ Write-Host "[3/5] Stopping server..." -ForegroundColor Yellow
 ssh $Server "pkill -9 -f livekit-server; pkill -9 -f mqvi-server; sleep 1"
 Write-Host "  OK - Server stopped" -ForegroundColor Green
 
-# --- Upload binary ---
+# --- Upload binary + start script ---
 Write-Host ""
-Write-Host "[4/5] Uploading binary..." -ForegroundColor Yellow
+Write-Host "[4/5] Uploading binary and start script..." -ForegroundColor Yellow
 $binaryPath = Join-Path $ScriptDir "package\mqvi-server"
-scp $binaryPath "${Server}:${RemotePath}/mqvi-server"
+$startScriptPath = Join-Path $ScriptDir "start.sh"
+scp $binaryPath $startScriptPath "${Server}:${RemotePath}/"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "  ERROR: SCP failed!" -ForegroundColor Red
     exit 1
 }
-Write-Host "  OK - Binary uploaded" -ForegroundColor Green
+Write-Host "  OK - Files uploaded" -ForegroundColor Green
 
 # --- Start server ---
 Write-Host ""

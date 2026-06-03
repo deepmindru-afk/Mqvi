@@ -48,6 +48,7 @@ export async function encryptFilesForE2EE(
 export function handleRateLimitError(res: {
   success: boolean;
   error?: string;
+  code?: string;
 }): boolean {
   if (!res.success && res.error?.includes("too many")) {
     useToastStore
@@ -56,6 +57,30 @@ export function handleRateLimitError(res: {
     return true;
   }
   return false;
+}
+
+export function handleSendError(res: {
+  success: boolean;
+  error?: string;
+  code?: string;
+}): boolean {
+  if (res.success) return false;
+  if (handleRateLimitError(res)) return true;
+
+  const err = res.error?.toLowerCase() ?? "";
+  let key = "chat:sendFailed";
+  if (res.code === "upload_infected" || err.includes("failed security scan")) {
+    key = "chat:uploadRejectedInfected";
+  } else if (res.code === "upload_scan_unavailable" || err.includes("security scan is temporarily unavailable")) {
+    key = "chat:uploadScanUnavailable";
+  } else if (res.code === "upload_too_large_scan" || err.includes("too large for security scan")) {
+    key = "chat:uploadTooLargeScan";
+  } else if (res.code === "upload_too_large") {
+    key = "chat:uploadTooLarge";
+  }
+
+  useToastStore.getState().addToast("error", i18n.t(key));
+  return true;
 }
 
 // ─── Typing Indicator ───

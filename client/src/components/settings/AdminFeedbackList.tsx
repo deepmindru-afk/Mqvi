@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 
 import { useTranslation } from "react-i18next";
 import { useToastStore } from "../../stores/toastStore";
+import { useSettingsBadgeStore } from "../../stores/settingsBadgeStore";
 import {
   adminListFeedbackTickets,
   adminGetFeedbackTicket,
@@ -53,6 +54,12 @@ function AdminFeedbackList() {
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
+
+  // Clear the admin "new feedback" badge once this panel is viewed.
+  const clearFeedbackBadge = useSettingsBadgeStore((s) => s.clearFeedback);
+  useEffect(() => {
+    clearFeedbackBadge();
+  }, [clearFeedbackBadge]);
 
   const openTicket = async (ticketId: string) => {
     const res = await adminGetFeedbackTicket(ticketId);

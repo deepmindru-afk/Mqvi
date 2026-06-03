@@ -76,8 +76,15 @@ func (s *voiceService) JoinChannel(userID, username, displayName, avatarURL, cha
 			},
 		})
 
+		if s.countInChannelLocked(oldChannelID) == 0 {
+			s.stopChannelTimerLocked(oldChannelID, oldServerID)
+		}
+
 		s.cleanupRoomPassphraseIfEmpty(oldChannelID)
 	}
+
+	// Capture before insertion so we can detect the 0 → 1 transition.
+	newChannelWasEmpty := s.countInChannelLocked(channelID) == 0
 
 	s.states[userID] = &models.VoiceState{
 		UserID:       userID,
@@ -104,6 +111,10 @@ func (s *voiceService) JoinChannel(userID, username, displayName, avatarURL, cha
 			Action:      "join",
 		},
 	})
+
+	if newChannelWasEmpty {
+		s.startChannelTimerLocked(channelID, serverID, time.Now())
+	}
 
 	s.mu.Unlock()
 
@@ -184,6 +195,10 @@ func (s *voiceService) LeaveChannel(userID string) error {
 		}
 	}
 
+	if s.countInChannelLocked(channelID) == 0 {
+		s.stopChannelTimerLocked(channelID, serverID)
+	}
+
 	// Clean up E2EE passphrase if room is empty (forward secrecy)
 	s.cleanupRoomPassphraseIfEmpty(channelID)
 
@@ -262,6 +277,80 @@ func (s *voiceService) UpdateState(userID string, isMuted, isDeafened, isStreami
 	}
 
 	return nil
+}
+
+// UpdateUserProfile refreshes the cached profile of a user's active voice state
+// after a profile change, so voice_states_sync on reconnect serves the current
+// avatar/name instead of a now-deleted old avatar file. No-op if not in voice.
+func (s *voiceService) UpdateUserProfile(userID, username, displayName, avatarURL string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, ok := s.states[userID]
+	if !ok {
+		return
+	}
+	state.Username = username
+	state.DisplayName = displayName
+	state.AvatarURL = avatarURL // unsigned — signed at broadcast egress
+}
+
+// ─── Channel timer helpers (caller holds s.mu) ───
+
+// countInChannelLocked returns the number of users currently in channelID.
+func (s *voiceService) countInChannelLocked(channelID string) int {
+	n := 0
+	for _, st := range s.states {
+		if st.ChannelID == channelID {
+			n++
+		}
+	}
+	return n
+}
+
+// startChannelTimerLocked marks the channel as active and broadcasts the start
+// event. No-op if already running.
+func (s *voiceService) startChannelTimerLocked(channelID, serverID string, now time.Time) {
+	if _, exists := s.channelStartedAt[channelID]; exists {
+		return
+	}
+	s.channelStartedAt[channelID] = now
+	s.broadcastToServer(serverID, ws.Event{
+		Op: ws.OpVoiceChannelTimerStart,
+		Data: ws.VoiceChannelTimerStartData{
+			ChannelID: channelID,
+			StartedAt: now.UnixMilli(),
+		},
+	})
+}
+
+// stopChannelTimerLocked clears an active timer and broadcasts the stop event.
+// No-op if no timer was running. Also fires the channel-empty callback (async)
+// so dependent state — e.g. ephemeral voice chat — can be cleaned up.
+func (s *voiceService) stopChannelTimerLocked(channelID, serverID string) {
+	if _, exists := s.channelStartedAt[channelID]; !exists {
+		return
+	}
+	delete(s.channelStartedAt, channelID)
+	s.broadcastToServer(serverID, ws.Event{
+		Op: ws.OpVoiceChannelTimerStop,
+		Data: ws.VoiceChannelTimerStopData{ChannelID: channelID},
+	})
+	if s.onChannelEmpty != nil {
+		go s.onChannelEmpty(channelID)
+	}
+}
+
+// GetActiveChannelTimers returns a snapshot of active channel start times (Unix ms).
+// Used by the WS sync handler to populate clients on reconnect.
+func (s *voiceService) GetActiveChannelTimers() map[string]int64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[string]int64, len(s.channelStartedAt))
+	for cid, t := range s.channelStartedAt {
+		out[cid] = t.UnixMilli()
+	}
+	return out
 }
 
 // ─── Query Methods ───

@@ -3,7 +3,9 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/akinalp/mqvi/database"
 	"github.com/akinalp/mqvi/models"
@@ -242,4 +244,48 @@ func (r *sqliteFeedbackRepo) GetAttachmentsByTicketID(ctx context.Context, ticke
 		atts = append(atts, a)
 	}
 	return atts, nil
+}
+
+func (r *sqliteFeedbackRepo) LatestCreatedAt(ctx context.Context) (*time.Time, error) {
+	var s sql.NullString
+	err := r.db.QueryRowContext(ctx, `SELECT MAX(created_at) FROM feedback_tickets`).Scan(&s)
+	if errors.Is(err, sql.ErrNoRows) || !s.Valid {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("feedback latest created_at: %w", err)
+	}
+	return parseSQLiteTimestamp(s.String)
+}
+
+func (r *sqliteFeedbackRepo) LatestAdminReplyForUser(ctx context.Context, userID string) (*time.Time, error) {
+	var s sql.NullString
+	err := r.db.QueryRowContext(ctx,
+		`SELECT MAX(r.created_at) FROM feedback_replies r
+		 JOIN feedback_tickets t ON t.id = r.ticket_id
+		 WHERE t.user_id = ? AND r.is_admin = 1`,
+		userID,
+	).Scan(&s)
+	if errors.Is(err, sql.ErrNoRows) || !s.Valid {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("feedback latest admin reply: %w", err)
+	}
+	return parseSQLiteTimestamp(s.String)
+}
+
+// parseSQLiteTimestamp handles the formats modernc.org/sqlite returns for
+// aggregate function results (MAX, MIN), which arrive as strings rather than
+// time.Time. Tries RFC3339 first, then SQLite's default TEXT format.
+func parseSQLiteTimestamp(value string) (*time.Time, error) {
+	if value == "" {
+		return nil, nil
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02 15:04:05.999999999", "2006-01-02 15:04:05"} {
+		if t, err := time.Parse(layout, value); err == nil {
+			return &t, nil
+		}
+	}
+	return nil, fmt.Errorf("unrecognized timestamp format: %q", value)
 }

@@ -13,6 +13,28 @@ import type { VoiceStore } from "../voiceStore";
 export type InputMode = "voice_activity" | "push_to_talk";
 export type ScreenShareQuality = "720p" | "1080p";
 
+/** Configurable keyboard shortcut. `code` is KeyboardEvent.code (layout-agnostic). */
+export type ShortcutBinding = {
+  code: string;
+  ctrl: boolean;
+  shift: boolean;
+  alt: boolean;
+};
+
+export const DEFAULT_MUTE_SHORTCUT: ShortcutBinding = {
+  code: "KeyM",
+  ctrl: true,
+  shift: true,
+  alt: false,
+};
+
+export const DEFAULT_DEAFEN_SHORTCUT: ShortcutBinding = {
+  code: "KeyD",
+  ctrl: true,
+  shift: true,
+  alt: false,
+};
+
 export type VoiceSettings = {
   inputMode: InputMode;
   pttKey: string;
@@ -23,11 +45,17 @@ export type VoiceSettings = {
   masterVolume: number;
   inputVolume: number;
   soundsEnabled: boolean;
+  /** Multiplier applied on top of masterVolume for notification sounds (messages, DMs, calls, mentions). */
+  notificationVolume: number;
+  /** Multiplier applied on top of masterVolume for in-app SFX (mute/deafen, join/leave, watch start/stop). */
+  appSoundVolume: number;
   localMutedUsers: Record<string, boolean>;
   noiseReduction: boolean;
   screenShareVolumes: Record<string, number>;
   screenShareAudio: boolean;
   screenShareQuality: ScreenShareQuality;
+  muteShortcut: ShortcutBinding;
+  deafenShortcut: ShortcutBinding;
 };
 
 const STORAGE_KEY = "mqvi_voice_settings";
@@ -42,11 +70,15 @@ export const DEFAULT_SETTINGS: VoiceSettings = {
   masterVolume: 100,
   inputVolume: 100,
   soundsEnabled: true,
+  notificationVolume: 100,
+  appSoundVolume: 100,
   localMutedUsers: {},
   noiseReduction: true,
   screenShareVolumes: {},
   screenShareAudio: false,
   screenShareQuality: "720p",
+  muteShortcut: DEFAULT_MUTE_SHORTCUT,
+  deafenShortcut: DEFAULT_DEAFEN_SHORTCUT,
 };
 
 /** Loads voice settings from localStorage with partial merge (new keys get defaults). */
@@ -82,11 +114,15 @@ function currentSettings(s: VoiceSettings): VoiceSettings {
     masterVolume: s.masterVolume,
     inputVolume: s.inputVolume,
     soundsEnabled: s.soundsEnabled,
+    notificationVolume: s.notificationVolume,
+    appSoundVolume: s.appSoundVolume,
     localMutedUsers: s.localMutedUsers,
     noiseReduction: s.noiseReduction,
     screenShareVolumes: s.screenShareVolumes,
     screenShareAudio: s.screenShareAudio,
     screenShareQuality: s.screenShareQuality,
+    muteShortcut: s.muteShortcut,
+    deafenShortcut: s.deafenShortcut,
   };
 }
 
@@ -104,9 +140,13 @@ export type VoiceSettingsSlice = VoiceSettings & {
   setMasterVolume: (value: number) => void;
   setInputVolume: (value: number) => void;
   setSoundsEnabled: (enabled: boolean) => void;
+  setNotificationVolume: (value: number) => void;
+  setAppSoundVolume: (value: number) => void;
   setScreenShareAudio: (enabled: boolean) => void;
   setScreenShareQuality: (quality: ScreenShareQuality) => void;
   setNoiseReduction: (enabled: boolean) => void;
+  setMuteShortcut: (binding: ShortcutBinding) => void;
+  setDeafenShortcut: (binding: ShortcutBinding) => void;
   toggleLocalMute: (userId: string) => void;
   applyFromServer: (settings: Record<string, unknown>) => void;
 };
@@ -129,11 +169,15 @@ export const createVoiceSettingsSlice: StateCreator<
     masterVolume: initial.masterVolume,
     inputVolume: initial.inputVolume,
     soundsEnabled: initial.soundsEnabled,
+    notificationVolume: initial.notificationVolume,
+    appSoundVolume: initial.appSoundVolume,
     localMutedUsers: initial.localMutedUsers,
     noiseReduction: initial.noiseReduction,
     screenShareVolumes: initial.screenShareVolumes,
     screenShareAudio: initial.screenShareAudio,
     screenShareQuality: initial.screenShareQuality,
+    muteShortcut: initial.muteShortcut,
+    deafenShortcut: initial.deafenShortcut,
     preMuteVolumes: {},
 
     setInputMode: (mode) => {
@@ -186,6 +230,16 @@ export const createVoiceSettingsSlice: StateCreator<
       saveSettings(currentSettings(get()));
     },
 
+    setNotificationVolume: (value) => {
+      set({ notificationVolume: value });
+      saveSettings(currentSettings(get()));
+    },
+
+    setAppSoundVolume: (value) => {
+      set({ appSoundVolume: value });
+      saveSettings(currentSettings(get()));
+    },
+
     setScreenShareAudio: (enabled) => {
       set({ screenShareAudio: enabled });
       saveSettings(currentSettings(get()));
@@ -198,6 +252,16 @@ export const createVoiceSettingsSlice: StateCreator<
 
     setNoiseReduction: (enabled) => {
       set({ noiseReduction: enabled });
+      saveSettings(currentSettings(get()));
+    },
+
+    setMuteShortcut: (binding) => {
+      set({ muteShortcut: binding });
+      saveSettings(currentSettings(get()));
+    },
+
+    setDeafenShortcut: (binding) => {
+      set({ deafenShortcut: binding });
       saveSettings(currentSettings(get()));
     },
 
@@ -257,11 +321,15 @@ export const createVoiceSettingsSlice: StateCreator<
         masterVolume: merged.masterVolume,
         inputVolume: merged.inputVolume,
         soundsEnabled: merged.soundsEnabled,
+        notificationVolume: merged.notificationVolume,
+        appSoundVolume: merged.appSoundVolume,
         screenShareAudio: merged.screenShareAudio,
         screenShareQuality: merged.screenShareQuality,
         localMutedUsers: merged.localMutedUsers,
         noiseReduction: merged.noiseReduction,
         screenShareVolumes: merged.screenShareVolumes,
+        muteShortcut: merged.muteShortcut,
+        deafenShortcut: merged.deafenShortcut,
       });
     },
   };

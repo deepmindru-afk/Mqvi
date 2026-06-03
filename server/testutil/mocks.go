@@ -180,6 +180,11 @@ func (m *MockUserRepo) SetPlatformAdmin(ctx context.Context, userID string, isAd
 	}
 	return nil
 }
+func (m *MockUserRepo) MarkFeedbackSeen(_ context.Context, _ string) error { return nil }
+func (m *MockUserRepo) MarkReportsSeen(_ context.Context, _ string) error  { return nil }
+func (m *MockUserRepo) ListPlatformAdminEmails(_ context.Context) ([]string, error) {
+	return nil, nil
+}
 func (m *MockUserRepo) UpdatePrefStatus(_ context.Context, _ string, _ models.UserStatus) error {
 	return nil
 }
@@ -676,6 +681,12 @@ func (m *MockEmailSender) SendServerDeleteNotification(ctx context.Context, toEm
 	if m.SendServerDeleteNotificationFn != nil {
 		return m.SendServerDeleteNotificationFn(ctx, toEmail, serverName, reason)
 	}
+	return nil
+}
+func (m *MockEmailSender) SendNewFeedbackNotification(_ context.Context, _, _, _, _ string) error {
+	return nil
+}
+func (m *MockEmailSender) SendNewReportNotification(_ context.Context, _, _, _, _ string) error {
 	return nil
 }
 

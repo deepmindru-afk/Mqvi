@@ -184,6 +184,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   writeClipboard: (text: string): Promise<void> =>
     ipcRenderer.invoke("write-clipboard", text),
 
+  /** Seconds since last OS-level input — for idle detection across the whole system */
+  getSystemIdleTime: (): Promise<number> =>
+    ipcRenderer.invoke("get-system-idle-time"),
+
   // ─── Event listeners (main → renderer) ───
 
   /** Update available */

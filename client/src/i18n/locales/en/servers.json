@@ -79,6 +79,7 @@
   "inviteJoinTitle": "You've been invited to join a server",
   "backToApp": "Back to App",
   "copyInviteLink": "Copy Invite Link",
+  "copyLink": "Copy Link",
   "copyInviteLinkHint": "Share this link via WhatsApp, Telegram, etc.",
   "inviteLinkCopied": "Invite link copied to clipboard",
   "inviteCopyFailed": "Could not copy to clipboard"

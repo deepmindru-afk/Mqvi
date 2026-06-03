@@ -18,7 +18,7 @@ import {
 import { encodePayload } from "../crypto/e2eePayload";
 import {
   encryptFilesForE2EE,
-  handleRateLimitError,
+  handleSendError,
 } from "./shared/messageUtils";
 import {
   createDMSettingsSlice,
@@ -223,7 +223,7 @@ export const useDMStore = create<DMStore>((set, get, store) => ({
 
           if (!res.success) {
             discardLastSentPlaintext(channelId);
-            handleRateLimitError(res);
+            handleSendError(res);
           }
 
           return res.success;
@@ -234,7 +234,7 @@ export const useDMStore = create<DMStore>((set, get, store) => ({
           const errMsg = err instanceof Error ? err.message : "";
           if (errMsg === "RECIPIENT_NO_KEYS") {
             const fallbackRes = await dmApi.sendDMMessage(channelId, content, files, replyToId);
-            handleRateLimitError(fallbackRes);
+            handleSendError(fallbackRes);
             return fallbackRes.success;
           }
           useToastStore.getState().addToast("error", i18n.t("e2ee:encryptionFailed"));
@@ -244,7 +244,7 @@ export const useDMStore = create<DMStore>((set, get, store) => ({
     }
 
     const res = await dmApi.sendDMMessage(channelId, content, files, replyToId);
-    handleRateLimitError(res);
+    handleSendError(res);
     return res.success;
   },
 

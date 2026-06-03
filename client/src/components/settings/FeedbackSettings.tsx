@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useToastStore } from "../../stores/toastStore";
+import { useSettingsBadgeStore } from "../../stores/settingsBadgeStore";
 import {
   createFeedbackTicket,
   listMyFeedbackTickets,
@@ -92,6 +93,11 @@ function FeedbackSettings() {
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
+
+  const clearMyFeedbackBadge = useSettingsBadgeStore((s) => s.clearMyFeedback);
+  useEffect(() => {
+    clearMyFeedbackBadge();
+  }, [clearMyFeedbackBadge]);
 
   const handleSubmit = async () => {
     if (!formSubject.trim() || !formContent.trim()) return;

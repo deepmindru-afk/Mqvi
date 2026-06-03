@@ -51,9 +51,15 @@ type VoiceService interface {
 	JoinChannel(userID, username, displayName, avatarURL, channelID string, isMuted, isDeafened bool) error
 	LeaveChannel(userID string) error
 	UpdateState(userID string, isMuted, isDeafened, isStreaming *bool) error
+	UpdateUserProfile(userID, username, displayName, avatarURL string)
 	GetChannelParticipants(channelID string) []models.VoiceState
 	GetUserVoiceState(userID string) *models.VoiceState
 	GetAllVoiceStates() []models.VoiceState
+	GetActiveChannelTimers() map[string]int64 // channelID → start time (Unix ms)
+	// SetOnChannelEmpty installs a callback fired (in a goroutine) whenever the
+	// channel transitions to zero participants. Used by voiceMessageService to
+	// purge the ephemeral chat for that channel.
+	SetOnChannelEmpty(fn func(channelID string))
 	DisconnectUser(userID string)
 	GetStreamCount(channelID string) int
 	AdminUpdateState(ctx context.Context, adminUserID, targetUserID string, isServerMuted, isServerDeafened *bool) error
@@ -94,6 +100,8 @@ type voiceService struct {
 	screenShareViewers map[string]map[string]bool    // streamerUserID -> set of viewerUserIDs
 	forceMoveGrants    map[string]forceMoveGrant     // userID -> one-time bypass (consumed on token gen)
 	offlineSince       map[string]time.Time          // userID -> first seen offline (grace period tracking)
+	channelStartedAt   map[string]time.Time          // channelID -> moment the channel went from 0→1 participant
+	onChannelEmpty     func(string)                  // optional callback fired (async) on N→0 — installed via SetOnChannelEmpty
 	mu                 sync.RWMutex
 
 	channelGetter    ChannelGetter
@@ -123,6 +131,7 @@ func NewVoiceService(
 		screenShareViewers: make(map[string]map[string]bool),
 		forceMoveGrants:    make(map[string]forceMoveGrant),
 		offlineSince:       make(map[string]time.Time),
+		channelStartedAt:   make(map[string]time.Time),
 		channelGetter:      channelGetter,
 		livekitGetter:      livekitGetter,
 		permResolver:       permResolver,
@@ -136,6 +145,12 @@ func NewVoiceService(
 
 func (s *voiceService) SetAppLogger(logger VoiceAppLogger) {
 	s.appLogger = logger
+}
+
+// SetOnChannelEmpty installs a callback fired (in a goroutine) on N→0 transitions.
+// Set once at wiring time; not safe to call concurrently with voice operations.
+func (s *voiceService) SetOnChannelEmpty(fn func(channelID string)) {
+	s.onChannelEmpty = fn
 }
 
 // logError writes a structured error log if appLogger is set.

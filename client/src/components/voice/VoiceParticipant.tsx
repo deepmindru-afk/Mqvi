@@ -18,7 +18,7 @@ import type { Participant } from "livekit-client";
 import { useVoiceStore } from "../../stores/voiceStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useSoundboardStore } from "../../stores/soundboardStore";
-import { IconHeadphonesMuted, IconSpeakerMuted } from "../shared/Icons";
+import { IconHeadphonesMuted, IconMicMuted } from "../shared/Icons";
 import VoiceUserContextMenu from "./VoiceUserContextMenu";
 import { resolveAssetUrl } from "../../utils/constants";
 
@@ -103,7 +103,7 @@ function VoiceParticipant({ participant, compact = false }: VoiceParticipantProp
     <div className="voice-participant-overlay">
       {isDeafened
         ? <IconHeadphonesMuted strokeWidth={2.5} />
-        : <IconSpeakerMuted strokeWidth={2.5} />
+        : <IconMicMuted strokeWidth={2.5} />
       }
     </div>
   ) : null;

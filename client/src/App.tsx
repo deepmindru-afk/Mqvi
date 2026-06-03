@@ -14,6 +14,7 @@ import TermsPage from "./components/landing/TermsPage";
 import InviteJoinPage from "./components/servers/InviteJoinPage";
 import UpdateNotification from "./components/shared/UpdateNotification";
 import CustomTitleBar from "./components/layout/CustomTitleBar";
+import FileViewerOverlay from "./components/viewers/FileViewerOverlay";
 import { useUpdateChecker } from "./hooks/useUpdateChecker";
 import { isElectron, isNativeApp } from "./utils/constants";
 
@@ -143,11 +144,17 @@ function App() {
         <CustomTitleBar />
         {updateBanner}
         {routes}
+        <FileViewerOverlay />
       </div>
     );
   }
 
-  return routes;
+  return (
+    <>
+      {routes}
+      <FileViewerOverlay />
+    </>
+  );
 }
 
 export default App;

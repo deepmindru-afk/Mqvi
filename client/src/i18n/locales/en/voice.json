@@ -13,6 +13,8 @@
   "screenShareVolume": "Screen Share Volume",
   "voiceChannelFull": "This voice channel is full",
   "connectingToVoice": "Connecting...",
+  "chatShow": "Show voice chat",
+  "chatHide": "Hide voice chat",
   "reconnectingToVoice": "Reconnecting...",
   "voiceDisconnected": "Voice disconnected",
   "joinVoicePrompt": "Click to join this voice channel",

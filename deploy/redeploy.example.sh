@@ -73,11 +73,11 @@ echo "[3/5] Stopping server..."
 ssh "$SERVER" "pkill -9 -f livekit-server; pkill -9 -f mqvi-server; sleep 1" || true
 echo "  OK - Server stopped"
 
-# --- Upload binary ---
+# --- Upload binary + start script ---
 echo ""
-echo "[4/5] Uploading binary..."
-scp "$SCRIPT_DIR/package/mqvi-server" "$SERVER:$REMOTE_PATH/mqvi-server"
-echo "  OK - Binary uploaded"
+echo "[4/5] Uploading binary and start script..."
+scp "$SCRIPT_DIR/package/mqvi-server" "$SCRIPT_DIR/start.sh" "$SERVER:$REMOTE_PATH/"
+echo "  OK - Files uploaded"
 
 # --- Start server ---
 echo ""

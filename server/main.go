@@ -24,6 +24,7 @@ import (
 	"github.com/akinalp/mqvi/pkg/fileacl"
 	"github.com/akinalp/mqvi/pkg/files"
 	"github.com/akinalp/mqvi/pkg/i18n"
+	"github.com/akinalp/mqvi/pkg/ratelimit"
 	"github.com/akinalp/mqvi/pkg/signedurl"
 	"github.com/akinalp/mqvi/repository"
 	"github.com/akinalp/mqvi/services"
@@ -141,7 +142,8 @@ func main() {
 	initRoutes(mux, h, svcs.Auth, repos.User, repos.Role, repos.Server, fileSigner, fileACL)
 
 	// 14. Static file serving
-	registerFileEndpoint(mux, cfg, fileSigner, svcs.Auth, repos.User, fileACL)
+	fileLimiter := ratelimit.NewFileRateLimiter(cfg.FileRateLimit.UserPerMin, cfg.FileRateLimit.IPPerMin)
+	registerFileEndpoint(mux, cfg, fileSigner, svcs.Auth, repos.User, fileACL, fileLimiter)
 
 	// 15. SPA frontend serving
 	frontendFS, hasFrontend := initFrontendFS()
@@ -213,8 +215,10 @@ func main() {
 	srv := &http.Server{
 		Addr:         cfg.Server.Addr(),
 		Handler:      securedHandler,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		// 5 min accommodates large file uploads on slow connections.
+		// MaxBytesReader on multipart endpoints still caps the body size.
+		ReadTimeout:  5 * time.Minute,
+		WriteTimeout: 5 * time.Minute,
 		IdleTimeout:  60 * time.Second,
 	}
 
@@ -235,6 +239,7 @@ func main() {
 	svcs.Cleanup.Stop()
 	svcs.AppLog.Stop()
 	metricsCollector.Stop()
+	fileLimiter.Stop()
 	hub.Shutdown()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -401,6 +406,7 @@ func registerFileEndpoint(
 	authService services.AuthService,
 	userRepo repository.UserRepository,
 	fileACL *fileacl.Checker,
+	fileLimiter *ratelimit.FileRateLimiter,
 ) {
 	fileLocator := files.NewLocator(cfg.Upload.Dir, cfg.Upload.PublicURL)
 	filesHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -413,12 +419,20 @@ func registerFileEndpoint(
 		signedPath := files.URLPathPrefix + "/" + after
 
 		sigOK := signer.Verify(signedPath, r.URL.Query().Get("exp"), r.URL.Query().Get("sig")) == nil
+		var userID string
 
 		if !sigOK {
-			if !authorizeByJWT(r, signedPath, authService, userRepo, fileACL) {
+			user, ok := authorizeByJWT(r, signedPath, authService, userRepo, fileACL)
+			if !ok {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
+			userID = user.ID
+		}
+
+		if ok, retry := fileLimiter.Allow(userID, ratelimit.ExtractIP(r)); !ok {
+			fileLimiter.HandleLimit(w, retry)
+			return
 		}
 
 		disk, err := fileLocator.ResolveServePath(after)
@@ -630,13 +644,13 @@ func authorizeByJWT(
 	authService services.AuthService,
 	userRepo repository.UserRepository,
 	fileACL *fileacl.Checker,
-) bool {
+) (*models.User, bool) {
 	for _, token := range readJWTTokens(r) {
-		if checkFileToken(r, token, signedPath, authService, userRepo, fileACL) {
-			return true
+		if user, ok := checkFileToken(r, token, signedPath, authService, userRepo, fileACL); ok {
+			return user, true
 		}
 	}
-	return false
+	return nil, false
 }
 
 func checkFileToken(
@@ -645,26 +659,42 @@ func checkFileToken(
 	authService services.AuthService,
 	userRepo repository.UserRepository,
 	fileACL *fileacl.Checker,
-) bool {
+) (*models.User, bool) {
+	user, ok := fileUserFromToken(r, token, authService, userRepo)
+	if !ok {
+		return nil, false
+	}
+	if fileACL.Check(r.Context(), user, signedPath) != nil {
+		return nil, false
+	}
+	return user, true
+}
+
+func fileUserFromToken(
+	r *http.Request,
+	token string,
+	authService services.AuthService,
+	userRepo repository.UserRepository,
+) (*models.User, bool) {
 	claims, err := authService.ValidateFileToken(token)
 	if err != nil {
-		return false
+		return nil, false
 	}
 	user, err := userRepo.GetActiveByID(r.Context(), claims.UserID)
 	if err != nil || user == nil {
-		return false
+		return nil, false
 	}
 	if user.DeletedAt != nil {
-		return false
+		return nil, false
 	}
 	if user.IsPlatformBanned {
-		return false
+		return nil, false
 	}
 	if claims.TokenVersion != user.TokenVersion {
-		return false
+		return nil, false
 	}
 	user.PasswordHash = ""
-	return fileACL.Check(r.Context(), user, signedPath) == nil
+	return user, true
 }
 
 func readJWTTokens(r *http.Request) []string {

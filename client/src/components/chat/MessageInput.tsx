@@ -437,7 +437,9 @@ function MessageInput({ openSearch }: MessageInputProps) {
 
   const placeholder = mode === "dm"
     ? t("dmPlaceholder", { user: channelName })
-    : t("messagePlaceholder", { channel: channelName });
+    : mode === "voice"
+      ? t("voicePlaceholder", { channel: channelName })
+      : t("messagePlaceholder", { channel: channelName });
 
   return (
     <div className="input-area">
@@ -466,6 +468,13 @@ function MessageInput({ openSearch }: MessageInputProps) {
       )}
 
       <FilePreview files={files} onRemove={handleFileRemove} />
+
+      {isSending && files.length > 0 && (
+        <div className="input-sending-status">
+          <span className="input-sending-spinner" />
+          <span>{t("sendingFiles")}</span>
+        </div>
+      )}
 
       <div className="input-box">
         <button

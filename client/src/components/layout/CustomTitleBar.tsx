@@ -9,11 +9,15 @@
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useAuthStore } from "../../stores/authStore";
+import { useSettingsStore } from "../../stores/settingsStore";
 
 function CustomTitleBar() {
   const { t } = useTranslation("settings");
   const [isMaximized, setIsMaximized] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
+  const user = useAuthStore((s) => s.user);
+  const openSettings = useSettingsStore((s) => s.openSettings);
 
   useEffect(() => {
     const api = window.electronAPI;
@@ -54,6 +58,15 @@ function CustomTitleBar() {
       )}
 
       <div className="titlebar-controls">
+        {user && (
+          <button
+            className="titlebar-text-btn"
+            onClick={() => openSettings("feedback")}
+          >
+            {t("feedback")}
+          </button>
+        )}
+
         <button className="titlebar-btn" onClick={handleMinimize}>
           <svg width="10" height="1" viewBox="0 0 10 1">
             <rect width="10" height="1" fill="currentColor" />

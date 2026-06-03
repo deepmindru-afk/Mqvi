@@ -96,6 +96,9 @@ interface ElectronAPI {
   /** Clipboard write via main process IPC — always works */
   writeClipboard: (text: string) => Promise<void>;
 
+  /** Seconds since last OS-level input (mouse/keyboard anywhere). For idle detection across apps. */
+  getSystemIdleTime: () => Promise<number>;
+
   onUpdateAvailable: (cb: (info: ElectronUpdateInfo) => void) => void;
   onUpdateProgress: (cb: (progress: ElectronDownloadProgress) => void) => void;
   onUpdateDownloaded: (cb: () => void) => void;

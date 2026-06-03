@@ -47,6 +47,7 @@ type Handlers struct {
 	Soundboard        *handlers.SoundboardHandler
 	Storage           *handlers.StorageHandler
 	LiveKitWebhook    *handlers.LiveKitWebhookHandler
+	VoiceMessage      *handlers.VoiceMessageHandler
 	WS                *ws.Handler
 }
 
@@ -69,9 +70,9 @@ func initHandlers(svcs *Services, repos *Repositories, limiters *RateLimiters, h
 		Reaction:          handlers.NewReactionHandler(svcs.Reaction),
 		ChannelPermission: handlers.NewChannelPermissionHandler(svcs.ChannelPermission),
 		Friendship:        handlers.NewFriendshipHandler(svcs.Friendship),
-		Avatar:            handlers.NewAvatarHandler(repos.User, svcs.Member, svcs.Server, fileLocator, urlSigner),
+		Avatar:            handlers.NewAvatarHandler(repos.User, svcs.Member, svcs.Server, fileLocator, svcs.UploadPipeline, urlSigner),
 		Stats:             handlers.NewStatsHandler(repos.User),
-		Admin:             handlers.NewAdminHandler(svcs.LiveKitAdmin, svcs.MetricsHistory, svcs.AdminUser, svcs.AdminServer, svcs.Report, svcs.AppLog, svcs.Voice),
+		Admin:             handlers.NewAdminHandler(svcs.LiveKitAdmin, svcs.MetricsHistory, svcs.AdminUser, svcs.AdminServer, svcs.Report, svcs.AppLog, svcs.SettingsBadge, svcs.Voice),
 		ServerMute:        handlers.NewServerMuteHandler(svcs.ServerMute),
 		ChannelMute:       handlers.NewChannelMuteHandler(svcs.ChannelMute),
 		DMSettings:        handlers.NewDMSettingsHandler(svcs.DMSettings),
@@ -81,13 +82,14 @@ func initHandlers(svcs *Services, repos *Repositories, limiters *RateLimiters, h
 		Device:            handlers.NewDeviceHandler(svcs.Device),
 		E2EE:              handlers.NewE2EEHandler(svcs.E2EE),
 		LinkPreview:       handlers.NewLinkPreviewHandler(svcs.LinkPreview),
-		Badge:             handlers.NewBadgeHandler(svcs.Badge, cfg.Upload.Dir),
+		Badge:             handlers.NewBadgeHandler(svcs.Badge, svcs.UploadPipeline),
 		Preferences:       handlers.NewPreferencesHandler(svcs.Preferences),
 		DownloadPrompt:    handlers.NewDownloadPromptHandler(repos.User),
-		Feedback:          handlers.NewFeedbackHandler(svcs.Feedback, svcs.FeedbackUpload, svcs.Storage, cfg.Upload.MaxSize, limiters.Feedback, svcs.AppLog, urlSigner),
+		Feedback:          handlers.NewFeedbackHandler(svcs.Feedback, svcs.FeedbackUpload, svcs.Storage, svcs.SettingsBadge, cfg.Upload.MaxSize, limiters.Feedback, svcs.AppLog, urlSigner),
 		Soundboard:        handlers.NewSoundboardHandler(svcs.Soundboard, svcs.Storage, cfg.Upload.MaxSize, urlSigner),
 		Storage:           handlers.NewStorageHandler(svcs.Storage),
 		LiveKitWebhook:    handlers.NewLiveKitWebhookHandler(repos.LiveKit, encryptionKey, svcs.AppLog),
+		VoiceMessage:      handlers.NewVoiceMessageHandler(svcs.VoiceMessage, svcs.UploadPipeline, urlSigner, limiters.Message, cfg.Upload.MaxSize),
 		WS:                ws.NewHandler(hub, svcs.Auth, nil, svcs.Voice, repos.User, repos.Server, svcs.ServerMute, svcs.ChannelMute, urlSigner),
 	}
 }

@@ -15,7 +15,9 @@ import {
   Menu,
   nativeImage,
   desktopCapturer,
+  powerMonitor,
   safeStorage,
+  shell,
 } from "electron";
 import { autoUpdater } from "electron-updater";
 import { uIOhook, UiohookKey } from "uiohook-napi";
@@ -364,6 +366,51 @@ function createWindow(): void {
     }
   });
 
+  // Open external links (http/https/mailto/tel) in the OS default browser
+  // instead of inside the Electron window. SPA routing uses history.pushState
+  // which doesn't fire will-navigate, so app navigation is unaffected.
+  const isExternalUrl = (url: string): boolean => {
+    try {
+      const u = new URL(url);
+      if (!["http:", "https:", "mailto:", "tel:"].includes(u.protocol)) return false;
+      if (isDev && u.origin === "http://localhost:3030") return false;
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isExternalUrl(url)) {
+      shell.openExternal(url).catch(() => {});
+    }
+    return { action: "deny" };
+  });
+
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (isExternalUrl(url)) {
+      event.preventDefault();
+      shell.openExternal(url).catch(() => {});
+    }
+  });
+
+  // Right-click on images shows Copy/Save options. Other targets get no menu.
+  mainWindow.webContents.on("context-menu", (_event, params) => {
+    if (params.mediaType !== "image" || !mainWindow) return;
+    const win = mainWindow;
+    const menu = Menu.buildFromTemplate([
+      {
+        label: "Copy image",
+        click: () => win.webContents.copyImageAt(params.x, params.y),
+      },
+      {
+        label: "Save image as…",
+        click: () => win.webContents.downloadURL(params.srcURL),
+      },
+    ]);
+    menu.popup({ window: win });
+  });
+
   // ─── Close-to-Tray ───
   // isQuitting=true always closes; otherwise hide if closeToTray is enabled
   mainWindow.on("close", (e) => {
@@ -520,6 +567,10 @@ function setupFileAuthInjection(): void {
 function setupIPC(): void {
   // App version from package.json
   ipcMain.handle("get-version", () => app.getVersion());
+
+  // Seconds since last OS-level input (mouse/keyboard anywhere on the system).
+  // Lets idle detection respect activity in other apps (games, browsers, etc.).
+  ipcMain.handle("get-system-idle-time", () => powerMonitor.getSystemIdleTime());
 
   // Relaunch app — used by ConnectionSettings
   ipcMain.handle("relaunch", () => {

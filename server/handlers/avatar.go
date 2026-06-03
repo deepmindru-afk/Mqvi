@@ -7,9 +7,7 @@ package handlers
 import (
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/akinalp/mqvi/models"
@@ -34,6 +32,7 @@ type AvatarHandler struct {
 	memberService services.MemberService
 	serverService services.ServerService
 	locator       *files.Locator
+	pipeline      services.UploadPipeline
 	urlSigner     services.FileURLSigner
 }
 
@@ -42,6 +41,7 @@ func NewAvatarHandler(
 	memberService services.MemberService,
 	serverService services.ServerService,
 	locator *files.Locator,
+	pipeline services.UploadPipeline,
 	urlSigner services.FileURLSigner,
 ) *AvatarHandler {
 	return &AvatarHandler{
@@ -49,6 +49,7 @@ func NewAvatarHandler(
 		memberService: memberService,
 		serverService: serverService,
 		locator:       locator,
+		pipeline:      pipeline,
 		urlSigner:     urlSigner,
 	}
 }
@@ -63,7 +64,7 @@ func (h *AvatarHandler) UploadUserAvatar(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	fileURL, err := h.processUpload(r, files.KindAvatar, user.ID)
+	fileURL, err := h.processUpload(w, r, files.KindAvatar, user.ID)
 	if err != nil {
 		pkg.Error(w, err)
 		return
@@ -94,7 +95,7 @@ func (h *AvatarHandler) UploadUserWallpaper(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	fileURL, err := h.processUpload(r, files.KindWallpaper, user.ID)
+	fileURL, err := h.processUpload(w, r, files.KindWallpaper, user.ID)
 	if err != nil {
 		pkg.Error(w, err)
 		return
@@ -139,7 +140,7 @@ func (h *AvatarHandler) UploadServerIcon(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	fileURL, err := h.processUpload(r, files.KindServerIcon, serverID)
+	fileURL, err := h.processUpload(w, r, files.KindServerIcon, serverID)
 	if err != nil {
 		pkg.Error(w, err)
 		return
@@ -165,7 +166,8 @@ func (h *AvatarHandler) UploadServerIcon(w http.ResponseWriter, r *http.Request)
 
 // processUpload parses the multipart form, validates the file, saves it via the
 // Locator, and returns the relative URL stored in DB.
-func (h *AvatarHandler) processUpload(r *http.Request, kind files.Kind, scopeID string) (string, error) {
+func (h *AvatarHandler) processUpload(w http.ResponseWriter, r *http.Request, kind files.Kind, scopeID string) (string, error) {
+	limitMultipartBody(w, r, avatarMaxSize, 1)
 	if err := r.ParseMultipartForm(avatarMaxSize); err != nil {
 		return "", fmt.Errorf("%w: failed to parse multipart form", pkg.ErrBadRequest)
 	}
@@ -191,24 +193,14 @@ func (h *AvatarHandler) processUpload(r *http.Request, kind files.Kind, scopeID 
 		return "", fmt.Errorf("%w: only image files are allowed (jpeg, png, gif, webp)", pkg.ErrBadRequest)
 	}
 
-	diskFilename, err := files.GenerateDiskFilename(header.Filename)
-	if err != nil {
-		return "", err
-	}
-
-	relURL, err := h.locator.SaveFile(kind, scopeID, diskFilename, func(dst *os.File) error {
-		if _, err := io.Copy(dst, file); err != nil {
-			return fmt.Errorf("failed to save file: %w", err)
-		}
-		return nil
-	})
+	stored, err := h.pipeline.Store(r.Context(), kind, scopeID, file, header, avatarMaxSize)
 	if err != nil {
 		if errors.Is(err, files.ErrInvalidSegment) {
 			return "", fmt.Errorf("%w: %v", pkg.ErrBadRequest, err)
 		}
 		return "", err
 	}
-	return relURL, nil
+	return stored.RelativeURL, nil
 }
 
 func derefStr(p *string) string {

@@ -5,12 +5,13 @@
 // binary via cron. The scheduler ticks every 24 hours; on startup it consults
 // cleanup_state.last_run_at to avoid double-runs after a restart.
 //
-// runOnce performs four phases in order; a failure in one phase logs and
+// runOnce performs phases in order; a failure in one phase logs and
 // continues to the next so a transient error never blocks the whole sweep:
 //  1. Drain due retries (failed disk deletes from previous runs)
 //  2. Tombstone soft-deleted users whose 30-day TTL has elapsed
 //  3. Hard-delete soft-deleted servers whose 30-day TTL has elapsed
-//  4. Walk the upload directory and reclaim orphan files (with 24h grace)
+//  4. Clear stale quarantine and scan-cache rows
+//  5. Walk the upload directory and reclaim orphan files (with 24h grace)
 package services
 
 import (
@@ -67,6 +68,7 @@ type ServerExpirer interface {
 type cleanupService struct {
 	db            *sql.DB
 	cleanupRepo   repository.CleanupRepository
+	scanCache     repository.ScanHashCacheRepository
 	userLister    SoftDeletedUserLister
 	serverLister  SoftDeletedServerLister
 	userExpirer   UserExpirer
@@ -74,11 +76,13 @@ type cleanupService struct {
 	fileDeleter   FileDeleter
 	appLog        AppLogService
 	uploadDir     string
+	cleanScanTTL  time.Duration
+	badScanTTL    time.Duration
 
-	mu       sync.Mutex
-	cancel   context.CancelFunc
-	done     chan struct{}
-	started  bool
+	mu      sync.Mutex
+	cancel  context.CancelFunc
+	done    chan struct{}
+	started bool
 }
 
 // NewCleanupService wires the worker. uploadDir must match the configured
@@ -86,6 +90,7 @@ type cleanupService struct {
 func NewCleanupService(
 	db *sql.DB,
 	cleanupRepo repository.CleanupRepository,
+	scanCache repository.ScanHashCacheRepository,
 	userLister SoftDeletedUserLister,
 	serverLister SoftDeletedServerLister,
 	userExpirer UserExpirer,
@@ -93,10 +98,13 @@ func NewCleanupService(
 	fileDeleter FileDeleter,
 	appLog AppLogService,
 	uploadDir string,
+	cleanScanTTL time.Duration,
+	badScanTTL time.Duration,
 ) CleanupService {
 	return &cleanupService{
 		db:            db,
 		cleanupRepo:   cleanupRepo,
+		scanCache:     scanCache,
 		userLister:    userLister,
 		serverLister:  serverLister,
 		userExpirer:   userExpirer,
@@ -104,6 +112,8 @@ func NewCleanupService(
 		fileDeleter:   fileDeleter,
 		appLog:        appLog,
 		uploadDir:     uploadDir,
+		cleanScanTTL:  cleanScanTTL,
+		badScanTTL:    badScanTTL,
 	}
 }
 
@@ -194,6 +204,8 @@ type runStats struct {
 	serversFailed      int
 	orphansDeleted     int
 	orphansEnqueued    int
+	quarantineDeleted  int
+	scanCachePruned    int
 	orphanScanDuration time.Duration
 }
 
@@ -207,6 +219,8 @@ func (s *cleanupService) RunOnce(ctx context.Context) error {
 	s.processRetryQueue(ctx, &st)
 	s.expireUsers(ctx, &st)
 	s.expireServers(ctx, &st)
+	s.cleanQuarantine(ctx, &st)
+	s.pruneScanCache(ctx, &st)
 	s.walkOrphans(ctx, &st)
 
 	if err := s.cleanupRepo.SetLastRunAt(ctx, start); err != nil {
@@ -218,26 +232,80 @@ func (s *cleanupService) RunOnce(ctx context.Context) error {
 		level = models.LogLevelWarn
 	}
 	msg := fmt.Sprintf(
-		"cleanup sweep: users=%d/%d servers=%d/%d retries=%d/%d (gaveup=%d) orphans=%d (queued=%d) duration=%s",
+		"cleanup sweep: users=%d/%d servers=%d/%d retries=%d/%d (gaveup=%d) quarantine=%d scan_cache=%d orphans=%d (queued=%d) duration=%s",
 		st.usersExpired, st.usersExpired+st.usersFailed,
 		st.serversExpired, st.serversExpired+st.serversFailed,
 		st.retriesSucceeded, st.retriesProcessed, st.retriesGaveUp,
+		st.quarantineDeleted, st.scanCachePruned,
 		st.orphansDeleted, st.orphansEnqueued,
 		time.Since(start).Round(time.Millisecond),
 	)
 	s.appLog.Log(level, models.LogCategoryCleaner, nil, nil, msg, map[string]string{
-		"users_expired":     itoa(st.usersExpired),
-		"users_failed":      itoa(st.usersFailed),
-		"servers_expired":   itoa(st.serversExpired),
-		"servers_failed":    itoa(st.serversFailed),
-		"retries_processed": itoa(st.retriesProcessed),
-		"retries_succeeded": itoa(st.retriesSucceeded),
-		"retries_gaveup":    itoa(st.retriesGaveUp),
-		"orphans_deleted":   itoa(st.orphansDeleted),
-		"orphans_enqueued":  itoa(st.orphansEnqueued),
-		"orphan_scan_ms":    itoa(int(st.orphanScanDuration.Milliseconds())),
+		"users_expired":      itoa(st.usersExpired),
+		"users_failed":       itoa(st.usersFailed),
+		"servers_expired":    itoa(st.serversExpired),
+		"servers_failed":     itoa(st.serversFailed),
+		"retries_processed":  itoa(st.retriesProcessed),
+		"retries_succeeded":  itoa(st.retriesSucceeded),
+		"retries_gaveup":     itoa(st.retriesGaveUp),
+		"quarantine_deleted": itoa(st.quarantineDeleted),
+		"scan_cache_pruned":  itoa(st.scanCachePruned),
+		"orphans_deleted":    itoa(st.orphansDeleted),
+		"orphans_enqueued":   itoa(st.orphansEnqueued),
+		"orphan_scan_ms":     itoa(int(st.orphanScanDuration.Milliseconds())),
 	})
 	return nil
+}
+
+func (s *cleanupService) pruneScanCache(ctx context.Context, st *runStats) {
+	if s.scanCache == nil {
+		return
+	}
+	if s.cleanScanTTL > 0 {
+		if s.deleteScanCacheBefore(ctx, st, "clean", time.Now().UTC().Add(-s.cleanScanTTL)) != nil {
+			return
+		}
+	}
+	if s.badScanTTL > 0 {
+		_ = s.deleteScanCacheBefore(ctx, st, "infected", time.Now().UTC().Add(-s.badScanTTL))
+	}
+}
+
+func (s *cleanupService) deleteScanCacheBefore(ctx context.Context, st *runStats, status string, cutoff time.Time) error {
+	before := cutoff.Format("2006-01-02 15:04:05")
+	n, err := s.scanCache.DeleteBefore(ctx, status, before)
+	if err != nil {
+		log.Printf("[cleanup] scan cache prune failed: %v", err)
+		return err
+	}
+	st.scanCachePruned += n
+	return nil
+}
+
+func (s *cleanupService) cleanQuarantine(ctx context.Context, st *runStats) {
+	if s.uploadDir == "" {
+		return
+	}
+	qdir := filepath.Join(s.uploadDir, ".quarantine")
+	cutoff := time.Now().UTC().Add(-time.Hour)
+	_ = filepath.WalkDir(qdir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		info, err := d.Info()
+		if err != nil || info.ModTime().UTC().After(cutoff) {
+			return nil
+		}
+		if err := os.Remove(path); err == nil || os.IsNotExist(err) {
+			st.quarantineDeleted++
+		}
+		return nil
+	})
 }
 
 // processRetryQueue drains failed-file rows whose backoff has elapsed. Successes
@@ -349,6 +417,9 @@ func (s *cleanupService) walkOrphans(ctx context.Context, st *runStats) {
 			return nil
 		}
 		if d.IsDir() {
+			if d.Name() == ".quarantine" {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		// Build the URL representation: relative path under uploadDir, mapped to
@@ -408,6 +479,7 @@ func (s *cleanupService) collectReferencedURLs(ctx context.Context) (map[string]
 		`SELECT avatar_url FROM users WHERE avatar_url IS NOT NULL AND avatar_url != ''`,
 		`SELECT wallpaper_url FROM users WHERE wallpaper_url IS NOT NULL AND wallpaper_url != ''`,
 		`SELECT icon_url FROM servers WHERE icon_url IS NOT NULL AND icon_url != ''`,
+		`SELECT icon FROM badges WHERE icon_type = 'custom' AND icon IS NOT NULL AND icon != ''`,
 	}
 	for _, q := range queries {
 		rows, err := s.db.QueryContext(ctx, q)

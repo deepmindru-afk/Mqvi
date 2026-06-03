@@ -9,6 +9,8 @@ import (
 	"github.com/akinalp/mqvi/services"
 )
 
+const maxReportUploadFiles = 4
+
 // ReportHandler handles user reporting.
 // Supports both JSON (text only) and multipart (text + evidence files).
 type ReportHandler struct {
@@ -55,8 +57,13 @@ func (h *ReportHandler) CreateReport(w http.ResponseWriter, r *http.Request) {
 	contentType := r.Header.Get("Content-Type")
 
 	if isMultipart(contentType) {
+		limitMultipartBody(w, r, h.maxUploadSize, maxReportUploadFiles)
 		if err := r.ParseMultipartForm(h.maxUploadSize); err != nil {
 			pkg.ErrorWithMessage(w, http.StatusBadRequest, "failed to parse multipart form")
+			return
+		}
+		if len(r.MultipartForm.File["files"]) > maxReportUploadFiles {
+			pkg.ErrorWithMessage(w, http.StatusBadRequest, "too many files")
 			return
 		}
 		req.Reason = r.FormValue("reason")
@@ -109,7 +116,9 @@ func (h *ReportHandler) CreateReport(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			uploadedBytes += fileHeader.Size
+			if att.FileSize != nil {
+				uploadedBytes += *att.FileSize
+			}
 			report.Attachments = append(report.Attachments, *att)
 		}
 

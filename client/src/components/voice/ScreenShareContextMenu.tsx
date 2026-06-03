@@ -162,7 +162,9 @@ function ScreenShareContextMenu({
         </div>
       </div>
     </div>,
-    document.body
+    // In fullscreen mode only the fullscreen element's subtree is visible;
+    // portal to it so the menu shows up. Falls back to body otherwise.
+    document.fullscreenElement ?? document.body
   );
 }
 

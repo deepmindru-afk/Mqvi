@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"time"
 
 	"github.com/akinalp/mqvi/config"
+	"github.com/akinalp/mqvi/pkg/antivirus"
 	"github.com/akinalp/mqvi/pkg/email"
 	"github.com/akinalp/mqvi/pkg/files"
 	"github.com/akinalp/mqvi/pkg/ratelimit"
@@ -22,6 +24,7 @@ type Services struct {
 	Message           services.MessageService
 	Upload            services.UploadService
 	DMUpload          services.DMUploadService
+	UploadPipeline    services.UploadPipeline
 	Member            services.MemberService
 	Role              services.RoleService
 	Voice             services.VoiceService
@@ -55,15 +58,18 @@ type Services struct {
 	Soundboard        services.SoundboardService
 	Storage           services.StorageService
 	Cleanup           services.CleanupService
+	SettingsBadge     services.SettingsBadgeService
+	VoiceMessage      services.VoiceMessageService
+	EmailSender       email.EmailSender
 }
 
 type RateLimiters struct {
-	Login         *ratelimit.LoginRateLimiter
-	Message       *ratelimit.MessageRateLimiter
-	Register      *ratelimit.LoginRateLimiter
-	ForgotPwd     *ratelimit.LoginRateLimiter
-	ResetPwd      *ratelimit.LoginRateLimiter
-	Feedback      *ratelimit.MessageRateLimiter
+	Login     *ratelimit.LoginRateLimiter
+	Message   *ratelimit.MessageRateLimiter
+	Register  *ratelimit.LoginRateLimiter
+	ForgotPwd *ratelimit.LoginRateLimiter
+	ResetPwd  *ratelimit.LoginRateLimiter
+	Feedback  *ratelimit.MessageRateLimiter
 }
 
 // initServices creates all services. Order matters:
@@ -75,6 +81,9 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 
 	// Storage quota service
 	storageService := services.NewStorageService(repos.Storage, cfg.Upload.DefaultQuotaBytes)
+	appLogService := services.NewAppLogService(repos.AppLog)
+	avScanner := antivirus.NewClamAVScanner(cfg.Antivirus.ClamAVAddr, time.Duration(cfg.Antivirus.TimeoutSeconds)*time.Second)
+	uploadPipeline := services.NewUploadPipeline(fileLocator, avScanner, repos.ScanHashCache, appLogService, cfg.Antivirus)
 
 	// File cleanup service (bulk file deletion + quota release for cascading deletes).
 	// Cleanup repo enables the retry queue so failed disk deletes get re-attempted
@@ -112,8 +121,8 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 		repos.Mention, repos.RoleMention, repos.Role, repos.Reaction, repos.ReadState,
 		hub, channelPermService, urlSigner, fileLocator, storageService,
 	)
-	uploadService := services.NewUploadService(repos.Attachment, fileLocator, cfg.Upload.MaxSize)
-	memberService := services.NewMemberService(repos.User, repos.Role, repos.Ban, repos.Server, hub, voiceService, urlSigner)
+	uploadService := services.NewUploadService(repos.Attachment, uploadPipeline, cfg.Upload.MaxSize)
+	memberService := services.NewMemberService(repos.User, repos.Role, repos.Ban, repos.Server, hub, voiceService, voiceService, urlSigner)
 	roleService := services.NewRoleService(repos.Role, repos.User, hub)
 	serverService := services.NewServerService(
 		db, repos.Server, repos.LiveKit, repos.Role, repos.Channel,
@@ -137,12 +146,12 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 	friendshipService := services.NewFriendshipService(repos.Friendship, repos.User, hub, urlSigner)
 	dmService := services.NewDMService(repos.DM, repos.User, hub, blockService, friendshipService, dmSettingsService, urlSigner, fileLocator, storageService)
 	friendshipService.SetDMAcceptor(dmService) // auto-accept pending DMs when friendship is accepted
-	dmUploadService := services.NewDMUploadService(repos.DM, fileLocator, cfg.Upload.MaxSize)
+	dmUploadService := services.NewDMUploadService(repos.DM, uploadPipeline, cfg.Upload.MaxSize)
 	reactionService := services.NewReactionService(repos.Reaction, repos.Message, repos.Channel, hub, channelPermService)
 	serverMuteService := services.NewServerMuteService(repos.ServerMute)
 	channelMuteService := services.NewChannelMuteService(repos.ChannelMute)
-	reportService := services.NewReportService(repos.Report, repos.User, urlSigner)
-	reportUploadService := services.NewReportUploadService(repos.Report, fileLocator, cfg.Upload.MaxSize)
+	reportService := services.NewReportService(repos.Report, repos.User, urlSigner, emailSender)
+	reportUploadService := services.NewReportUploadService(repos.Report, uploadPipeline, cfg.Upload.MaxSize)
 
 	deviceService := services.NewDeviceService(repos.Device, hub)
 	e2eeService := services.NewE2EEService(repos.E2EEBackup, repos.GroupSession, hub)
@@ -153,13 +162,20 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 	linkPreviewService := services.NewLinkPreviewService(repos.LinkPreview)
 	badgeService := services.NewBadgeService(repos.Badge, hub)
 	preferencesService := services.NewPreferencesService(repos.Preferences)
-	appLogService := services.NewAppLogService(repos.AppLog)
-
 	metricsHistoryService := services.NewMetricsHistoryService(repos.MetricsHistory, repos.LiveKit)
-	feedbackService := services.NewFeedbackService(repos.Feedback, fileLocator, storageService)
-	feedbackUploadService := services.NewFeedbackUploadService(repos.Feedback, fileLocator, cfg.Upload.MaxSize)
+	feedbackService := services.NewFeedbackService(repos.Feedback, repos.User, fileLocator, storageService, emailSender)
+	settingsBadgeService := services.NewSettingsBadgeService(repos.User, repos.Feedback, repos.Report)
+	voiceMessageService := services.NewVoiceMessageService(repos.VoiceMessage, voiceService, hub, urlSigner, fileLocator)
+	// Wipe ephemeral voice chat when the last participant leaves the channel.
+	// 5-minute timeout so a hung DB call can't leak the goroutine indefinitely.
+	voiceService.SetOnChannelEmpty(func(channelID string) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		voiceMessageService.CleanupChannel(ctx, channelID)
+	})
+	feedbackUploadService := services.NewFeedbackUploadService(repos.Feedback, uploadPipeline, cfg.Upload.MaxSize)
 	soundboardService := services.NewSoundboardService(
-		repos.Soundboard, repos.User, hub, voiceService, fileLocator, cfg.Upload.MaxSize, urlSigner, storageService,
+		repos.Soundboard, repos.User, hub, voiceService, uploadPipeline, cfg.Upload.MaxSize, urlSigner, storageService,
 	)
 	metricsCollector := services.NewMetricsCollector(
 		repos.LiveKit, repos.MetricsHistory,
@@ -169,19 +185,21 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 		voiceService,
 	)
 	cleanupService := services.NewCleanupService(
-		db, repos.Cleanup,
+		db, repos.Cleanup, repos.ScanHashCache,
 		repos.User, repos.Server,
 		adminUserService, adminServerService,
 		fileLocator, appLogService,
 		cfg.Upload.Dir,
+		time.Duration(cfg.Antivirus.CleanCacheTTLHours)*time.Hour,
+		time.Duration(cfg.Antivirus.InfectedCacheTTLDays)*24*time.Hour,
 	)
 
 	// Rate limiters
 	loginLimiter := ratelimit.NewLoginRateLimiter(5, 2*time.Minute)
 	messageLimiter := ratelimit.NewMessageRateLimiter(5, 5*time.Second, 15*time.Second)
-	registerLimiter := ratelimit.NewLoginRateLimiter(3, 10*time.Minute)   // 3 registrations per 10 min per IP
-	forgotPwdLimiter := ratelimit.NewLoginRateLimiter(3, 5*time.Minute)   // 3 forgot-password per 5 min per IP
-	resetPwdLimiter := ratelimit.NewLoginRateLimiter(5, 5*time.Minute)    // 5 reset attempts per 5 min per IP
+	registerLimiter := ratelimit.NewLoginRateLimiter(3, 10*time.Minute)                  // 3 registrations per 10 min per IP
+	forgotPwdLimiter := ratelimit.NewLoginRateLimiter(3, 5*time.Minute)                  // 3 forgot-password per 5 min per IP
+	resetPwdLimiter := ratelimit.NewLoginRateLimiter(5, 5*time.Minute)                   // 5 reset attempts per 5 min per IP
 	feedbackLimiter := ratelimit.NewMessageRateLimiter(2, 1*time.Minute, 30*time.Second) // 2 feedback per min, 30s cooldown
 
 	svcs := &Services{
@@ -192,6 +210,7 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 		Message:           messageService,
 		Upload:            uploadService,
 		DMUpload:          dmUploadService,
+		UploadPipeline:    uploadPipeline,
 		Member:            memberService,
 		Role:              roleService,
 		Voice:             voiceService,
@@ -225,6 +244,9 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 		Soundboard:        soundboardService,
 		Storage:           storageService,
 		Cleanup:           cleanupService,
+		SettingsBadge:     settingsBadgeService,
+		VoiceMessage:      voiceMessageService,
+		EmailSender:       emailSender,
 	}
 
 	limiters := &RateLimiters{

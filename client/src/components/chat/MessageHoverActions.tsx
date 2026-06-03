@@ -15,6 +15,10 @@ type MessageHoverActionsProps = {
   onPinToggle: () => void;
   onEditStart: () => void;
   onDelete: () => void;
+  /** Optional feature toggles — default true; voice chat passes false to hide. */
+  showReply?: boolean;
+  showReactions?: boolean;
+  showPin?: boolean;
 };
 
 function MessageHoverActions({
@@ -29,30 +33,37 @@ function MessageHoverActions({
   onPinToggle,
   onEditStart,
   onDelete,
+  showReply = true,
+  showReactions = true,
+  showPin = true,
 }: MessageHoverActionsProps) {
   const { t } = useTranslation("chat");
 
   return (
     <div className="msg-hover-actions">
-      <button onClick={onReply} title={t("replyMessage")}>
-        <svg style={{ width: 14, height: 14 }} fill="currentColor" viewBox="0 0 24 24" stroke="none">
-          <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" />
-        </svg>
-      </button>
-      <div className="msg-reaction-add-wrap">
-        <button onClick={onPickerOpen} title={t("addReaction")}>
-          <svg style={{ width: 14, height: 14 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      {showReply && (
+        <button onClick={onReply} title={t("replyMessage")}>
+          <svg style={{ width: 14, height: 14 }} fill="currentColor" viewBox="0 0 24 24" stroke="none">
+            <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" />
           </svg>
         </button>
-        {pickerSource === "hover" && (
-          <EmojiPicker
-            onSelect={onReaction}
-            onClose={onPickerClose}
-          />
-        )}
-      </div>
-      {canManageMessages && (
+      )}
+      {showReactions && (
+        <div className="msg-reaction-add-wrap">
+          <button onClick={onPickerOpen} title={t("addReaction")}>
+            <svg style={{ width: 14, height: 14 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+          {pickerSource === "hover" && (
+            <EmojiPicker
+              onSelect={onReaction}
+              onClose={onPickerClose}
+            />
+          )}
+        </div>
+      )}
+      {showPin && canManageMessages && (
         <button onClick={onPinToggle} title={isPinned ? t("unpinMessage") : t("pinMessage")}>
           <svg style={{ width: 14, height: 14 }} fill={isPinned ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M16 4v4l2 2v4h-5v6l-1 1-1-1v-6H6v-4l2-2V4a1 1 0 011-1h6a1 1 0 011 1z" />

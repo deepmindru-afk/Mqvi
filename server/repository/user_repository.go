@@ -89,4 +89,12 @@ type UserRepository interface {
 	// ─── Platform Admin ───
 
 	SetPlatformAdmin(ctx context.Context, userID string, isAdmin bool) error
+
+	// ─── Admin Badge Watermarks ───
+
+	MarkFeedbackSeen(ctx context.Context, userID string) error
+	MarkReportsSeen(ctx context.Context, userID string) error
+	// ListPlatformAdminEmails returns the email address of every active
+	// platform admin with one set. Returns an empty slice if none.
+	ListPlatformAdminEmails(ctx context.Context) ([]string, error)
 }

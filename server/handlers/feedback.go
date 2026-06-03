@@ -13,18 +13,50 @@ import (
 	"github.com/akinalp/mqvi/services"
 )
 
+const maxFeedbackUploadFiles = 4
+
 type FeedbackHandler struct {
 	service        services.FeedbackService
 	uploadService  services.FeedbackUploadService
 	storageService services.StorageService
+	badgeService   services.SettingsBadgeService
 	maxUploadSize  int64
 	limiter        *ratelimit.MessageRateLimiter
 	appLog         services.AppLogService
 	urlSigner      services.FileURLSigner
 }
 
-func NewFeedbackHandler(service services.FeedbackService, uploadService services.FeedbackUploadService, storageService services.StorageService, maxUploadSize int64, limiter *ratelimit.MessageRateLimiter, appLog services.AppLogService, urlSigner services.FileURLSigner) *FeedbackHandler {
-	return &FeedbackHandler{service: service, uploadService: uploadService, storageService: storageService, maxUploadSize: maxUploadSize, limiter: limiter, appLog: appLog, urlSigner: urlSigner}
+func NewFeedbackHandler(service services.FeedbackService, uploadService services.FeedbackUploadService, storageService services.StorageService, badgeService services.SettingsBadgeService, maxUploadSize int64, limiter *ratelimit.MessageRateLimiter, appLog services.AppLogService, urlSigner services.FileURLSigner) *FeedbackHandler {
+	return &FeedbackHandler{service: service, uploadService: uploadService, storageService: storageService, badgeService: badgeService, maxUploadSize: maxUploadSize, limiter: limiter, appLog: appLog, urlSigner: urlSigner}
+}
+
+// GetMyBadge -- GET /api/feedback/badge
+func (h *FeedbackHandler) GetMyBadge(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(UserContextKey).(*models.User)
+	if !ok {
+		pkg.ErrorWithMessage(w, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+	hasNew, err := h.badgeService.GetUserFeedbackBadge(r.Context(), user)
+	if err != nil {
+		pkg.Error(w, err)
+		return
+	}
+	pkg.JSON(w, http.StatusOK, map[string]bool{"has_new_replies": hasNew})
+}
+
+// MarkMySeen -- POST /api/feedback/mark-seen
+func (h *FeedbackHandler) MarkMySeen(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(UserContextKey).(*models.User)
+	if !ok {
+		pkg.ErrorWithMessage(w, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+	if err := h.badgeService.MarkFeedbackSeen(r.Context(), user.ID); err != nil {
+		pkg.Error(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // CreateTicket -- POST /api/feedback
@@ -49,8 +81,13 @@ func (h *FeedbackHandler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 	contentType := r.Header.Get("Content-Type")
 
 	if strings.HasPrefix(contentType, "multipart/") {
+		limitMultipartBody(w, r, h.maxUploadSize, maxFeedbackUploadFiles)
 		if err := r.ParseMultipartForm(h.maxUploadSize); err != nil {
 			pkg.ErrorWithMessage(w, http.StatusBadRequest, "invalid multipart form")
+			return
+		}
+		if len(r.MultipartForm.File["files"]) > maxFeedbackUploadFiles {
+			pkg.ErrorWithMessage(w, http.StatusBadRequest, "too many files")
 			return
 		}
 		req.Type = r.FormValue("type")
@@ -98,7 +135,9 @@ func (h *FeedbackHandler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 						fmt.Sprintf("failed to upload file %s for ticket %s: %v", fh.Filename, ticket.ID, uploadErr), nil)
 					continue
 				}
-				uploadedBytes += fh.Size
+				if att.FileSize != nil {
+					uploadedBytes += *att.FileSize
+				}
 				ticket.Attachments = append(ticket.Attachments, *att)
 			}
 			if unused := totalSize - uploadedBytes; unused > 0 {
@@ -179,7 +218,7 @@ func (h *FeedbackHandler) AddReply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ticketID := r.PathValue("id")
-	reply, err := h.parseAndCreateReply(r, ticketID, user.ID, false)
+	reply, err := h.parseAndCreateReply(w, r, ticketID, user.ID, false)
 	if err != nil {
 		pkg.Error(w, err)
 		return
@@ -257,7 +296,7 @@ func (h *FeedbackHandler) AdminReply(w http.ResponseWriter, r *http.Request) {
 	}
 	ticketID := r.PathValue("id")
 
-	reply, err := h.parseAndCreateReply(r, ticketID, admin.ID, true)
+	reply, err := h.parseAndCreateReply(w, r, ticketID, admin.ID, true)
 	if err != nil {
 		pkg.Error(w, err)
 		return
@@ -285,13 +324,17 @@ func (h *FeedbackHandler) AdminUpdateStatus(w http.ResponseWriter, r *http.Reque
 }
 
 // parseAndCreateReply handles both JSON and multipart reply creation with optional file uploads.
-func (h *FeedbackHandler) parseAndCreateReply(r *http.Request, ticketID, userID string, isAdmin bool) (*models.FeedbackReply, error) {
+func (h *FeedbackHandler) parseAndCreateReply(w http.ResponseWriter, r *http.Request, ticketID, userID string, isAdmin bool) (*models.FeedbackReply, error) {
 	var req models.CreateFeedbackReplyRequest
 	contentType := r.Header.Get("Content-Type")
 
 	if strings.HasPrefix(contentType, "multipart/") {
+		limitMultipartBody(w, r, h.maxUploadSize, maxFeedbackUploadFiles)
 		if err := r.ParseMultipartForm(h.maxUploadSize); err != nil {
 			return nil, fmt.Errorf("%w: invalid multipart form", pkg.ErrBadRequest)
+		}
+		if len(r.MultipartForm.File["files"]) > maxFeedbackUploadFiles {
+			return nil, fmt.Errorf("%w: too many files", pkg.ErrBadRequest)
 		}
 		req.Content = r.FormValue("content")
 	} else {
@@ -334,7 +377,9 @@ func (h *FeedbackHandler) parseAndCreateReply(r *http.Request, ticketID, userID 
 						fmt.Sprintf("failed to upload reply attachment %s: %v", fh.Filename, uploadErr), nil)
 					continue
 				}
-				uploadedBytes += fh.Size
+				if att.FileSize != nil {
+					uploadedBytes += *att.FileSize
+				}
 				reply.Attachments = append(reply.Attachments, *att)
 			}
 			if unused := totalSize - uploadedBytes; unused > 0 {
