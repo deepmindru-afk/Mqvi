@@ -54,6 +54,10 @@ type P2PCallStore = {
   isVideoOn: boolean;
   isScreenSharing: boolean;
 
+  /** Remote audio output volume, 0–200 (100 = normal). Above 100 amplifies via Web Audio. */
+  remoteVolume: number;
+  setRemoteVolume: (volume: number) => void;
+
   /** Active call duration in seconds — incremented by timer */
   callDuration: number;
   _durationInterval: ReturnType<typeof setInterval> | null;
@@ -363,6 +367,7 @@ export const useP2PCallStore = create<P2PCallStore>((set, get) => ({
   isMuted: false,
   isVideoOn: false,
   isScreenSharing: false,
+  remoteVolume: 100,
   callDuration: 0,
   _durationInterval: null,
   _pendingCandidates: [],
@@ -370,6 +375,8 @@ export const useP2PCallStore = create<P2PCallStore>((set, get) => ({
   _sendWS: null,
 
   registerSendWS: (fn) => set({ _sendWS: fn }),
+
+  setRemoteVolume: (volume) => set({ remoteVolume: Math.max(0, Math.min(200, volume)) }),
 
   // ─── Actions ───
 
@@ -644,6 +651,7 @@ export const useP2PCallStore = create<P2PCallStore>((set, get) => ({
       isMuted: false,
       isVideoOn: false,
       isScreenSharing: false,
+      remoteVolume: 100,
       callDuration: 0,
       _durationInterval: null,
       _pendingCandidates: [],
