@@ -459,6 +459,23 @@ EOF
 systemctl daemon-reload
 systemctl enable mqvi-livekit.service mqvi-server.service >/dev/null
 
+# ─── coturn (TURN relay for P2P calls) ───────────────────────────────────────
+# Reuse the single source of truth (deploy/coturn-setup.sh) instead of
+# duplicating the turnserver.conf. Best-effort: 1-on-1 P2P calls still connect
+# without it (just no relay fallback), so a failure must not abort the install.
+log "Setting up coturn (P2P call TURN relay)..."
+# coturn-setup.sh reads TURN_SECRET from .env (single source of truth) — self-host
+# users don't hand-edit .env, so seed one here if absent (preserved on re-runs).
+ensure_env_value "${INSTALL_DIR}/.env" "TURN_SECRET" "$(openssl rand -hex 32)"
+if curl -fsSL --retry 3 "https://raw.githubusercontent.com/${REPO}/main/deploy/coturn-setup.sh" -o /tmp/mqvi-coturn-setup.sh; then
+    MQVI_ENV="${INSTALL_DIR}/.env" bash /tmp/mqvi-coturn-setup.sh \
+        || warn "coturn setup failed — P2P relay disabled. Re-run deploy/coturn-setup.sh later."
+    rm -f /tmp/mqvi-coturn-setup.sh
+    chown "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}/.env" 2>/dev/null || true
+else
+    warn "Could not download coturn-setup.sh — P2P relay not configured."
+fi
+
 # ─── Caddy install + config (TLS modes only, when not existing) ──────────────
 install_caddy() {
     command -v caddy >/dev/null 2>&1 && return 0
