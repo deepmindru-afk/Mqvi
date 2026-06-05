@@ -224,6 +224,10 @@ func initRoutes(
 	mux.Handle("GET /api/friends", auth(h.Friendship.ListFriends))
 	mux.Handle("DELETE /api/friends/{userId}", auth(h.Friendship.RemoveFriend))
 
+	// P2P Calls — ICE servers (STUN + TURN relay fallback). Fetched per call so
+	// the short-lived HMAC TURN credential is always fresh.
+	mux.Handle("GET /api/calls/ice-servers", auth(h.ICEServer.GetICEServers))
+
 	// Platform Admin — LiveKit
 	mux.Handle("GET /api/admin/livekit-instances", authAdmin(h.Admin.ListLiveKitInstances))
 	mux.Handle("GET /api/admin/livekit-instances/{id}/metrics/timeseries", authAdmin(h.Admin.GetLiveKitInstanceMetricsTimeSeries))

@@ -225,6 +225,8 @@ type VoiceForceMoveData struct {
 type VoiceStateUpdateBroadcast struct {
 	UserID           string `json:"user_id"`
 	ChannelID        string `json:"channel_id"`
+	ChannelName      string `json:"channel_name,omitempty"` // set on "join" — feeds cross-server voice popups
+	ServerID         string `json:"server_id,omitempty"`    // set on "join" — attributes the entry to a server
 	Username         string `json:"username"`
 	DisplayName      string `json:"display_name"`
 	AvatarURL        string `json:"avatar_url"`
@@ -263,6 +265,7 @@ type VoiceMessageDeleteData struct {
 type VoiceStateItem struct {
 	UserID           string `json:"user_id"`
 	ChannelID        string `json:"channel_id"`
+	ChannelName      string `json:"channel_name"`
 	ServerID         string `json:"server_id"`
 	Username         string `json:"username"`
 	DisplayName      string `json:"display_name"`
@@ -314,7 +317,7 @@ type P2PCallDeclineData struct {
 // P2PSignalData carries WebRTC SDP/ICE data. Server relays without inspecting.
 type P2PSignalData struct {
 	CallID    string `json:"call_id"`
-	Type      string `json:"type"`                // "offer", "answer", "ice-candidate"
+	Type      string `json:"type"`                // "offer", "answer", "ice-candidate", "ice-restart"
 	SDP       string `json:"sdp,omitempty"`
 	Candidate any    `json:"candidate,omitempty"`
 }

@@ -42,6 +42,9 @@ type P2PCallService interface {
 	RelaySignal(senderID, callID string, signal ws.P2PSignalData) error
 	HandleDisconnect(userID string)
 	GetUserCall(userID string) *models.P2PCall
+	// HasActiveCall reports whether the user is in an ACCEPTED (active) call.
+	// Status is read under the lock — no mutable pointer escapes.
+	HasActiveCall(userID string) bool
 	SetAppLogger(logger P2PAppLogger)
 }
 
@@ -55,8 +58,14 @@ type p2pCallService struct {
 	// In-memory state, cleared on server restart.
 	activeCalls map[string]*models.P2PCall // callID -> call
 	userCalls   map[string]string          // userID -> callID (max 1 call per user)
+	ringTimers  map[string]*time.Timer     // callID -> auto-cleanup timer for unanswered ringing calls
 	mu          sync.RWMutex
 }
+
+// ringingTimeout auto-cleans a call that is never answered. Slightly longer than
+// the client-side outgoing timeout so a well-behaved client ends it first; this
+// is a server-side backstop against a client that never sends decline/end.
+const ringingTimeout = 60 * time.Second
 
 func (s *p2pCallService) SetAppLogger(logger P2PAppLogger) {
 	s.appLogger = logger
@@ -81,12 +90,62 @@ func NewP2PCallService(
 		urlSigner:     urlSigner,
 		activeCalls:   make(map[string]*models.P2PCall),
 		userCalls:     make(map[string]string),
+		ringTimers:    make(map[string]*time.Timer),
+	}
+}
+
+// removeUserMapping deletes a user's call mapping only if it still points to
+// callID — prevents a stale cleanup from clobbering a mapping that has since
+// moved to a newer call (defends the one-call-per-user invariant). Caller MUST
+// hold s.mu.
+func (s *p2pCallService) removeUserMapping(userID, callID string) {
+	if s.userCalls[userID] == callID {
+		delete(s.userCalls, userID)
+	}
+}
+
+// stopRingTimer cancels and drops the ringing-timeout timer for a call.
+// Caller MUST hold s.mu.
+func (s *p2pCallService) stopRingTimer(callID string) {
+	if t, ok := s.ringTimers[callID]; ok {
+		t.Stop()
+		delete(s.ringTimers, callID)
+	}
+}
+
+// timeoutRinging fires when a call has been ringing too long. It cleans up only
+// if the call is still ringing (accepted/ended calls already cleared their
+// timer) and notifies both parties of the missed call.
+func (s *p2pCallService) timeoutRinging(callID string) {
+	s.mu.Lock()
+	call, exists := s.activeCalls[callID]
+	if !exists || call.Status != models.P2PCallStatusRinging {
+		delete(s.ringTimers, callID)
+		s.mu.Unlock()
+		return
+	}
+	delete(s.activeCalls, callID)
+	s.removeUserMapping(call.CallerID, callID)
+	s.removeUserMapping(call.ReceiverID, callID)
+	delete(s.ringTimers, callID)
+	s.mu.Unlock()
+
+	log.Printf("[p2p] ringing call timed out: %s", callID)
+	for _, uid := range []string{call.CallerID, call.ReceiverID} {
+		s.hub.BroadcastToUser(uid, ws.Event{
+			Op:   ws.OpP2PCallEnd,
+			Data: map[string]string{"call_id": callID, "reason": "timeout"},
+		})
 	}
 }
 
 func (s *p2pCallService) InitiateCall(callerID, receiverID string, callType models.P2PCallType) error {
 	if callerID == receiverID {
 		return fmt.Errorf("%w: cannot call yourself", pkg.ErrBadRequest)
+	}
+
+	if callType != models.P2PCallTypeVoice && callType != models.P2PCallTypeVideo {
+		return fmt.Errorf("%w: invalid call type", pkg.ErrBadRequest)
 	}
 
 	ctx := context.Background()
@@ -110,24 +169,6 @@ func (s *p2pCallService) InitiateCall(callerID, receiverID string, callType mode
 		return fmt.Errorf("%w: not friends", pkg.ErrForbidden)
 	}
 
-	s.mu.RLock()
-	_, callerBusy := s.userCalls[callerID]
-	_, receiverBusy := s.userCalls[receiverID]
-	s.mu.RUnlock()
-
-	if callerBusy {
-		return fmt.Errorf("%w: already in a call", pkg.ErrBadRequest)
-	}
-
-	// Send busy signal if receiver is in another call
-	if receiverBusy {
-		s.hub.BroadcastToUser(callerID, ws.Event{
-			Op:   ws.OpP2PCallBusy,
-			Data: map[string]string{"receiver_id": receiverID},
-		})
-		return fmt.Errorf("%w: user is busy", pkg.ErrBadRequest)
-	}
-
 	call := &models.P2PCall{
 		ID:         uuid.New().String(),
 		CallerID:   callerID,
@@ -137,9 +178,35 @@ func (s *p2pCallService) InitiateCall(callerID, receiverID string, callType mode
 		CreatedAt:  time.Now().UTC(),
 	}
 
+	// Atomic busy-check + reservation under a single write lock. Checking under
+	// RLock then reserving under a later Lock leaves a TOCTOU gap where two
+	// concurrent initiates from the same caller both pass the check and overwrite
+	// userCalls, orphaning a call in activeCalls.
 	s.mu.Lock()
+	if _, callerBusy := s.userCalls[callerID]; callerBusy {
+		s.mu.Unlock()
+		return fmt.Errorf("%w: already in a call", pkg.ErrBadRequest)
+	}
+	if _, receiverBusy := s.userCalls[receiverID]; receiverBusy {
+		s.mu.Unlock()
+		// Broadcast outside the lock — no I/O under the mutex.
+		s.hub.BroadcastToUser(callerID, ws.Event{
+			Op:   ws.OpP2PCallBusy,
+			Data: map[string]string{"receiver_id": receiverID},
+		})
+		return fmt.Errorf("%w: user is busy", pkg.ErrBadRequest)
+	}
 	s.activeCalls[call.ID] = call
-	s.userCalls[callerID] = call.ID // Register caller immediately to prevent double-call
+	// Reserve BOTH parties immediately. Reserving only the caller let two callers
+	// ring the same idle receiver concurrently; the single-call frontend can't
+	// model that, so the receiver would accept one call while its state points at
+	// the other. Reserving the receiver makes the second caller get "busy".
+	s.userCalls[callerID] = call.ID
+	s.userCalls[receiverID] = call.ID
+	// Server-side backstop: auto-clean if never answered. Cancelled on
+	// accept/decline/end/disconnect. time.AfterFunc is a one-shot (no lingering
+	// goroutine); on shutdown it's dropped with the rest of the in-memory state.
+	s.ringTimers[call.ID] = time.AfterFunc(ringingTimeout, func() { s.timeoutRinging(call.ID) })
 	s.mu.Unlock()
 
 	log.Printf("[p2p] call initiated: %s -> %s (type=%s, id=%s)", callerID, receiverID, callType, call.ID)
@@ -194,8 +261,17 @@ func (s *p2pCallService) AcceptCall(userID, callID string) error {
 		return fmt.Errorf("%w: call is not ringing", pkg.ErrBadRequest)
 	}
 
+	// Reject if the receiver is already in another call — without this, a receiver
+	// with two ringing calls could accept both, overwriting userCalls and leaving
+	// the first call active-but-orphaned. Checked under the same lock as the write.
+	if existing, busy := s.userCalls[userID]; busy && existing != callID {
+		s.mu.Unlock()
+		return fmt.Errorf("%w: already in a call", pkg.ErrBadRequest)
+	}
+
 	call.Status = models.P2PCallStatusActive
 	s.userCalls[userID] = callID
+	s.stopRingTimer(callID)
 	s.mu.Unlock()
 
 	log.Printf("[p2p] call accepted: %s accepted call %s", userID, callID)
@@ -228,8 +304,9 @@ func (s *p2pCallService) DeclineCall(userID, callID string) error {
 	}
 
 	delete(s.activeCalls, callID)
-	delete(s.userCalls, call.CallerID)
-	delete(s.userCalls, call.ReceiverID)
+	s.removeUserMapping(call.CallerID, callID)
+	s.removeUserMapping(call.ReceiverID, callID)
+	s.stopRingTimer(callID)
 	s.mu.Unlock()
 
 	log.Printf("[p2p] call declined: %s declined call %s", userID, callID)
@@ -264,8 +341,9 @@ func (s *p2pCallService) EndCall(userID string) error {
 	}
 
 	delete(s.activeCalls, callID)
-	delete(s.userCalls, call.CallerID)
-	delete(s.userCalls, call.ReceiverID)
+	s.removeUserMapping(call.CallerID, callID)
+	s.removeUserMapping(call.ReceiverID, callID)
+	s.stopRingTimer(callID)
 	s.mu.Unlock()
 
 	log.Printf("[p2p] call ended: %s ended call %s", userID, callID)
@@ -286,21 +364,37 @@ func (s *p2pCallService) EndCall(userID string) error {
 // RelaySignal forwards WebRTC signaling data (SDP/ICE) to the other party.
 // Server does not inspect the payload.
 func (s *p2pCallService) RelaySignal(senderID, callID string, signal ws.P2PSignalData) error {
+	// Snapshot under the lock — Status is mutated by AcceptCall, so reading it
+	// off the shared *P2PCall after unlocking would be a data race. This removes
+	// the race; a benign logical window remains (the call may end between this
+	// snapshot and the broadcast below), but the receiving client drops a signal
+	// whose call_id no longer matches its active call.
 	s.mu.RLock()
 	call, exists := s.activeCalls[callID]
+	var callerID, receiverID string
+	var status models.P2PCallStatus
+	if exists {
+		callerID, receiverID, status = call.CallerID, call.ReceiverID, call.Status
+	}
 	s.mu.RUnlock()
 
 	if !exists {
 		return fmt.Errorf("%w: call not found", pkg.ErrNotFound)
 	}
 
-	if call.CallerID != senderID && call.ReceiverID != senderID {
+	if callerID != senderID && receiverID != senderID {
 		return fmt.Errorf("%w: not part of this call", pkg.ErrForbidden)
 	}
 
-	otherUserID := call.CallerID
-	if call.CallerID == senderID {
-		otherUserID = call.ReceiverID
+	// Only relay WebRTC signaling once the call is accepted. Forwarding SDP/ICE
+	// during ringing lets a caller drive negotiation before the callee consents.
+	if status != models.P2PCallStatusActive {
+		return fmt.Errorf("%w: call is not active", pkg.ErrBadRequest)
+	}
+
+	otherUserID := callerID
+	if callerID == senderID {
+		otherUserID = receiverID
 	}
 
 	s.hub.BroadcastToUser(otherUserID, ws.Event{
@@ -329,8 +423,9 @@ func (s *p2pCallService) HandleDisconnect(userID string) {
 	}
 
 	delete(s.activeCalls, callID)
-	delete(s.userCalls, call.CallerID)
-	delete(s.userCalls, call.ReceiverID)
+	s.removeUserMapping(call.CallerID, callID)
+	s.removeUserMapping(call.ReceiverID, callID)
+	s.stopRingTimer(callID)
 	s.mu.Unlock()
 
 	log.Printf("[p2p] call ended due to disconnect: user=%s, call=%s", userID, callID)
@@ -362,6 +457,22 @@ func (s *p2pCallService) GetUserCall(userID string) *models.P2PCall {
 	return call
 }
 
+// HasActiveCall reports whether the user is in an accepted (active) call.
+// A ringing/outgoing call is NOT enough — this gates TURN credential issuance
+// so a caller cannot mint relay credentials before the callee accepts. The
+// status is checked under the lock and only a bool escapes (no data race on the
+// shared *P2PCall that AcceptCall mutates).
+func (s *p2pCallService) HasActiveCall(userID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	callID, exists := s.userCalls[userID]
+	if !exists {
+		return false
+	}
+	call := s.activeCalls[callID]
+	return call != nil && call.Status == models.P2PCallStatusActive
+}
+
 // cleanupCall removes call state on error.
 func (s *p2pCallService) cleanupCall(callID string) {
 	s.mu.Lock()
@@ -373,8 +484,9 @@ func (s *p2pCallService) cleanupCall(callID string) {
 	}
 
 	delete(s.activeCalls, callID)
-	delete(s.userCalls, call.CallerID)
-	delete(s.userCalls, call.ReceiverID)
+	s.removeUserMapping(call.CallerID, callID)
+	s.removeUserMapping(call.ReceiverID, callID)
+	s.stopRingTimer(callID)
 }
 
 func (s *p2pCallService) buildBroadcast(call *models.P2PCall, caller, receiver *models.User) models.P2PCallBroadcast {

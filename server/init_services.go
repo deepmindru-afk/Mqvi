@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"time"
 
 	"github.com/akinalp/mqvi/config"
+	"github.com/akinalp/mqvi/models"
 	"github.com/akinalp/mqvi/pkg/antivirus"
 	"github.com/akinalp/mqvi/pkg/email"
 	"github.com/akinalp/mqvi/pkg/files"
@@ -38,6 +40,7 @@ type Services struct {
 	Friendship        services.FriendshipService
 	LiveKitAdmin      services.LiveKitAdminService
 	P2PCall           services.P2PCallService
+	TURN              services.ICEServerProvider
 	MetricsHistory    services.MetricsHistoryService
 	ServerMute        services.ServerMuteService
 	ChannelMute       services.ChannelMuteService
@@ -70,6 +73,7 @@ type RateLimiters struct {
 	ForgotPwd *ratelimit.LoginRateLimiter
 	ResetPwd  *ratelimit.LoginRateLimiter
 	Feedback  *ratelimit.MessageRateLimiter
+	ICE       *ratelimit.MessageRateLimiter
 }
 
 // initServices creates all services. Order matters:
@@ -98,6 +102,24 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 		repos.Channel, repos.LiveKit, channelPermService, hub, hub, repos.Server, encryptionKey, urlSigner,
 	)
 	p2pCallService := services.NewP2PCallService(repos.Friendship, repos.User, hub, urlSigner)
+
+	// ICE server provider for P2P calls (STUN + TURN relay fallback).
+	turnService := services.NewTURNService(
+		cfg.TURN.Secret, cfg.TURN.URLs, cfg.TURN.STUNURLs,
+		time.Duration(cfg.TURN.CredentialTTLSeconds)*time.Second,
+	)
+	// Surface TURN status through the in-app log (viewable in the admin panel),
+	// not just stdout — a silent STUN-only degrade should be discoverable.
+	// "configured" not "enabled": this only confirms secret+URLs are present, not
+	// that coturn is reachable or the secret matches (a reachability/health check
+	// would be needed for that).
+	if cfg.TURN.Secret != "" && len(cfg.TURN.URLs) > 0 {
+		appLogService.Log(models.LogLevelInfo, models.LogCategoryVoice, nil, nil,
+			fmt.Sprintf("TURN relay configured: %d server(s), credential TTL %ds", len(cfg.TURN.URLs), cfg.TURN.CredentialTTLSeconds), nil)
+	} else {
+		appLogService.Log(models.LogLevelInfo, models.LogCategoryVoice, nil, nil,
+			"TURN relay not configured — P2P calls use STUN only (no relay fallback)", nil)
+	}
 
 	// Email service (optional)
 	var emailSender email.EmailSender
@@ -201,6 +223,7 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 	forgotPwdLimiter := ratelimit.NewLoginRateLimiter(3, 5*time.Minute)                  // 3 forgot-password per 5 min per IP
 	resetPwdLimiter := ratelimit.NewLoginRateLimiter(5, 5*time.Minute)                   // 5 reset attempts per 5 min per IP
 	feedbackLimiter := ratelimit.NewMessageRateLimiter(2, 1*time.Minute, 30*time.Second) // 2 feedback per min, 30s cooldown
+	iceLimiter := ratelimit.NewMessageRateLimiter(20, 1*time.Minute, 30*time.Second)     // 20 ICE-server fetches per min, 30s cooldown
 
 	svcs := &Services{
 		Auth:              authService,
@@ -224,6 +247,7 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 		Friendship:        friendshipService,
 		LiveKitAdmin:      livekitAdminService,
 		P2PCall:           p2pCallService,
+		TURN:              turnService,
 		MetricsHistory:    metricsHistoryService,
 		ServerMute:        serverMuteService,
 		ChannelMute:       channelMuteService,
@@ -256,6 +280,7 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 		ForgotPwd: forgotPwdLimiter,
 		ResetPwd:  resetPwdLimiter,
 		Feedback:  feedbackLimiter,
+		ICE:       iceLimiter,
 	}
 
 	return svcs, limiters, metricsCollector

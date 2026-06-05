@@ -19,9 +19,30 @@ type Config struct {
 	FileRateLimit   FileRateLimitConfig
 	Email           EmailConfig
 	Klipy           KlipyConfig
+	TURN            TURNConfig
 	EncryptionKey   string // AES-256 key (64 hex chars = 32 bytes) for LiveKit credential encryption
 	HetznerAPIToken string // Hetzner Cloud API token (read-only) — optional
 }
+
+// TURNConfig holds the STUN/TURN servers handed to P2P call clients.
+// P2P 1-on-1 calls are central and friendship-scoped, so a single TURN
+// surface serves every call.
+type TURNConfig struct {
+	// Secret is the shared HMAC secret matching coturn's use-auth-secret.
+	// Empty => TURN disabled, clients get STUN-only (P2P still works on
+	// non-restrictive networks, just no relay fallback).
+	Secret string
+	// URLs are the TURN server URLs given to clients,
+	// e.g. "turn:turn.mqvi.app:3478?transport=udp".
+	URLs []string
+	// STUNURLs are STUN-only servers (no credentials).
+	STUNURLs []string
+	// CredentialTTLSeconds is how long a minted TURN credential stays valid.
+	CredentialTTLSeconds int
+}
+
+// defaultSTUNURLs — public Google STUN, used when STUN_URLS is unset.
+const defaultSTUNURLs = "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302"
 
 // EmailConfig — optional. If RESEND_API_KEY is empty, password reset is disabled.
 type EmailConfig struct {
@@ -188,6 +209,25 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("ENCRYPTION_KEY environment variable is required (64 hex chars = 32 byte AES-256 key)")
 	}
 
+	// Default 24h: a TURN credential must outlast any single call, otherwise a
+	// relayed call drops when coturn rejects the next allocation refresh.
+	turnTTL, err := strconv.Atoi(getEnv("TURN_CREDENTIAL_TTL_SECONDS", "86400"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid TURN_CREDENTIAL_TTL_SECONDS: %w", err)
+	}
+	// Fail fast on an invalid TTL — single source of truth, no silent fallback.
+	// Upper bound (7 days) also prevents int64 nanosecond overflow downstream.
+	if turnTTL <= 0 || turnTTL > 604800 {
+		return nil, fmt.Errorf("TURN_CREDENTIAL_TTL_SECONDS must be between 1 and 604800 (7 days), got %d", turnTTL)
+	}
+
+	turnSecret := strings.TrimSpace(getEnv("TURN_SECRET", ""))
+	turnURLs := splitCSV(getEnv("TURN_URLS", ""))
+	stunURLs := splitCSV(getEnv("STUN_URLS", defaultSTUNURLs))
+	if err := validateICEServers(turnSecret, turnURLs, stunURLs); err != nil {
+		return nil, err
+	}
+
 	cfg := &Config{
 		Server: ServerConfig{
 			Host: getEnv("SERVER_HOST", "0.0.0.0"),
@@ -239,6 +279,12 @@ func Load() (*Config, error) {
 		Klipy: KlipyConfig{
 			APIKey: getEnv("KLIPY_API_KEY", ""),
 		},
+		TURN: TURNConfig{
+			Secret:               turnSecret,
+			URLs:                 turnURLs,
+			STUNURLs:             stunURLs,
+			CredentialTTLSeconds: turnTTL,
+		},
 		EncryptionKey:   encKey,
 		HetznerAPIToken: getEnv("HETZNER_API_TOKEN", ""),
 	}
@@ -256,4 +302,44 @@ func getEnv(key, fallback string) string {
 		return val
 	}
 	return fallback
+}
+
+// validateICEServers fails fast on misconfigured STUN/TURN values so a bad
+// config surfaces at startup, not on the first restrictive-NAT call (where it
+// would silently degrade to STUN-only and break the relay).
+func validateICEServers(turnSecret string, turnURLs, stunURLs []string) error {
+	for _, u := range stunURLs {
+		if !strings.HasPrefix(u, "stun:") && !strings.HasPrefix(u, "stuns:") {
+			return fmt.Errorf("invalid STUN URL %q: must start with stun: or stuns:", u)
+		}
+	}
+	// TURN is "enabled" only when URLs are present; then it needs a strong shared
+	// secret and valid turn:/turns: schemes (the dangerous misconfig: relay
+	// advertised but broken). A leftover secret without URLs is harmless — it just
+	// means no relay (STUN-only), so it's ignored rather than failed (avoids a
+	// deploy footgun where the setup script writes the secret before the URLs).
+	if len(turnURLs) > 0 {
+		if len(turnSecret) < 16 {
+			return fmt.Errorf("TURN_SECRET must be at least 16 chars when TURN_URLS is set")
+		}
+		for _, u := range turnURLs {
+			if !strings.HasPrefix(u, "turn:") && !strings.HasPrefix(u, "turns:") {
+				return fmt.Errorf("invalid TURN URL %q: must start with turn: or turns:", u)
+			}
+		}
+	}
+	return nil
+}
+
+// splitCSV splits a comma-separated env value, trimming whitespace and
+// dropping empty entries.
+func splitCSV(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
