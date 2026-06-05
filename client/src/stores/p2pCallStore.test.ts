@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 // Module-level imports of p2pCallStore — stub them so the store loads in isolation.
-vi.mock("../api/calls", () => ({ fetchIceServers: vi.fn() }));
+vi.mock("../api/calls", () => ({ fetchIceServers: vi.fn(), fetchIceServersForRecovery: vi.fn() }));
 vi.mock("../i18n", () => ({ default: { t: (k: string) => k } }));
 vi.mock("./toastStore", () => ({
   useToastStore: { getState: () => ({ addToast: vi.fn() }) },
@@ -37,6 +37,7 @@ beforeEach(() => {
     peerConnection: null,
     _durationInterval: null,
     _pendingCandidates: [],
+    _triggerIceRestart: null,
   });
 });
 
@@ -75,5 +76,26 @@ describe("handleCallBusy — stale-busy protection", () => {
     useP2PCallStore.setState({ activeCall: makeCall({ id: "A", status: "ringing", receiver_id: "X" }) });
     useP2PCallStore.getState().handleCallBusy({ receiver_id: "X" });
     expect(useP2PCallStore.getState().activeCall).toBeNull();
+  });
+});
+
+describe("handleSignal — ice-restart dispatch", () => {
+  it("drives recovery via _triggerIceRestart when the call id matches", () => {
+    const trigger = vi.fn();
+    useP2PCallStore.setState({ activeCall: makeCall({ id: "A", status: "active" }), _triggerIceRestart: trigger });
+    void useP2PCallStore.getState().handleSignal({ call_id: "A", type: "ice-restart" });
+    expect(trigger).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores an ice-restart for a different call", () => {
+    const trigger = vi.fn();
+    useP2PCallStore.setState({ activeCall: makeCall({ id: "A", status: "active" }), _triggerIceRestart: trigger });
+    void useP2PCallStore.getState().handleSignal({ call_id: "B", type: "ice-restart" });
+    expect(trigger).not.toHaveBeenCalled();
+  });
+
+  it("is a no-op on the receiver (no recovery trigger set)", () => {
+    useP2PCallStore.setState({ activeCall: makeCall({ id: "A", status: "active" }), _triggerIceRestart: null });
+    expect(() => void useP2PCallStore.getState().handleSignal({ call_id: "A", type: "ice-restart" })).not.toThrow();
   });
 });

@@ -413,7 +413,7 @@ export type P2PCall = {
  */
 export type P2PSignalPayload = {
   call_id: string;
-  type: "offer" | "answer" | "ice-candidate";
+  type: "offer" | "answer" | "ice-candidate" | "ice-restart";
   sdp?: string;
   candidate?: RTCIceCandidateInit;
 };

@@ -15,7 +15,7 @@
  */
 
 import { create } from "zustand";
-import { fetchIceServers } from "../api/calls";
+import { fetchIceServers, fetchIceServersForRecovery } from "../api/calls";
 import i18n from "../i18n";
 import type { P2PCall, P2PCallType, P2PSignalPayload } from "../types";
 import { useToastStore } from "./toastStore";
@@ -43,6 +43,12 @@ type P2PCallStore = {
    * Flushed after setRemoteDescription completes.
    */
   _pendingCandidates: RTCIceCandidateInit[];
+
+  /**
+   * Set by the caller's peer connection so an incoming "ice-restart" request
+   * (sent by the receiver when it detects a failure) can drive recovery.
+   */
+  _triggerIceRestart: (() => void) | null;
 
   isMuted: boolean;
   isVideoOn: boolean;
@@ -117,13 +123,23 @@ function applyDegradationPreference(pc: RTCPeerConnection): void {
 
 // ─── PeerConnection Factory ───
 
+// Mid-call recovery: on a failed connection, attempt an ICE restart (TURN relay
+// candidates are already in the pool) before giving up. Bounded so a truly dead
+// call still ends. Each attempt gets its own window (enough for TURN/TLS fallback
+// and slow ICE gathering); after the cap with no reconnect, the call ends.
+const MAX_ICE_RESTARTS = 2;
+const ICE_RESTART_ATTEMPT_MS = 7_000;
+
 /**
  * Creates RTCPeerConnection with standard handlers.
  * Single creation point prevents race conditions from duplicate PC creation.
+ * isCaller drives ICE-restart recovery — only the offerer regenerates the offer.
+ * Exported for unit-testing the recovery state machine.
  */
-function createPeerConnection(
+export function createPeerConnection(
   activeCall: P2PCall,
   iceServers: RTCIceServer[],
+  isCaller: boolean,
   sendWS: (op: string, data?: unknown) => void,
   set: (partial: Partial<P2PCallStore> | ((state: P2PCallStore) => Partial<P2PCallStore>)) => void,
   get: () => P2PCallStore,
@@ -162,46 +178,141 @@ function createPeerConnection(
     }
   };
 
-  // Connection state monitoring — end call on permanent failure.
-  // "disconnected" may be transient (renegotiation, network change) so we wait before ending.
+  // Connection-state monitoring with mid-call recovery.
+  // "disconnected" may be a transient blip → grace wait; "failed" (or a disconnect
+  // that doesn't recover) → ICE-restart recovery before ending.
+  //
+  // Recovery is an explicit, bounded retry loop run on BOTH peers — failure
+  // detection isn't symmetric, so either side may notice first. Each attempt
+  // refreshes ICE credentials (a relayed reconnect may need a fresh TURN
+  // allocation, and the original creds can be near expiry) then acts: the caller
+  // regenerates the offer via restartIce; the receiver asks the caller to, via an
+  // "ice-restart" signal. After the cap with no reconnect, the call ends.
   let disconnectedTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let recovering = false;
+  let attempts = 0;
+
+  const clearDisconnectedTimer = () => {
+    if (disconnectedTimer) {
+      clearTimeout(disconnectedTimer);
+      disconnectedTimer = null;
+    }
+  };
+
+  const stopRecovery = () => {
+    recovering = false;
+    attempts = 0;
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
+    }
+  };
+
+  const endNow = () => {
+    clearDisconnectedTimer();
+    stopRecovery();
+    const current = get();
+    if (current.activeCall) current.endCall();
+  };
+
+  // On fetch failure this returns null — keep the existing (TURN) config rather
+  // than downgrade to STUN-only right when a relayed reconnect is needed.
+  const refreshIceServers = async () => {
+    const iceServers = await fetchIceServersForRecovery();
+    if (!isCurrent() || !iceServers) return;
+    try {
+      // Spread the current config so we only swap iceServers — passing a bare
+      // { iceServers } would reset any other fields (iceTransportPolicy, etc.) to
+      // their defaults if they're ever added at creation time.
+      pc.setConfiguration({ ...pc.getConfiguration(), iceServers });
+    } catch (err) {
+      console.error("[p2p] setConfiguration during recovery failed:", err);
+    }
+  };
+
+  // The caller drives the actual restart; the receiver requests it.
+  const recoveryAction = () => {
+    if (isCaller) {
+      try {
+        pc.restartIce();
+      } catch (err) {
+        console.error("[p2p] restartIce error:", err);
+      }
+    } else {
+      sendWS("p2p_signal", { call_id: activeCall.id, type: "ice-restart" });
+    }
+  };
+
+  const recoveryStep = async () => {
+    if (!isCurrent() || pc.connectionState === "connected") {
+      stopRecovery();
+      return;
+    }
+    if (attempts >= MAX_ICE_RESTARTS) {
+      console.warn("[p2p] ICE restart cap reached, ending call");
+      endNow();
+      return;
+    }
+    attempts++;
+    console.warn(`[p2p] ICE restart attempt ${attempts}/${MAX_ICE_RESTARTS} (${isCaller ? "caller" : "receiver"})`);
+    await refreshIceServers();
+    // Re-check after the await — the connection may have recovered on its own (or
+    // the call ended). Don't disturb a now-healthy connection with a restart.
+    if (!isCurrent() || !recovering || pc.connectionState === "connected") {
+      stopRecovery();
+      return;
+    }
+    recoveryAction();
+    // Reconnect, retry, or give up after this attempt's window.
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      void recoveryStep();
+    }, ICE_RESTART_ATTEMPT_MS);
+  };
+
+  const startRecovery = () => {
+    if (recovering) return; // idempotent — own failure + an incoming request may coincide
+    recovering = true;
+    attempts = 0;
+    void recoveryStep();
+  };
+
+  // Let an incoming "ice-restart" request (receiver → caller) drive recovery.
+  if (isCaller) {
+    set({ _triggerIceRestart: startRecovery });
+  }
 
   pc.onconnectionstatechange = () => {
     if (!isCurrent()) return;
-    if (pc.connectionState === "connected" || pc.connectionState === "connecting") {
-      if (disconnectedTimer) {
-        clearTimeout(disconnectedTimer);
-        disconnectedTimer = null;
-      }
-      return;
-    }
-
-    if (pc.connectionState === "failed" || pc.connectionState === "closed") {
-      if (disconnectedTimer) {
-        clearTimeout(disconnectedTimer);
-        disconnectedTimer = null;
-      }
-      console.warn("[p2p] PeerConnection state:", pc.connectionState);
-      const current = get();
-      if (current.activeCall) {
-        current.endCall();
-      }
-    } else if (pc.connectionState === "disconnected") {
-      // During renegotiation (signalingState !== "stable"), ICE may temporarily disconnect.
-      const timeout = pc.signalingState !== "stable" ? 10000 : 5000;
-      console.warn("[p2p] PeerConnection disconnected, waiting for recovery...", { signalingState: pc.signalingState, timeout });
-      if (!disconnectedTimer) {
-        disconnectedTimer = setTimeout(() => {
-          disconnectedTimer = null;
-          if (!isCurrent()) return;
-          if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
-            console.warn("[p2p] PeerConnection did not recover, ending call");
-            const current = get();
-            if (current.activeCall) {
-              current.endCall();
+    switch (pc.connectionState) {
+      case "connected":
+        clearDisconnectedTimer();
+        stopRecovery();
+        return;
+      case "connecting":
+        clearDisconnectedTimer();
+        return;
+      case "failed":
+        clearDisconnectedTimer();
+        startRecovery();
+        return;
+      case "closed":
+        endNow();
+        return;
+      case "disconnected": {
+        const timeout = pc.signalingState !== "stable" ? 10000 : 5000;
+        console.warn("[p2p] PeerConnection disconnected, waiting for recovery...", { signalingState: pc.signalingState, timeout });
+        if (!disconnectedTimer) {
+          disconnectedTimer = setTimeout(() => {
+            disconnectedTimer = null;
+            if (!isCurrent()) return;
+            if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
+              startRecovery();
             }
-          }
-        }, timeout);
+          }, timeout);
+        }
+        return;
       }
     }
   };
@@ -221,6 +332,9 @@ function createPeerConnection(
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+
+      // Re-check after the awaits — don't send an offer for a PC/call we've left.
+      if (!isCurrent() || get().activeCall?.id !== call.id) return;
 
       sendWS("p2p_signal", {
         call_id: call.id,
@@ -251,6 +365,7 @@ export const useP2PCallStore = create<P2PCallStore>((set, get) => ({
   callDuration: 0,
   _durationInterval: null,
   _pendingCandidates: [],
+  _triggerIceRestart: null,
   _sendWS: null,
 
   registerSendWS: (fn) => set({ _sendWS: fn }),
@@ -468,7 +583,7 @@ export const useP2PCallStore = create<P2PCallStore>((set, get) => ({
         return;
       }
 
-      const pc = createPeerConnection(activeCall, iceServers, _sendWS, set, get);
+      const pc = createPeerConnection(activeCall, iceServers, isCaller, _sendWS, set, get);
 
       // addTrack triggers onnegotiationneeded -> handler auto-creates offer.
       // No explicit createOffer here to avoid duplicate offers.
@@ -531,6 +646,7 @@ export const useP2PCallStore = create<P2PCallStore>((set, get) => ({
       callDuration: 0,
       _durationInterval: null,
       _pendingCandidates: [],
+      _triggerIceRestart: null,
     });
   },
 
@@ -638,7 +754,9 @@ export const useP2PCallStore = create<P2PCallStore>((set, get) => ({
           // The call may have ended/changed during the async fetch.
           if (get().activeCall?.id !== callId) break;
 
-          pc = createPeerConnection(activeCall, iceServers, _sendWS, set, get);
+          // This path only runs for the receiver (the caller offers from
+          // startWebRTC), so it never drives the ICE restart.
+          pc = createPeerConnection(activeCall, iceServers, false, _sendWS, set, get);
 
           // addTrack fires onnegotiationneeded async, but setRemoteDescription
           // synchronously changes signalingState to "have-remote-offer" —
@@ -749,6 +867,14 @@ export const useP2PCallStore = create<P2PCallStore>((set, get) => ({
         } else {
           await peerConnection.addIceCandidate(new RTCIceCandidate(candidateInit));
         }
+        break;
+      }
+
+      case "ice-restart": {
+        // The other peer (the receiver) detected a failure and asked us to
+        // restart ICE. Only the caller exposes _triggerIceRestart, so this is a
+        // no-op on the receiver; it's idempotent if we're already recovering.
+        get()._triggerIceRestart?.();
         break;
       }
       }

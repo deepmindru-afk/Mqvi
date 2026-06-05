@@ -16,14 +16,9 @@ const FALLBACK_ICE_SERVERS: RTCIceServer[] = [
 // running in the background and mint an unneeded credential / consume rate limit.
 const ICE_FETCH_TIMEOUT_MS = 4000;
 
-/**
- * Fetches the ICE server list (STUN + TURN with fresh short-lived credentials)
- * for the current P2P call. Must be called once the call is "active" — the
- * backend gates this on an accepted call. Never throws and never blocks beyond
- * ICE_FETCH_TIMEOUT_MS: on any failure or timeout it returns STUN-only so the
- * call is not held up by TURN.
- */
-export async function fetchIceServers(): Promise<RTCIceServer[]> {
+// Fetches the backend ICE list, or null on any failure/timeout. Never throws and
+// never blocks beyond ICE_FETCH_TIMEOUT_MS. Callers decide the failure policy.
+async function fetchIceServersOrNull(): Promise<RTCIceServer[] | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ICE_FETCH_TIMEOUT_MS);
   try {
@@ -38,6 +33,28 @@ export async function fetchIceServers(): Promise<RTCIceServer[]> {
   } finally {
     clearTimeout(timer);
   }
+  return null;
+}
+
+/**
+ * Fetches the ICE server list (STUN + TURN with fresh short-lived credentials)
+ * for the start of a P2P call. Must be called once the call is "active" — the
+ * backend gates this on an accepted call. On any failure/timeout it returns
+ * STUN-only so the call is not held up by TURN.
+ */
+export async function fetchIceServers(): Promise<RTCIceServer[]> {
+  const servers = await fetchIceServersOrNull();
+  if (servers) return servers;
   console.warn("[p2p] ICE server fetch failed/timed out, falling back to STUN-only");
   return FALLBACK_ICE_SERVERS;
+}
+
+/**
+ * Recovery variant: returns null on failure instead of STUN-only. During an
+ * ICE-restart the caller must NOT downgrade its config to STUN-only — that would
+ * strip the TURN servers at the exact moment a relayed reconnect is needed. On
+ * null, keep the existing configuration.
+ */
+export async function fetchIceServersForRecovery(): Promise<RTCIceServer[] | null> {
+  return fetchIceServersOrNull();
 }
