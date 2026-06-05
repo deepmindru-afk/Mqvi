@@ -17,7 +17,7 @@ import P2PStreamContextMenu from "./P2PStreamContextMenu";
 
 // ─── Draggable Local PiP ───
 
-function DraggableLocalVideo({ stream }: { stream: MediaStream }) {
+function DraggableVideo({ stream, onClick }: { stream: MediaStream; onClick?: () => void }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const dragState = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
@@ -80,18 +80,28 @@ function DraggableLocalVideo({ stream }: { stream: MediaStream }) {
     clamp(el);
   }, [clamp]);
 
-  const onPointerUp = useCallback(() => {
-    setDragging(false);
-    dragState.current = null;
-  }, []);
+  const onPointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      const ds = dragState.current;
+      setDragging(false);
+      dragState.current = null;
+      // Tap (no meaningful movement) acts as a click → swap; a real drag does not.
+      if (onClick && ds && Math.hypot(e.clientX - ds.startX, e.clientY - ds.startY) < 5) {
+        onClick();
+      }
+    },
+    [onClick],
+  );
 
   return (
     <div
       ref={wrapRef}
-      className={`p2p-local-video-wrap${dragging ? " dragging" : ""}`}
+      className={`p2p-local-video-wrap${dragging ? " dragging" : ""}${onClick ? " swappable" : ""}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      // Keep PiP interactions from bubbling to the media area's fullscreen dblclick.
+      onDoubleClick={(e) => e.stopPropagation()}
     >
       <video ref={videoRef} autoPlay playsInline muted />
     </div>
@@ -114,24 +124,20 @@ function P2PCallScreen() {
   const remoteVolume = useP2PCallStore((s) => s.remoteVolume);
   const currentUserId = useAuthStore((s) => s.user?.id);
 
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  // Hidden audio element — the single audio sink (the <video> is muted). Also
+  // Hidden audio element — the single audio sink (every <video> is muted). Also
   // keeps the stream "playing" so the Web Audio source below isn't silent.
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const mediaAreaRef = useRef<HTMLDivElement>(null);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  // WhatsApp-style camera swap: which feed fills the big area. Only meaningful
+  // when both peers have a camera on; auto-resets otherwise (effect below).
+  const [isSwapped, setIsSwapped] = useState(false);
 
   useEffect(() => {
     if (remoteAudioRef.current && remoteStream) {
       remoteAudioRef.current.srcObject = remoteStream;
-    }
-  }, [remoteStream]);
-
-  useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
     }
   }, [remoteStream]);
 
@@ -239,21 +245,50 @@ function P2PCallScreen() {
   const hasRemoteVideo = remoteStream?.getVideoTracks().some((tr) => tr.enabled);
   const hasLocalVideo = localStream?.getVideoTracks().some((tr) => tr.enabled);
 
-  // Double-click toggles fullscreen on the remote stream.
+  // ─── Camera swap (WhatsApp-style) ───
+  // The PiP always shows your own camera as the secondary view; when both peers
+  // have a camera, tapping the PiP swaps which feed fills the big area.
+  const localHasCam = !!hasLocalVideo && isVideoOn && !isScreenSharing;
+  const bothHaveVideo = localHasCam && !!hasRemoteVideo;
+  const effectiveSwapped = isSwapped && bothHaveVideo;
+
+  const bigStream = effectiveSwapped ? localStream : remoteStream;
+  const bigHasVideo = effectiveSwapped ? true : !!hasRemoteVideo;
+  const pipStream = effectiveSwapped ? remoteStream : localStream;
+
+  // Drop a stale swap when the pair is no longer both-on-camera.
+  useEffect(() => {
+    if (!bothHaveVideo && isSwapped) setIsSwapped(false);
+  }, [bothHaveVideo, isSwapped]);
+
+  const handlePipClick = useCallback(() => {
+    if (bothHaveVideo) setIsSwapped((s) => !s);
+  }, [bothHaveVideo]);
+
+  // The big feed's srcObject follows whichever stream is foregrounded (muted —
+  // audio always comes from the hidden <audio> element).
+  const bigVideoRef = useCallback(
+    (node: HTMLVideoElement | null) => {
+      if (node && bigStream) node.srcObject = bigStream;
+    },
+    [bigStream],
+  );
+
+  // Double-click toggles fullscreen on the foreground stream.
   const handleDoubleClick = useCallback(() => {
-    if (!hasRemoteVideo) return;
+    if (!bigHasVideo) return;
     handleFullscreenToggle();
-  }, [hasRemoteVideo, handleFullscreenToggle]);
+  }, [bigHasVideo, handleFullscreenToggle]);
 
   // Suppress the native media menu on the video and open ours instead. Without
   // preventDefault a fullscreen <video> shows the browser menu (Save as…, PiP…).
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
-      if (!hasRemoteVideo) return;
+      if (!bigHasVideo) return;
       e.preventDefault();
       setCtxMenu({ x: e.clientX, y: e.clientY });
     },
-    [hasRemoteVideo]
+    [bigHasVideo]
   );
 
   // Single return to keep hidden <audio> always in DOM
@@ -289,9 +324,9 @@ function P2PCallScreen() {
             onContextMenu={handleContextMenu}
             onDoubleClick={handleDoubleClick}
           >
-            {hasRemoteVideo ? (
+            {bigHasVideo ? (
               <video
-                ref={remoteVideoRef}
+                ref={bigVideoRef}
                 className="p2p-remote-video"
                 autoPlay
                 playsInline
@@ -308,13 +343,16 @@ function P2PCallScreen() {
               </div>
             )}
 
-            {/* Local PiP — draggable, independent of remote video state */}
-            {hasLocalVideo && isVideoOn && !isScreenSharing && localStream && (
-              <DraggableLocalVideo stream={localStream} />
+            {/* Floating PiP — your own camera; tap to swap when both are on camera */}
+            {localHasCam && pipStream && (
+              <DraggableVideo
+                stream={pipStream}
+                onClick={bothHaveVideo ? handlePipClick : undefined}
+              />
             )}
 
-            {/* Hover overlay — fullscreen button (only when there's a remote stream) */}
-            {hasRemoteVideo && (
+            {/* Hover overlay — fullscreen button (only when a stream is foregrounded) */}
+            {bigHasVideo && (
               <div className="p2p-stream-overlay">
                 <button
                   type="button"

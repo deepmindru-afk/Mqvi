@@ -2743,9 +2743,11 @@ button.ch-tree-vu-stream svg { width:21px;height:21px; }
 .p2p-stream-btn { position:absolute;top:8px;right:8px;width:32px;height:32px;border:none;border-radius:6px;background:rgba(0,0,0,0.6);color:var(--t1);cursor:pointer;display:flex;align-items:center;justify-content:center;pointer-events:auto;transition:background .15s,color .15s; }
 .p2p-stream-btn:hover { background:var(--bg-h);color:var(--t0); }
 .p2p-stream-btn svg { width:16px;height:16px; }
-.p2p-local-video-wrap { position:absolute;right:12px;bottom:12px;z-index:1;cursor:grab;touch-action:none;user-select:none;transition:box-shadow .15s; }
+.p2p-local-video-wrap { position:absolute;right:12px;bottom:12px;z-index:3;cursor:grab;touch-action:none;user-select:none;transition:box-shadow .15s; }
 .p2p-local-video-wrap.dragging { cursor:grabbing;box-shadow:0 4px 20px rgba(0,0,0,.4); }
-.p2p-local-video-wrap video { display:block;width:auto;height:120px;max-width:45vw;object-fit:cover;border-radius:8px;border:2px solid var(--b2); }
+.p2p-local-video-wrap.swappable { cursor:pointer; }
+.p2p-local-video-wrap.swappable.dragging { cursor:grabbing; }
+.p2p-local-video-wrap video { display:block;width:auto;height:120px;max-width:45vw;object-fit:contain;background:var(--bg-0);border-radius:8px;border:2px solid var(--b2); }
 @media (orientation:portrait) { .p2p-local-video-wrap video { height:160px; } }
 
 /* Duration */
