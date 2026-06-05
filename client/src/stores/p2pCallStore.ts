@@ -150,6 +150,8 @@ export function createPeerConnection(
   // a PC that lost a concurrent-offer race, was discarded, or belonged to a call
   // the user already left must not mutate or end the current call.
   const isCurrent = () => get().peerConnection === pc;
+  // Closure read — dodges TS's stale narrowing of readonly connectionState after await.
+  const isConnected = () => pc.connectionState === "connected";
 
   // Relay new ICE candidates to the other peer
   pc.onicecandidate = (event) => {
@@ -245,7 +247,7 @@ export function createPeerConnection(
   };
 
   const recoveryStep = async () => {
-    if (!isCurrent() || pc.connectionState === "connected") {
+    if (!isCurrent() || isConnected()) {
       stopRecovery();
       return;
     }
@@ -257,9 +259,8 @@ export function createPeerConnection(
     attempts++;
     console.warn(`[p2p] ICE restart attempt ${attempts}/${MAX_ICE_RESTARTS} (${isCaller ? "caller" : "receiver"})`);
     await refreshIceServers();
-    // Re-check after the await — the connection may have recovered on its own (or
-    // the call ended). Don't disturb a now-healthy connection with a restart.
-    if (!isCurrent() || !recovering || pc.connectionState === "connected") {
+    // Re-check after the await — the call may have ended or reconnected meanwhile.
+    if (!isCurrent() || !recovering || isConnected()) {
       stopRecovery();
       return;
     }

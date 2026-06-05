@@ -103,7 +103,6 @@ echo -e "${GREEN}  Public IPv4: ${PUBLIC_IP}${NC}"
 
 # ─── 3/6: Write turnserver.conf ───
 echo -e "${YELLOW}[3/6] Writing /etc/turnserver.conf...${NC}"
-mkdir -p /var/log/turnserver
 cat > /etc/turnserver.conf <<EOF
 # /etc/turnserver.conf — managed by mqvi coturn-setup.sh (P2P call TURN relay)
 listening-port=${LISTENING_PORT}
@@ -151,7 +150,9 @@ denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff
 
 # No admin CLI console.
 no-cli
-log-file=/var/log/turnserver/turnserver.log
+# Log to stdout so systemd/journald captures it (journalctl -u coturn). Avoids the
+# permission issue of a custom file once coturn drops to the turnserver user.
+log-file=stdout
 simple-log
 EOF
 
