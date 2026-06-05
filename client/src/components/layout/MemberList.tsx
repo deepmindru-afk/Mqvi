@@ -13,6 +13,7 @@ import { useIsMobile } from "../../hooks/useMediaQuery";
 import { useResizeHandle } from "../../hooks/useResizeHandle";
 import { resolveAssetUrl } from "../../utils/constants";
 import MemberItem from "../members/MemberItem";
+import FriendsVoiceList from "./FriendsVoiceList";
 import { MemberSkeleton } from "../shared/Skeleton";
 import { IconMembers } from "../shared/Icons";
 import type { MemberWithRoles, Role } from "../../types";
@@ -98,6 +99,13 @@ function MemberList() {
   const isMobile = useIsMobile();
   const activeServer = useServerStore((s) => s.activeServer);
 
+  // When the Friends view is focused, the panel shows friends' voice activity
+  // instead of the active server's member list.
+  const isFriendsView = useUIStore((s) => {
+    const panel = s.panels[s.activePanelId];
+    return panel?.tabs.find((t) => t.id === panel.activeTabId)?.type === "friends";
+  });
+
   // Collapsible sections — persisted in localStorage
   const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
 
@@ -167,7 +175,7 @@ function MemberList() {
         {/* ─── Header ─── */}
         <div className="members-header">
           <div className="members-header-left">
-            {activeServer?.icon_url ? (
+            {!isFriendsView && (activeServer?.icon_url ? (
               <img
                 src={resolveAssetUrl(activeServer.icon_url)}
                 alt={activeServer.name}
@@ -177,14 +185,18 @@ function MemberList() {
               <span className="members-header-icon-fallback">
                 {activeServer.name.charAt(0).toUpperCase()}
               </span>
-            ) : null}
-            <h3>{t("members")}</h3>
+            ) : null)}
+            <h3>{isFriendsView ? t("activeNow") : t("members")}</h3>
           </div>
           <button onClick={isMobile ? closeRightDrawer : toggleMembers}>✕</button>
         </div>
 
-        {/* ─── Member List ─── */}
+        {/* ─── Member List (or friends' voice activity) ─── */}
         <div className="members-list">
+          {isFriendsView ? (
+            <FriendsVoiceList />
+          ) : (
+          <>
           {/* Skeleton while loading */}
           {isLoading && members.length === 0 && (
             <MemberSkeleton count={8} />
@@ -258,6 +270,8 @@ function MemberList() {
                 />
               ))}
             </div>
+          )}
+          </>
           )}
         </div>
       </div>

@@ -2178,6 +2178,19 @@ button.ch-tree-vu-stream svg { width:21px;height:21px; }
 .vp-vol-range::-moz-range-thumb { width:16px;height:16px;border-radius:999px;background:var(--primary);border:none;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,0.4); }
 .vp-vol-value { font-size:13px;font-weight:500;color:var(--primary);min-width:36px;text-align:right;font-variant-numeric:tabular-nums; }
 
+/* Friends view — right panel "Active Now" voice activity list */
+.fva-list { display:flex;flex-direction:column;gap:2px;padding:8px; }
+.fva-row { display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:8px; }
+.fva-row:hover { background:var(--bg-h); }
+.fva-avatar { flex-shrink:0; }
+.fva-info { display:flex;flex-direction:column;min-width:0;gap:2px; }
+.fva-name { font-size:14px;font-weight:600;color:var(--t0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.fva-location { display:flex;align-items:center;gap:5px;min-width:0;color:var(--t2); }
+.fva-location svg { width:14px;height:14px;flex-shrink:0;color:var(--success,#3ba55d); }
+.fva-location-text { font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.fva-server { color:var(--t3); }
+.fva-empty { padding:24px 16px;text-align:center;font-size:13px;line-height:1.6;color:var(--t3);white-space:pre-line; }
+
 /* Server hover — active voice channels preview popup */
 .server-voice-popup { position:fixed;z-index:9999;min-width:180px;max-width:240px;background:var(--bg-2);border:1px solid var(--b1);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:8px;display:flex;flex-direction:column;gap:10px;animation:vpIn .12s ease-out;pointer-events:none; }
 .svp-channel { display:flex;flex-direction:column;gap:6px; }

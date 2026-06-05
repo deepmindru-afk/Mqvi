@@ -89,6 +89,8 @@
   "streamVolume": "Yayın Sesi",
   "fullscreen": "Tam Ekran",
   "exitFullscreen": "Tam Ekrandan Çık",
+  "activeNow": "Şu An Aktif",
+  "noFriendsInVoice": "Şimdilik sessiz.\nHiçbir arkadaşın seste değil.",
   "connecting": "Bağlanıyor...",
   "invisible": "Görünmez",
   "setStatus": "Durum Ayarla",
