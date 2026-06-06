@@ -32,9 +32,18 @@ async function copyImageToClipboard(src: string): Promise<boolean> {
     canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
     const png = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
     if (!png) return false;
-    await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+
+    // Electron's renderer clipboard API is sandboxed and silently fails for images
+    // (text is routed through main for the same reason) — write PNG bytes natively
+    // via IPC. Browser builds fall back to the async clipboard API.
+    if (window.electronAPI?.writeClipboardImage) {
+      await window.electronAPI.writeClipboardImage(new Uint8Array(await png.arrayBuffer()));
+    } else {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+    }
     return true;
-  } catch {
+  } catch (err) {
+    console.error("[FileViewer] copy image failed:", err);
     return false;
   }
 }

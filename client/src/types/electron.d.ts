@@ -96,6 +96,9 @@ interface ElectronAPI {
   /** Clipboard write via main process IPC — always works */
   writeClipboard: (text: string) => Promise<void>;
 
+  /** Image clipboard write via main process IPC (renderer clipboard API is sandboxed) */
+  writeClipboardImage: (data: Uint8Array) => Promise<void>;
+
   /** Seconds since last OS-level input (mouse/keyboard anywhere). For idle detection across apps. */
   getSystemIdleTime: () => Promise<number>;
 

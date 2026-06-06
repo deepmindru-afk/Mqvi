@@ -184,6 +184,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   writeClipboard: (text: string): Promise<void> =>
     ipcRenderer.invoke("write-clipboard", text),
 
+  /** Copy a PNG image to clipboard via main process IPC (renderer clipboard API is sandboxed) */
+  writeClipboardImage: (data: Uint8Array): Promise<void> =>
+    ipcRenderer.invoke("write-clipboard-image", data),
+
   /** Seconds since last OS-level input — for idle detection across the whole system */
   getSystemIdleTime: (): Promise<number> =>
     ipcRenderer.invoke("get-system-idle-time"),

@@ -798,6 +798,17 @@ function setupIPC(): void {
     }
   );
 
+  // Image clipboard — the renderer's async clipboard API is unreliable in the
+  // sandboxed context (same reason text is routed here), so write PNG bytes natively.
+  ipcMain.handle(
+    "write-clipboard-image",
+    (_e: Electron.IpcMainInvokeEvent, data: Uint8Array) => {
+      const img = nativeImage.createFromBuffer(Buffer.from(data));
+      if (img.isEmpty()) throw new Error("decoded image is empty");
+      clipboard.writeImage(img);
+    }
+  );
+
   // ─── App Settings (General / Windows Settings) ───
 
   ipcMain.handle("get-app-settings", () => {
