@@ -152,6 +152,8 @@ function VoiceProvider({ children }: VoiceProviderProps) {
             if (tokenResp && _wsSend) {
               _wsSend("voice_join", { channel_id: channelToRejoin });
             } else {
+              // Rejoin token fetch failed — we're dropping the user for real.
+              useToastStore.getState().addToast("error", t("youWereDisconnected"), 6000);
               leaveVoiceChannel();
             }
           });
@@ -159,21 +161,29 @@ function VoiceProvider({ children }: VoiceProviderProps) {
         }
       }
 
+      // Unrecoverable drop (rejoin exhausted) — notify only if they were in voice.
+      if (currentVoiceChannelId) {
+        useToastStore.getState().addToast("error", t("youWereDisconnected"), 6000);
+      }
       leaveVoiceChannel();
     },
-    [leaveVoiceChannel]
+    [leaveVoiceChannel, t]
   );
 
   const handleError = useCallback(
     (err: Error) => {
-      if (err.message?.includes("Client initiated")) return;
-
       console.error("[VoiceProvider] LiveKit error:", err);
-      useToastStore.getState().addToast(
-        "error",
-        t("livekitConnectionError"),
-        8000
-      );
+
+      // Connection errors are transient failed (re)connect attempts — the SDK's
+      // reconnection and handleDisconnected's auto-rejoin recover them. Toasting
+      // each one spammed the user mid-session while audio kept working. A single
+      // terminal toast is shown from handleDisconnected only when recovery fails.
+      const isConnectionError =
+        err.name === "ConnectionError" ||
+        /could not establish|client initiated/i.test(err.message ?? "");
+      if (isConnectionError) return;
+
+      useToastStore.getState().addToast("error", t("livekitConnectionError"), 8000);
     },
     [t]
   );
