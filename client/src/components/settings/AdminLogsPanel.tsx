@@ -237,8 +237,8 @@ function AdminLogsPanel() {
               <div
                 key={log.id}
                 className={`admin-log-entry${isExpanded ? " expanded" : ""}`}
-                onClick={() => meta && toggleExpand(log.id)}
-                style={{ cursor: meta ? "pointer" : "default" }}
+                onClick={() => toggleExpand(log.id)}
+                style={{ cursor: "pointer" }}
               >
                 <div className="admin-log-row">
                   <span className={levelBadgeClass(log.level)}>
@@ -256,9 +256,11 @@ function AdminLogsPanel() {
                   </span>
                 </div>
 
-                {isExpanded && meta && (
+                {isExpanded && (
                   <div className="admin-log-metadata">
-                    {Object.entries(meta).map(([key, value]) => (
+                    {/* Full, wrapped message — the row above truncates it */}
+                    <div className="admin-log-full-message">{log.message}</div>
+                    {meta && Object.entries(meta).map(([key, value]) => (
                       <div key={key} className="admin-log-meta-item">
                         <span className="admin-log-meta-key">{key}:</span>
                         <span className="admin-log-meta-value">{value}</span>
