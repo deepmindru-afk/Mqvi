@@ -4,11 +4,11 @@
 # then lives independently of redeploys (do not run on every deploy).
 #
 # Usage:
-#   powershell -ExecutionPolicy Bypass -File deploy\coturn-setup.ps1                        # test (default)
-#   powershell -ExecutionPolicy Bypass -File deploy\coturn-setup.ps1 -Server root@46.225.124.90   # prod
+#   powershell -ExecutionPolicy Bypass -File deploy\coturn-setup.ps1
+#   powershell -ExecutionPolicy Bypass -File deploy\coturn-setup.ps1 -Server root@1.2.3.4
 
 param(
-    [string]$Server = "root@46.225.191.119"
+    [string]$Server
 )
 
 $ErrorActionPreference = "Stop"
@@ -17,8 +17,19 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Write-Host ""
 Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host "  mqvi coturn Setup (one-time)" -ForegroundColor Cyan
-Write-Host "  Target: $Server" -ForegroundColor Cyan
 Write-Host "=========================================" -ForegroundColor Cyan
+Write-Host ""
+
+# --- Ask for server address if not provided ---
+if (-not $Server) {
+    $ip = Read-Host "Server address (e.g. root@1.2.3.4)"
+    if (-not $ip) {
+        Write-Host "  ERROR: Server address is required." -ForegroundColor Red
+        exit 1
+    }
+    $Server = $ip
+}
+Write-Host "  Target: $Server" -ForegroundColor White
 Write-Host ""
 
 # --- SSH Agent: ask passphrase once ---
