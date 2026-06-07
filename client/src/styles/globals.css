@@ -1367,6 +1367,8 @@ button.ch-tree-vu-stream svg { width:21px;height:21px; }
 .settings-content { flex:1;min-width:0;overflow-y:auto;padding:32px 40px;background:var(--panel-bg);backdrop-filter:var(--panel-backdrop);-webkit-backdrop-filter:var(--panel-backdrop);border:1px solid var(--panel-border);border-radius:var(--panel-radius);box-shadow:var(--panel-inset),var(--panel-shadow); }
 .settings-close { position:absolute;top:14px;right:14px;z-index:5;width:36px;height:36px;border:none;border-radius:999px;background:var(--red);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:background .15s,opacity .15s;opacity:0.85; }
 .settings-close:hover { background:var(--red);opacity:1; }
+/* Top headers with a right-aligned action button must clear the floating close button */
+.settings-section-header { padding-right:24px; }
 
 /* Settings form elements */
 .settings-section { margin-bottom:32px; }
@@ -3342,6 +3344,8 @@ button.ch-tree-vu-stream svg { width:21px;height:21px; }
   .settings-content {
     padding: 16px;
   }
+  /* Mobile close is wider and offset — needs more right clearance on top headers */
+  .settings-section-header { padding-right: 44px; }
   /* Settings close button — fixed top-right over the stacked layout, offset for safe area + tab bar */
   .settings-close {
     position: fixed;
