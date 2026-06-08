@@ -152,6 +152,23 @@ let pttTargetKeycode: number | null = null;
 let uiohookRunning = false;
 
 /**
+ * A toggle-style global shortcut (mute / deafen). Unlike PTT (hold), these
+ * fire once on the keydown that completes the combo. `isDown` is the repeat
+ * guard — uIOhook re-fires keydown while a key is held, so we only act on the
+ * press→hold transition and reset on keyup of the main key.
+ */
+type ToggleShortcut = {
+  keycode: number;
+  ctrl: boolean;
+  shift: boolean;
+  alt: boolean;
+  isDown: boolean;
+};
+
+let muteShortcut: ToggleShortcut | null = null;
+let deafenShortcut: ToggleShortcut | null = null;
+
+/**
  * Map KeyboardEvent.code (stored by frontend) → uiohook native keycode.
  * Built from UiohookKey enum + manual entries for left/right modifier variants.
  */
@@ -233,11 +250,55 @@ function stopUiohook(): void {
   console.log("[main] uIOhook stopped");
 }
 
+/** Run the hook while any global shortcut is registered; stop when none are. */
+function refreshUiohookState(): void {
+  const anyActive =
+    pttTargetKeycode !== null || muteShortcut !== null || deafenShortcut !== null;
+  if (anyActive) startUiohook();
+  else stopUiohook();
+}
+
+/** Build a ToggleShortcut from a renderer ShortcutBinding, or null if the key is unknown. */
+function buildToggleShortcut(binding: {
+  code: string;
+  ctrl: boolean;
+  shift: boolean;
+  alt: boolean;
+}): ToggleShortcut | null {
+  const keycode = codeToUiohook[binding.code];
+  if (keycode === undefined) return null;
+  return { keycode, ctrl: binding.ctrl, shift: binding.shift, alt: binding.alt, isDown: false };
+}
+
+/** Whether a keydown event's key + modifier state matches a toggle shortcut. */
+function matchesToggle(e: { keycode: number; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }, s: ToggleShortcut): boolean {
+  return (
+    e.keycode === s.keycode &&
+    e.ctrlKey === s.ctrl &&
+    e.shiftKey === s.shift &&
+    e.altKey === s.alt
+  );
+}
+
 // ─── uIOhook event handlers (registered once, filter by pttTargetKeycode) ───
 
 uIOhook.on("keydown", (e) => {
   if (pttTargetKeycode !== null && e.keycode === pttTargetKeycode) {
     mainWindow?.webContents.send("ptt-global-down");
+  }
+
+  if (muteShortcut && matchesToggle(e, muteShortcut)) {
+    if (!muteShortcut.isDown) {
+      muteShortcut.isDown = true;
+      mainWindow?.webContents.send("mute-global-toggle");
+    }
+  }
+
+  if (deafenShortcut && matchesToggle(e, deafenShortcut)) {
+    if (!deafenShortcut.isDown) {
+      deafenShortcut.isDown = true;
+      mainWindow?.webContents.send("deafen-global-toggle");
+    }
   }
 });
 
@@ -245,6 +306,10 @@ uIOhook.on("keyup", (e) => {
   if (pttTargetKeycode !== null && e.keycode === pttTargetKeycode) {
     mainWindow?.webContents.send("ptt-global-up");
   }
+
+  // Reset repeat guard when the main key of a toggle combo is released.
+  if (muteShortcut && e.keycode === muteShortcut.keycode) muteShortcut.isDown = false;
+  if (deafenShortcut && e.keycode === deafenShortcut.keycode) deafenShortcut.isDown = false;
 });
 
 // ─── Window Bounds Persistence ───
@@ -893,7 +958,7 @@ function setupIPC(): void {
       }
 
       pttTargetKeycode = uiCode;
-      startUiohook();
+      refreshUiohookState();
       console.log(`[main] PTT registered: ${keyCode} → uiohook ${uiCode}`);
       return true;
     }
@@ -901,8 +966,49 @@ function setupIPC(): void {
 
   ipcMain.handle("unregister-ptt-shortcut", () => {
     pttTargetKeycode = null;
-    stopUiohook();
+    refreshUiohookState();
     console.log("[main] PTT unregistered");
+  });
+
+  // ─── Global Mute / Deafen Toggle Shortcuts ───
+  // Toggle-style: fire once per press, even when the app is unfocused (in-game).
+
+  ipcMain.handle(
+    "register-mute-shortcut",
+    (_e: Electron.IpcMainInvokeEvent, binding: { code: string; ctrl: boolean; shift: boolean; alt: boolean }) => {
+      const built = buildToggleShortcut(binding);
+      if (!built) {
+        console.warn(`[main] Unknown mute key code: ${binding.code}`);
+        return false;
+      }
+      muteShortcut = built;
+      refreshUiohookState();
+      return true;
+    }
+  );
+
+  ipcMain.handle("unregister-mute-shortcut", () => {
+    muteShortcut = null;
+    refreshUiohookState();
+  });
+
+  ipcMain.handle(
+    "register-deafen-shortcut",
+    (_e: Electron.IpcMainInvokeEvent, binding: { code: string; ctrl: boolean; shift: boolean; alt: boolean }) => {
+      const built = buildToggleShortcut(binding);
+      if (!built) {
+        console.warn(`[main] Unknown deafen key code: ${binding.code}`);
+        return false;
+      }
+      deafenShortcut = built;
+      refreshUiohookState();
+      return true;
+    }
+  );
+
+  ipcMain.handle("unregister-deafen-shortcut", () => {
+    deafenShortcut = null;
+    refreshUiohookState();
   });
 }
 
@@ -1147,6 +1253,8 @@ app.on("before-quit", (e) => {
 
   stopUiohook();
   pttTargetKeycode = null;
+  muteShortcut = null;
+  deafenShortcut = null;
 
   if (!captureProcess || cleanupDone) {
     // Nothing to wait for — let quit proceed

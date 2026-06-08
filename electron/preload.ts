@@ -124,6 +124,32 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.removeAllListeners("ptt-global-up");
   },
 
+  // ─── Global Mute / Deafen Toggle Shortcuts ───
+
+  /** Register the global mute toggle (works even when app is unfocused) */
+  registerMuteShortcut: (binding: { code: string; ctrl: boolean; shift: boolean; alt: boolean }): Promise<boolean> =>
+    ipcRenderer.invoke("register-mute-shortcut", binding),
+  unregisterMuteShortcut: (): Promise<void> =>
+    ipcRenderer.invoke("unregister-mute-shortcut"),
+  onMuteGlobalToggle: (cb: () => void): void => {
+    ipcRenderer.on("mute-global-toggle", () => cb());
+  },
+  removeMuteListeners: (): void => {
+    ipcRenderer.removeAllListeners("mute-global-toggle");
+  },
+
+  /** Register the global deafen toggle (works even when app is unfocused) */
+  registerDeafenShortcut: (binding: { code: string; ctrl: boolean; shift: boolean; alt: boolean }): Promise<boolean> =>
+    ipcRenderer.invoke("register-deafen-shortcut", binding),
+  unregisterDeafenShortcut: (): Promise<void> =>
+    ipcRenderer.invoke("unregister-deafen-shortcut"),
+  onDeafenGlobalToggle: (cb: () => void): void => {
+    ipcRenderer.on("deafen-global-toggle", () => cb());
+  },
+  removeDeafenListeners: (): void => {
+    ipcRenderer.removeAllListeners("deafen-global-toggle");
+  },
+
   // ─── Credential Storage (Remember Me) ───
 
   /** Save credentials encrypted via safeStorage */

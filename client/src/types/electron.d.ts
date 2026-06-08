@@ -72,6 +72,20 @@ interface ElectronAPI {
   /** Remove global PTT listeners to prevent accumulation */
   removePTTListeners: () => void;
 
+  /** Register the global mute toggle (works when app is unfocused) */
+  registerMuteShortcut: (binding: { code: string; ctrl: boolean; shift: boolean; alt: boolean }) => Promise<boolean>;
+  unregisterMuteShortcut: () => Promise<void>;
+  /** Mute toggle pressed globally */
+  onMuteGlobalToggle: (cb: () => void) => void;
+  removeMuteListeners: () => void;
+
+  /** Register the global deafen toggle (works when app is unfocused) */
+  registerDeafenShortcut: (binding: { code: string; ctrl: boolean; shift: boolean; alt: boolean }) => Promise<boolean>;
+  unregisterDeafenShortcut: () => Promise<void>;
+  /** Deafen toggle pressed globally */
+  onDeafenGlobalToggle: (cb: () => void) => void;
+  removeDeafenListeners: () => void;
+
   /** Save credentials encrypted with safeStorage */
   saveCredentials: (username: string, password: string) => Promise<void>;
   loadCredentials: () => Promise<{ username: string; password: string } | null>;
