@@ -18,5 +18,15 @@
 
   "art_welcome": "Welcome to mqvi",
   "art_register-login": "Create an account & sign in",
-  "art_send-messages": "Sending messages"
+  "art_download-app": "Get the desktop app",
+  "art_join-invite": "Join a server with an invite",
+  "art_interface-tour": "A tour of the interface",
+  "art_first-voice-chat": "Start a voice chat",
+  "art_send-messages": "Sending messages",
+  "art_commands": "Slash commands",
+  "art_reactions-replies": "Reactions & replies",
+  "art_mentions": "Mentions",
+  "art_pins": "Pinned messages",
+  "art_attachments": "Files & attachments",
+  "art_search-messages": "Searching messages"
 }
