@@ -80,11 +80,71 @@ export const HELP_CATEGORIES: HelpCategory[] = [
       { slug: "blocking-reporting", titleKey: "art_blocking-reporting" },
     ],
   },
-  { id: "servers", labelKey: "cat_servers", icon: "servers", articles: [] },
-  { id: "roles", labelKey: "cat_roles", icon: "roles", articles: [] },
-  { id: "privacy", labelKey: "cat_privacy", icon: "lock", articles: [] },
-  { id: "account", labelKey: "cat_account", icon: "user", articles: [] },
-  { id: "app", labelKey: "cat_app", icon: "sliders", articles: [] },
-  { id: "selfhost", labelKey: "cat_selfhost", icon: "server", articles: [] },
-  { id: "nice-to-know", labelKey: "cat_niceToKnow", icon: "sparkle", articles: [] },
+  {
+    id: "servers",
+    labelKey: "cat_servers",
+    icon: "servers",
+    articles: [
+      { slug: "create-server", titleKey: "art_create-server" },
+      { slug: "channels-categories", titleKey: "art_channels-categories" },
+      { slug: "invites", titleKey: "art_invites" },
+    ],
+  },
+  {
+    id: "roles",
+    labelKey: "cat_roles",
+    icon: "roles",
+    articles: [
+      { slug: "roles", titleKey: "art_roles" },
+      { slug: "permissions", titleKey: "art_permissions" },
+      { slug: "moderation", titleKey: "art_moderation" },
+    ],
+  },
+  {
+    id: "privacy",
+    labelKey: "cat_privacy",
+    icon: "lock",
+    articles: [
+      { slug: "encryption-overview", titleKey: "art_encryption-overview" },
+      { slug: "devices-keys", titleKey: "art_devices-keys" },
+      { slug: "recovery", titleKey: "art_recovery" },
+    ],
+  },
+  {
+    id: "account",
+    labelKey: "cat_account",
+    icon: "user",
+    articles: [
+      { slug: "profile", titleKey: "art_profile" },
+      { slug: "security", titleKey: "art_security" },
+      { slug: "manage-account", titleKey: "art_manage-account" },
+    ],
+  },
+  {
+    id: "app",
+    labelKey: "cat_app",
+    icon: "sliders",
+    articles: [
+      { slug: "themes-appearance", titleKey: "art_themes-appearance" },
+      { slug: "notifications", titleKey: "art_notifications" },
+      { slug: "desktop-app", titleKey: "art_desktop-app" },
+    ],
+  },
+  {
+    id: "selfhost",
+    labelKey: "cat_selfhost",
+    icon: "server",
+    articles: [
+      { slug: "self-host-overview", titleKey: "art_self-host-overview" },
+      { slug: "voice-livekit", titleKey: "art_voice-livekit" },
+      { slug: "full-server", titleKey: "art_full-server" },
+      { slug: "connections", titleKey: "art_connections" },
+    ],
+  },
+  {
+    id: "nice-to-know",
+    labelKey: "cat_niceToKnow",
+    icon: "sparkle",
+    articles: [{ slug: "split-view", titleKey: "art_split-view" }],
+  },
 ];

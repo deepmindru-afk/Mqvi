@@ -1,0 +1,11 @@
+# Connecting to a custom server
+
+The desktop app can connect to **any mqvi backend**, not just the default one.
+
+## Saved connections
+
+In **Settings → Connections**, add a connection with a **name** and the server **URL**, then switch between them — the app reloads against the backend you pick.
+
+> 📸 **Screenshot:** the Connections settings with saved entries and a connect button.
+
+This is how you point the app at a **self-hosted** mqvi instance.
