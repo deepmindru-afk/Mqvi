@@ -6,7 +6,7 @@
 
   "cat_gettingStarted": "Getting Started",
   "cat_messaging": "Messaging & Files",
-  "cat_voice": "Voice, Video & Screen Share",
+  "cat_voice": "Voice & Screen Share",
   "cat_friends": "Friends & DMs",
   "cat_servers": "Servers & Channels",
   "cat_roles": "Roles & Moderation",
@@ -28,5 +28,15 @@
   "art_mentions": "Mentions",
   "art_pins": "Pinned messages",
   "art_attachments": "Files & attachments",
-  "art_search-messages": "Searching messages"
+  "art_search-messages": "Searching messages",
+  "art_audio-setup": "Audio setup",
+  "art_voice-activity-ptt": "Voice activity & push-to-talk",
+  "art_in-call-controls": "Controls while you're in voice",
+  "art_screen-share": "Screen sharing",
+  "art_soundboard": "Soundboard",
+  "art_add-friends": "Friends",
+  "art_direct-messages": "Direct messages",
+  "art_status-presence": "Status & presence",
+  "art_calls": "Voice & video calls",
+  "art_blocking-reporting": "Blocking & reporting"
 }
