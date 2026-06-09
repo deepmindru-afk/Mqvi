@@ -18,6 +18,8 @@ export default defineConfig(({ command }) => ({
   server: {
     port: 3030,
     strictPort: true, // Fail if port is taken — Electron dev expects a fixed port
+    // Allow importing release-notes/*.md from the repo root (one level above client/).
+    fs: { allow: [".."] },
     // Backend API proxy — routes /api/* and /ws/* to the Go backend in development.
     proxy: {
       "/api": {

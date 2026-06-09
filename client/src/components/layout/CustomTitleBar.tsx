@@ -11,11 +11,14 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../../stores/authStore";
 import { useSettingsStore } from "../../stores/settingsStore";
+import InfoModal from "../shared/InfoModal";
 
 function CustomTitleBar() {
   const { t } = useTranslation("settings");
+  const { t: tc } = useTranslation("common");
   const [isMaximized, setIsMaximized] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
   const user = useAuthStore((s) => s.user);
   const openSettings = useSettingsStore((s) => s.openSettings);
 
@@ -58,6 +61,17 @@ function CustomTitleBar() {
       )}
 
       <div className="titlebar-controls">
+        <button
+          className="titlebar-icon-btn"
+          onClick={() => setInfoOpen(true)}
+          title={tc("appInfo")}
+          aria-label={tc("appInfo")}
+        >
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+          </svg>
+        </button>
+
         {user && (
           <button
             className="titlebar-text-btn"
@@ -110,6 +124,8 @@ function CustomTitleBar() {
           </svg>
         </button>
       </div>
+
+      <InfoModal isOpen={infoOpen} onClose={() => setInfoOpen(false)} />
     </div>
   );
 }

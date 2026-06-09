@@ -190,6 +190,16 @@ select option:disabled {
   transition:background 0.1s,color 0.1s;
 }
 .titlebar-text-btn:hover { background:var(--bg-h);color:var(--t0); }
+.titlebar-icon-btn {
+  display:flex;align-items:center;justify-content:center;
+  height:32px;width:36px;
+  background:transparent;border:none;
+  color:var(--t2);cursor:pointer;
+  -webkit-app-region:no-drag;
+  transition:background 0.1s,color 0.1s;
+}
+.titlebar-icon-btn:hover { background:var(--bg-h);color:var(--t0); }
+.titlebar-icon-btn svg { width:16px;height:16px; }
 .titlebar-update-btn {
   display:flex;align-items:center;gap:5px;
   padding:0 10px;height:32px;
@@ -1369,6 +1379,33 @@ button.ch-tree-vu-stream svg { width:21px;height:21px; }
 .settings-close:hover { background:var(--red);opacity:1; }
 /* Top headers with a right-aligned action button must clear the floating close button */
 .settings-section-header { padding-right:24px; }
+
+/* Release notes — collapsible list (shared: info modal + landing) */
+.release-notes { display:flex;flex-direction:column;gap:8px; }
+.rn-release { border:1px solid var(--b1);border-radius:10px;background:var(--bg-2);overflow:hidden; }
+.rn-release.open { background:var(--bg-3); }
+.rn-release-header { width:100%;display:flex;align-items:center;gap:10px;padding:12px 14px;background:none;border:none;cursor:pointer;color:var(--t0);text-align:left;transition:background .15s; }
+.rn-release-header:hover { background:var(--bg-h); }
+.rn-chevron { color:var(--t3);font-size:13px;width:14px;flex-shrink:0; }
+.rn-version { font-size:15px;font-weight:700;color:var(--t0); }
+.rn-date { font-size:13px;color:var(--t3);margin-left:auto;white-space:nowrap; }
+.rn-body { padding:4px 16px 14px 38px;display:flex;flex-direction:column;gap:14px; }
+.rn-section { display:flex;flex-direction:column;gap:6px; }
+.rn-section-heading { margin:0;font-size:13px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.03em; }
+.rn-items { list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px; }
+.rn-item { font-size:14px;line-height:1.5;color:var(--t1); }
+.rn-scope { font-weight:700;color:var(--primary);margin-right:6px; }
+.rn-text { color:var(--t1); }
+
+/* Info modal — tabbed (release notes + features), wide reading width */
+.modal-card:has(.info-modal) { max-width:75vw; }
+.info-modal { display:flex;flex-direction:column;min-width:0; }
+.info-modal-tabs { display:flex;gap:4px;border-bottom:1px solid var(--b1);margin-bottom:14px; }
+.info-modal-tab { background:none;border:none;padding:9px 14px;font-size:14px;font-weight:600;color:var(--t2);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s; }
+.info-modal-tab:hover { color:var(--t0); }
+.info-modal-tab.active { color:var(--primary);border-bottom-color:var(--primary); }
+.info-modal-body { overflow-y:auto;max-height:60vh; }
+.info-modal-placeholder { padding:40px 16px;text-align:center;font-size:14px;color:var(--t3); }
 
 /* Settings form elements */
 .settings-section { margin-bottom:32px; }
