@@ -8,6 +8,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Modal from "./Modal";
 import ReleaseNotes from "./ReleaseNotes";
+import FeatureGuide from "../help/FeatureGuide";
 
 type InfoTab = "releaseNotes" | "features";
 
@@ -42,11 +43,7 @@ function InfoModal({ isOpen, onClose, initialTab = "releaseNotes" }: InfoModalPr
         </div>
 
         <div className="info-modal-body">
-          {tab === "releaseNotes" ? (
-            <ReleaseNotes />
-          ) : (
-            <p className="info-modal-placeholder">{t("featuresComingSoon")}</p>
-          )}
+          {tab === "releaseNotes" ? <ReleaseNotes /> : <FeatureGuide />}
         </div>
       </div>
     </Modal>

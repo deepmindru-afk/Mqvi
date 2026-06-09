@@ -1,0 +1,20 @@
+{
+  "title": "Yardım & Özellikler",
+  "selectArticle": "Başlamak için soldan bir konu seç.",
+  "comingSoon": "Bu bölümün rehberleri yakında.",
+  "notTranslated": "Henüz çevrilmedi — İngilizce gösteriliyor.",
+
+  "cat_gettingStarted": "Başlangıç",
+  "cat_messaging": "Mesajlaşma & Dosyalar",
+  "cat_voice": "Sesli, Görüntülü & Ekran Paylaşımı",
+  "cat_friends": "Arkadaşlar & DM",
+  "cat_servers": "Sunucular & Kanallar",
+  "cat_roles": "Roller & Moderasyon",
+  "cat_privacy": "Gizlilik & Şifreleme",
+  "cat_account": "Hesap Ayarları",
+  "cat_app": "Uygulama Ayarları & Görünüm",
+  "cat_selfhost": "Self-Hosting",
+  "cat_niceToKnow": "Bilmekte Fayda Var",
+
+  "art_welcome": "mqvi'ye hoş geldin"
+}

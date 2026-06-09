@@ -1,0 +1,22 @@
+{
+  "title": "Help & Features",
+  "selectArticle": "Pick a topic on the left to get started.",
+  "comingSoon": "Guides for this section are coming soon.",
+  "notTranslated": "Not yet translated — showing English.",
+
+  "cat_gettingStarted": "Getting Started",
+  "cat_messaging": "Messaging & Files",
+  "cat_voice": "Voice, Video & Screen Share",
+  "cat_friends": "Friends & DMs",
+  "cat_servers": "Servers & Channels",
+  "cat_roles": "Roles & Moderation",
+  "cat_privacy": "Privacy & Encryption",
+  "cat_account": "Account Settings",
+  "cat_app": "App Settings & Appearance",
+  "cat_selfhost": "Self-Hosting",
+  "cat_niceToKnow": "Nice to Know",
+
+  "art_welcome": "Welcome to mqvi",
+  "art_register-login": "Create an account & sign in",
+  "art_send-messages": "Sending messages"
+}
