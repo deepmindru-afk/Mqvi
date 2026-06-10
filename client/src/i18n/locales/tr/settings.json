@@ -612,6 +612,7 @@
   "platformLogsPage": "Sayfa {{current}} / {{total}}",
 
   "feedback": "Geri Bildirim",
+  "help": "Yardım",
   "feedbackNewTicket": "Yeni Bildirim",
   "feedbackBackToList": "Geri",
   "feedbackEmpty": "Henüz geri bildirim göndermediniz.",

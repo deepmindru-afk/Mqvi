@@ -26,6 +26,7 @@ const USER_ITEMS: NavItem[] = [
   { id: "encryption", labelKey: "encryption" },
   { id: "blocked-users", labelKey: "blockedUsers" },
   { id: "feedback", labelKey: "feedback" },
+  { id: "help", labelKey: "help" },
   // "general" is added conditionally below (Electron only)
 ];
 

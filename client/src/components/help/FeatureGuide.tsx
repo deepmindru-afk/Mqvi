@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { HELP_CATEGORIES, type HelpIcon } from "./manifest";
-import { loadArticleBody, type LoadedArticle } from "./loader";
+import { loadArticleBody, loadAllBodies, type LoadedArticle } from "./loader";
 
 const ICON_PATHS: Record<HelpIcon, string> = {
   rocket: "M15.59 14.37a6 6 0 01-5.84 7.38v-4.82m5.84-2.56a14.95 14.95 0 005.84-2.56 14.95 14.95 0 00-2.56-8.4 14.95 14.95 0 00-8.4-2.56 14.95 14.95 0 00-2.56 5.84m7.72 10.24L8.06 9.66m1.69 7.27a6 6 0 00-4.18-4.18",
@@ -35,6 +35,8 @@ function HelpIconSvg({ icon }: { icon: HelpIcon }) {
 }
 
 const FIRST_CAT = HELP_CATEGORIES.find((c) => c.articles.length > 0);
+const ALL_ARTICLES = HELP_CATEGORIES.flatMap((c) => c.articles);
+const ALL_SLUGS = ALL_ARTICLES.map((a) => a.slug);
 
 function FeatureGuide() {
   const { t, i18n } = useTranslation("help");
@@ -71,10 +73,56 @@ function FeatureGuide() {
       return next;
     });
 
+  // ─── Search ───
+  const [query, setQuery] = useState("");
+  const [bodies, setBodies] = useState<Map<string, string> | null>(null);
+  const q = query.trim().toLowerCase();
+
+  // Re-index when the language changes (search the active language's bodies).
+  useEffect(() => setBodies(null), [lang]);
+
+  // Load every article body on the first search (cached thereafter).
+  useEffect(() => {
+    if (q && !bodies) loadAllBodies(lang, ALL_SLUGS).then(setBodies);
+  }, [q, bodies, lang]);
+
+  const results = q
+    ? ALL_ARTICLES.filter((a) => {
+        if (t(a.titleKey).toLowerCase().includes(q)) return true;
+        const body = bodies?.get(a.slug);
+        return body ? body.toLowerCase().includes(q) : false;
+      })
+    : [];
+
   return (
     <div className="feature-guide">
       <nav className="fg-nav">
-        {HELP_CATEGORIES.map((cat) => {
+        <input
+          type="text"
+          className="fg-search"
+          placeholder={t("searchPlaceholder")}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {q ? (
+          <div className="fg-results">
+            {results.length > 0 ? (
+              results.map((a) => (
+                <button
+                  type="button"
+                  key={a.slug}
+                  className={`fg-article-link${selected === a.slug ? " active" : ""}`}
+                  onClick={() => setSelected(a.slug)}
+                >
+                  {t(a.titleKey)}
+                </button>
+              ))
+            ) : (
+              <p className="fg-coming-soon">{bodies ? t("noResults") : "…"}</p>
+            )}
+          </div>
+        ) : (
+          HELP_CATEGORIES.map((cat) => {
           const open = expanded.has(cat.id);
           return (
             <div key={cat.id} className="fg-cat">
@@ -108,7 +156,8 @@ function FeatureGuide() {
               )}
             </div>
           );
-        })}
+        })
+        )}
       </nav>
 
       <div className="fg-content">

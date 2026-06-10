@@ -25,3 +25,22 @@ export async function loadArticleBody(lang: string, slug: string): Promise<Loade
 
   return null;
 }
+
+// Cache the full body set per language so search loads each language's bodies once.
+const bodyCache = new Map<string, Map<string, string>>();
+
+/** Loads every article body for `lang` (with English fallback), cached. Powers search. */
+export async function loadAllBodies(lang: string, slugs: string[]): Promise<Map<string, string>> {
+  const cached = bodyCache.get(lang);
+  if (cached) return cached;
+
+  const map = new Map<string, string>();
+  await Promise.all(
+    slugs.map(async (slug) => {
+      const article = await loadArticleBody(lang, slug);
+      if (article) map.set(slug, article.body);
+    }),
+  );
+  bodyCache.set(lang, map);
+  return map;
+}

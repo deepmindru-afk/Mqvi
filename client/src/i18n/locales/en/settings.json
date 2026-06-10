@@ -612,6 +612,7 @@
   "platformLogsPage": "Page {{current}} of {{total}}",
 
   "feedback": "Feedback",
+  "help": "Help",
   "feedbackNewTicket": "New Ticket",
   "feedbackBackToList": "Back",
   "feedbackEmpty": "You haven't submitted any feedback yet.",

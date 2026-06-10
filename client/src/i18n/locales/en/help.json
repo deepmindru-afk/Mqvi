@@ -3,6 +3,8 @@
   "selectArticle": "Pick a topic on the left to get started.",
   "comingSoon": "Guides for this section are coming soon.",
   "notTranslated": "Not yet translated — showing English.",
+  "searchPlaceholder": "Search help…",
+  "noResults": "No matching articles.",
 
   "cat_gettingStarted": "Getting Started",
   "cat_messaging": "Messaging & Files",

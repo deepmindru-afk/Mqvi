@@ -1,51 +1,27 @@
 /**
- * InfoModal — tabbed app-info modal (Release Notes + Features).
- * Opened from the app (info icon) and the landing page. Features tab is a
- * placeholder until the in-app feature guide is built.
+ * InfoModal — modal wrapper around HelpCenter.
+ * view="tabs" (default) shows Features + Release Notes tabbed (desktop info icon).
+ * view="features" / "releaseNotes" show a single section, no tabs (landing links).
  */
 
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Modal from "./Modal";
-import ReleaseNotes from "./ReleaseNotes";
-import FeatureGuide from "../help/FeatureGuide";
-
-type InfoTab = "releaseNotes" | "features";
+import HelpCenter, { type HelpView } from "./HelpCenter";
 
 type InfoModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: InfoTab;
+  view?: HelpView;
 };
 
-function InfoModal({ isOpen, onClose, initialTab = "releaseNotes" }: InfoModalProps) {
+function InfoModal({ isOpen, onClose, view = "tabs" }: InfoModalProps) {
   const { t } = useTranslation("common");
-  const [tab, setTab] = useState<InfoTab>(initialTab);
+  const title =
+    view === "features" ? t("features") : view === "releaseNotes" ? t("releaseNotes") : "mqvi";
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="mqvi">
-      <div className="info-modal">
-        <div className="info-modal-tabs">
-          <button
-            type="button"
-            className={`info-modal-tab${tab === "releaseNotes" ? " active" : ""}`}
-            onClick={() => setTab("releaseNotes")}
-          >
-            {t("releaseNotes")}
-          </button>
-          <button
-            type="button"
-            className={`info-modal-tab${tab === "features" ? " active" : ""}`}
-            onClick={() => setTab("features")}
-          >
-            {t("features")}
-          </button>
-        </div>
-
-        <div className="info-modal-body">
-          {tab === "releaseNotes" ? <ReleaseNotes /> : <FeatureGuide />}
-        </div>
-      </div>
+    <Modal isOpen={isOpen} onClose={onClose} title={title}>
+      <HelpCenter view={view} />
     </Modal>
   );
 }

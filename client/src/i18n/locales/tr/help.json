@@ -3,6 +3,8 @@
   "selectArticle": "Başlamak için soldan bir konu seç.",
   "comingSoon": "Bu bölümün rehberleri yakında.",
   "notTranslated": "Henüz çevrilmedi — İngilizce gösteriliyor.",
+  "searchPlaceholder": "Yardımda ara…",
+  "noResults": "Eşleşen makale yok.",
 
   "cat_gettingStarted": "Başlangıç",
   "cat_messaging": "Mesajlaşma & Dosyalar",
