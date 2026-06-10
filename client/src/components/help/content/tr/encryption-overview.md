@@ -12,4 +12,4 @@ Bazı sunucular ve DM'ler **uçtan uca şifreleme (E2EE)** kullanır: mesajlar, 
 
 E2EE **DM bazında** ya da **sunucu bazında** (sahibi tarafından) etkinleştirilebilir. Açık olduğunda bir **şifreleme göstergesi** görürsün. Sunucu şifreli mesajları okuyamadığı için, **arama bunun yerine senin cihazında yerel olarak çalışır**.
 
-> 📸 **Ekran görüntüsü:** şifreli bir kanaldaki ya da DM'deki şifreleme göstergesi.
+> 📸 **Ekran görüntüsü:** `assets/encryption-overview-1.webp` — şifreli bir kanaldaki ya da DM'deki şifreleme göstergesi.

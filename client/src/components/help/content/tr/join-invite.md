@@ -6,16 +6,16 @@ Sunucular özeldir — birinin seninle paylaştığı bir **davet bağlantısı*
 
 Davet bağlantısını aç (`…/invite/AbC123` gibi görünür). Sunucunun bir **önizlemesini** görürsün — adı, simgesi ve üye sayısı — ardından **Katıl**'a tıkla.
 
-> 📸 **Ekran görüntüsü:** Katıl butonu olan davet önizleme sayfası.
+> 📸 **Ekran görüntüsü:** `assets/join-invite-1.webp` — Katıl butonu olan davet önizleme sayfası.
 
 ## Kodla
 
 Zaten giriş yaptın mı? Bir sunucu eklemek için **+**'ya tıkla, **Davetle katıl**'ı seç, kodu yapıştır ve onayla.
 
-> 📸 **Ekran görüntüsü:** Sunucu Ekle penceresi, "Katıl" sekmesi, kod alanıyla.
+> 📸 **Ekran görüntüsü:** `assets/join-invite-2.webp` — Sunucu Ekle penceresi, "Katıl" sekmesi, kod alanıyla.
 
 ## Kendi davetini oluştur
 
 Yönettiğin bir sunucunun içinde, kod oluşturmak için **Sunucu Ayarları → Davetler**'i aç. Bir **son kullanma tarihi** ve **maksimum kullanım sayısı** belirleyebilir, sonra paylaşmak için bağlantıyı kopyalayabilirsin.
 
-> 📸 **Ekran görüntüsü:** Aktif bir davet ve seçenekleriyle Davetler ayarları paneli.
+> 📸 **Ekran görüntüsü:** `assets/join-invite-3.webp` — Aktif bir davet ve seçenekleriyle Davetler ayarları paneli.

@@ -2,7 +2,7 @@
 
 Type **`/`** at the start of the composer to open the command menu — an autocomplete list shows what's available and how to use it as you type.
 
-> 📸 **Screenshot:** the command autocomplete list after typing "/".
+> 📸 **Screenshot:** `assets/commands-1.webp` — the command autocomplete list after typing "/".
 
 ## Everyday
 
@@ -30,4 +30,4 @@ Type **`/`** at the start of the composer to open the command menu — an autoco
 | `/call @user` | Start a 1-on-1 call |
 | `/invite @user` | Invite someone to the server |
 
-> 📸 **Screenshot:** a poll posted in a channel, showing the question and votable options.
+> 📸 **Screenshot:** `assets/commands-2.webp` — a poll posted in a channel, showing the question and votable options.

@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { reportUser, type ReportReason } from "../../api/report";
 import { useToastStore } from "../../stores/toastStore";
@@ -137,7 +138,7 @@ function ReportModal({ userId, username, onClose }: ReportModalProps) {
     if (e.target === e.currentTarget) onClose();
   }
 
-  return (
+  return createPortal(
     <div className="report-overlay" onClick={handleOverlayClick}>
       <div className="report-modal" {...dragHandlers} onPaste={handlePaste}>
         {/* Drag overlay */}
@@ -235,7 +236,8 @@ function ReportModal({ userId, username, onClose }: ReportModalProps) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

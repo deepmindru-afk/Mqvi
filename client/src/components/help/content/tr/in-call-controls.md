@@ -4,13 +4,13 @@
 
 Sol alttaki çubuktan **mikrofonunu** aç/kapat (sustur) veya **kendin dahil herkesi** sessize al (sağırlaştır).
 
-> 📸 **Ekran görüntüsü:** Sustur ve sağırlaştır düğmeleri.
+> 📸 **Ekran görüntüsü:** `assets/in-call-controls-1.webp` — Sustur ve sağırlaştır düğmeleri.
 
 ## Kişileri ayrı ayrı ayarla
 
 Bir **katılımcıya sağ tıklayarak** ses seviyesini *yalnızca senin için* ayarla veya onu **yerel olarak sustur** — hiçbiri aramadaki başkalarını etkilemez.
 
-> 📸 **Ekran görüntüsü:** Bir katılımcının sağ tık menüsündeki kişiye özel ses seviyesi kaydırıcısı.
+> 📸 **Ekran görüntüsü:** `assets/in-call-controls-2.webp` — Bir katılımcının sağ tık menüsündeki kişiye özel ses seviyesi kaydırıcısı.
 
 ## Bağlantı kalitesi
 
@@ -20,7 +20,7 @@ Küçük bir **ping göstergesi** bağlantı sağlığını (iyi / orta / kötü
 
 Aramanın yanında geçici bir metin sohbeti açmak için **sohbet anahtarını** kullan — bağlantılar ve hızlı notlar için kullanışlıdır. Kanal boşaldığında temizlenir.
 
-> 📸 **Ekran görüntüsü:** Bir sesli aramanın yanında açık olan yan sohbet paneli.
+> 📸 **Ekran görüntüsü:** `assets/in-call-controls-3.webp` — Bir sesli aramanın yanında açık olan yan sohbet paneli.
 
 ## Sesler & AFK
 

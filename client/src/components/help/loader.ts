@@ -13,6 +13,26 @@ const loaders = import.meta.glob("./content/*/*.md", {
 
 const keyFor = (lang: string, slug: string) => `./content/${lang}/${slug}.md`;
 
+// Eagerly map every bundled help image (basename → hashed URL). Markdown references
+// images as `assets/<file>`; the renderer resolves them through this map. Bundling
+// (not server-hosting) keeps help offline-capable and versioned with the app.
+const assetUrls = import.meta.glob(["./content/assets/*", "!./content/assets/*.md"], {
+  eager: true,
+  query: "?url",
+  import: "default",
+}) as Record<string, string>;
+
+const assetByName = new Map<string, string>(
+  Object.entries(assetUrls).map(([path, url]) => [path.split("/").pop() as string, url]),
+);
+
+/** Resolves a markdown image src ("assets/foo.webp") to its bundled URL, or null if absent. */
+export function resolveAsset(src: string | undefined): string | null {
+  if (!src) return null;
+  const name = src.replace(/^\.?\/?assets\//, "").split("/").pop();
+  return name ? assetByName.get(name) ?? null : null;
+}
+
 export type LoadedArticle = { slug: string; body: string; translated: boolean };
 
 /** Loads a slug's markdown body for `lang`, falling back to English. Null if neither exists. */

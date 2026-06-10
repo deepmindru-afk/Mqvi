@@ -11,7 +11,7 @@ mqvi sets you to **online**, **idle**, or **offline** automatically. You can als
 - **Do Not Disturb** — online but suppressing notifications
 - **Invisible** — appear offline while still using the app
 
-> 📸 **Screenshot:** the status menu on your user avatar.
+> 📸 **Screenshot:** `assets/status-presence-1.webp` — the status menu on your user avatar.
 
 ## Custom status
 

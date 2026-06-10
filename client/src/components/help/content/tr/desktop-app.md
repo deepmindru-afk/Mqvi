@@ -8,7 +8,7 @@
 - **Küçültülmüş başlat** — sessizce sistem tepsisine açıl
 - **Tepsiye kapat** — pencereyi kapattığında arka planda çalışmaya devam et
 
-> 📸 **Ekran görüntüsü:** başlangıç ve tepsi anahtarları.
+> 📸 **Ekran görüntüsü:** `assets/desktop-app-1.webp` — başlangıç ve tepsi anahtarları.
 
 ## Görünüm
 
@@ -18,7 +18,7 @@ Buzlu cam etkili bir pencere için **saydam arka planı** etkinleştir (uygulanm
 
 mqvi odakta olmadığında bile çalışan **global sustur ve sağırlaştır** tuşlarını ata.
 
-> 📸 **Ekran görüntüsü:** global kısayol atamaları.
+> 📸 **Ekran görüntüsü:** `assets/desktop-app-2.webp` — global kısayol atamaları.
 
 ## Güncellemeler
 

@@ -10,13 +10,13 @@ mqvi açılış sayfasını aç ve **İndir**'e tıkla — işletim sistemini al
 - **macOS** — disk görüntüsü (`.dmg`)
 - **Linux** — AppImage
 
-> 📸 **Ekran görüntüsü:** İndir butonunun vurgulandığı açılış sayfası hero alanı.
+> 📸 **Ekran görüntüsü:** `assets/download-app-1.webp` — İndir butonunun vurgulandığı açılış sayfası hero alanı.
 
 ## Windows SmartScreen
 
 Uygulama henüz kod imzalı değil, bu yüzden Windows ilk çalıştırdığında bir **SmartScreen** uyarısı gösterebilir. **Ek bilgi → Yine de çalıştır**'a tıkla — güvenlidir.
 
-> 📸 **Ekran görüntüsü:** "Ek bilgi" ardından "Yine de çalıştır" gösteren SmartScreen iletişim kutusu.
+> 📸 **Ekran görüntüsü:** `assets/download-app-2.webp` — "Ek bilgi" ardından "Yine de çalıştır" gösteren SmartScreen iletişim kutusu.
 
 ## Güncel kalmak
 

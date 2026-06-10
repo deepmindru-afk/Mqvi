@@ -6,13 +6,13 @@ Two quick ways to respond without typing a full message.
 
 Hover a message and click the **emoji** button to add a reaction. Click an existing reaction to add yours to it, or click again to remove it. Reactions are a fast way to acknowledge, vote, or just have fun.
 
-> 📸 **Screenshot:** a message with a few emoji reactions and the reaction picker open.
+> 📸 **Screenshot:** `assets/reactions-replies-1.webp` — a message with a few emoji reactions and the reaction picker open.
 
 ## Reply to a message
 
 Hover a message and choose **Reply** to quote it. Your message appears with a small reference to the original, so it's clear what you're responding to — handy in busy channels.
 
-> 📸 **Screenshot:** a reply showing the quoted original above it.
+> 📸 **Screenshot:** `assets/reactions-replies-2.webp` — a reply showing the quoted original above it.
 
 ## Edit & delete
 

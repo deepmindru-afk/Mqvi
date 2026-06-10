@@ -12,4 +12,4 @@ Some servers and DMs use **end-to-end encryption (E2EE)**: messages, files, and 
 
 E2EE can be enabled **per DM** or **per server** (by the owner). When it's on, you'll see an **encryption indicator**. Because the server can't read encrypted messages, **search runs locally on your device** instead.
 
-> 📸 **Screenshot:** the encryption indicator on an encrypted channel or DM.
+> 📸 **Screenshot:** `assets/encryption-overview-1.webp` — the encryption indicator on an encrypted channel or DM.

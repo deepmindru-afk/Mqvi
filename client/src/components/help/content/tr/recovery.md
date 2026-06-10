@@ -6,10 +6,10 @@
 
 Anahtarlarını güvenli bir şekilde yedeklemek için bir **kurtarma parolası** belirle. Onu güvenli bir yerde sakla — şifreli geçmişinin kilidini açan şey odur.
 
-> 📸 **Ekran görüntüsü:** kurtarma parolası belirleme penceresi.
+> 📸 **Ekran görüntüsü:** `assets/recovery-1.webp` — kurtarma parolası belirleme penceresi.
 
 ## Yeni bir cihazda geri yükle
 
 Yeni bir yerde mi giriş yapıyorsun? **Kurtarmadan geri yükle**'yi seç ve şifreli mesajlarını yanında getirmek için kurtarma parolanı gir. O olmadan, yeni bir cihaz sıfırdan başlar ve eski şifreli mesajlarını okuyamaz.
 
-> 📸 **Ekran görüntüsü:** kurtarmadan geri yükleme istemi.
+> 📸 **Ekran görüntüsü:** `assets/recovery-2.webp` — kurtarmadan geri yükleme istemi.

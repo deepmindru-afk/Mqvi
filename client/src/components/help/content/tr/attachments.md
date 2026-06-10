@@ -10,13 +10,13 @@ Görselleri, belgeleri ve daha fazlasını doğrudan sohbette paylaş.
 
 Göndermeden önce bir önizleme görürsün, böylece onaylayabilir ya da kaldırabilirsin.
 
-> 📸 **Ekran görüntüsü:** göndermeden önce yazma kutusunun üstündeki dosya eki önizlemesi.
+> 📸 **Ekran görüntüsü:** `assets/attachments-1.webp` — göndermeden önce yazma kutusunun üstündeki dosya eki önizlemesi.
 
 ## Dosyaları satır içinde görüntüle
 
 Kanaldan çıkmadan **görüntüleyiciyi** açmak için bir dosya ekine tıkla. **Görseller, video, ses, PDF'ler ve Office belgeleri** (Word, Excel) ile başa çıkar ve görseller için yakınlaştırma sunar. Görüntüleyiciden bir **görseli** doğrudan panona **kopyalayabilir** ya da dosyayı indirebilirsin.
 
-> 📸 **Ekran görüntüsü:** kopyala/indir eylemleriyle bir görseli gösteren dosya görüntüleyici katmanı.
+> 📸 **Ekran görüntüsü:** `assets/attachments-2.webp` — kopyala/indir eylemleriyle bir görseli gösteren dosya görüntüleyici katmanı.
 
 ## Şifreli sunucularda
 

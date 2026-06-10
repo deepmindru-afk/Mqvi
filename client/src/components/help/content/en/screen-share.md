@@ -6,7 +6,7 @@ Share your whole screen or a single window with everyone in the voice channel.
 
 Click **screen share**, then pick a **screen** or **window**. You can also include **system audio** — perfect for sharing a video or some music with the right sound.
 
-> 📸 **Screenshot:** the screen picker showing screens, windows, and the "share audio" option.
+> 📸 **Screenshot:** `assets/screen-share-1.webp` — the screen picker showing screens, windows, and the "share audio" option.
 
 ## Quality
 
@@ -16,7 +16,7 @@ Pick a **quality level** to balance sharpness against bandwidth — handy on slo
 
 Click a share to **watch** it. **Double-click** or the **fullscreen** button to expand it, and the **layout toggle** switches between a grid and a focused view. **Right-click** a share to set its audio volume independently of voices.
 
-> 📸 **Screenshot:** a screen share in focus view with the fullscreen and layout controls.
+> 📸 **Screenshot:** `assets/screen-share-2.webp` — a screen share in focus view with the fullscreen and layout controls.
 
 ## Limits
 

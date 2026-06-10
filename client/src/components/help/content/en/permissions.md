@@ -6,7 +6,7 @@ Permissions decide what members can do — send messages, manage channels, kick 
 
 A role's permissions apply across the whole server. Give trusted roles more; keep the default role limited.
 
-> 📸 **Screenshot:** the permission toggles for a role.
+> 📸 **Screenshot:** `assets/permissions-1.webp` — the permission toggles for a role.
 
 ## Per-channel overrides
 
@@ -18,4 +18,4 @@ On any channel you can **override** permissions for specific roles or members �
 
 Admin always bypasses overrides.
 
-> 📸 **Screenshot:** the per-channel permission overrides with allow/deny toggles.
+> 📸 **Screenshot:** `assets/permissions-2.webp` — the per-channel permission overrides with allow/deny toggles.

@@ -6,13 +6,13 @@ Sesli kanaldaki herkes için kısa sesler çal — tepkiler, meme'ler, jingle'la
 
 **Soundboard**'u aç ve bir sese tıkla (sesli kanalda olman gerekir). **Soundboard ses seviyesini** ayarla veya sessizlik gerekiyorsa tamamen sustur.
 
-> 📸 **Ekran görüntüsü:** Ses ızgarası olan soundboard paneli.
+> 📸 **Ekran görüntüsü:** `assets/soundboard-1.webp` — Ses ızgarası olan soundboard paneli.
 
 ## Kendi sesini ekle
 
 Bir ad ve emoji ile bir ses **yükle**. Onu yalnızca istediğin kısma **kırpabilir** ve hatta kısa bir **video** bile bırakabilirsin — mqvi sesi senin için çıkarır. Uzunluk ve dosya formatında sınırlar vardır.
 
-> 📸 **Ekran görüntüsü:** Dalga formu kırpıcısı olan yükleme penceresi.
+> 📸 **Ekran görüntüsü:** `assets/soundboard-2.webp` — Dalga formu kırpıcısı olan yükleme penceresi.
 
 ## Yönet
 

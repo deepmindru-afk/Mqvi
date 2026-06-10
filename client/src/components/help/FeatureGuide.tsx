@@ -10,7 +10,19 @@ import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { HELP_CATEGORIES, type HelpIcon } from "./manifest";
-import { loadArticleBody, loadAllBodies, type LoadedArticle } from "./loader";
+import { loadArticleBody, loadAllBodies, resolveAsset, type LoadedArticle } from "./loader";
+
+const VIDEO_EXT = /\.(webm|mp4)$/i;
+
+/** Resolves bundled help media; renders <video> for clips, <img> otherwise. */
+function HelpMedia({ src, alt }: { src?: string; alt?: string }) {
+  const url = resolveAsset(src);
+  if (!url) return <span className="fg-img-missing">🖼 {alt || src}</span>;
+  if (VIDEO_EXT.test(src || "")) {
+    return <video className="fg-media" src={url} autoPlay loop muted playsInline />;
+  }
+  return <img className="fg-media" src={url} alt={alt || ""} loading="lazy" />;
+}
 
 const ICON_PATHS: Record<HelpIcon, string> = {
   rocket: "M15.59 14.37a6 6 0 01-5.84 7.38v-4.82m5.84-2.56a14.95 14.95 0 005.84-2.56 14.95 14.95 0 00-2.56-8.4 14.95 14.95 0 00-8.4-2.56 14.95 14.95 0 00-2.56 5.84m7.72 10.24L8.06 9.66m1.69 7.27a6 6 0 00-4.18-4.18",
@@ -174,6 +186,7 @@ function FeatureGuide() {
                   a: ({ node: _node, ...props }) => (
                     <a {...props} target="_blank" rel="noopener noreferrer" />
                   ),
+                  img: ({ node: _node, src, alt }) => <HelpMedia src={src as string} alt={alt} />,
                 }}
               >
                 {article.body}

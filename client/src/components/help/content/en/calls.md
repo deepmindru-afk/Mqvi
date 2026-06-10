@@ -6,19 +6,19 @@ Call a friend directly — no server or channel needed.
 
 From a **DM** or a friend's **profile**, start a **voice call** or a **video call**.
 
-> 📸 **Screenshot:** the voice/video call buttons on a profile card.
+> 📸 **Screenshot:** `assets/calls-1.webp` — the voice/video call buttons on a profile card.
 
 ## In the call
 
 Toggle your **mic** and **camera**, or **share your screen**. Make the other person's video **fullscreen**, and **right-click** it to adjust their volume.
 
-> 📸 **Screenshot:** an active video call with the mic/camera/screen-share controls.
+> 📸 **Screenshot:** `assets/calls-2.webp` — an active video call with the mic/camera/screen-share controls.
 
 ## Swap the view
 
 When you both have your camera on, **tap the small floating self-view** to swap it with the main view — just like a phone call.
 
-> 📸 **Screenshot:** the floating self-view being tapped to swap.
+> 📸 **Screenshot:** `assets/calls-3.webp` — the floating self-view being tapped to swap.
 
 ## Behind the scenes
 

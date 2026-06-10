@@ -2,7 +2,7 @@
 
 Komut menüsünü açmak için yazma kutusunun başında **`/`** yaz — sen yazdıkça bir otomatik tamamlama listesi neyin mevcut olduğunu ve nasıl kullanılacağını gösterir.
 
-> 📸 **Ekran görüntüsü:** "/" yazdıktan sonra çıkan komut otomatik tamamlama listesi.
+> 📸 **Ekran görüntüsü:** `assets/commands-1.webp` — "/" yazdıktan sonra çıkan komut otomatik tamamlama listesi.
 
 ## Günlük
 
@@ -30,4 +30,4 @@ Komut menüsünü açmak için yazma kutusunun başında **`/`** yaz — sen yaz
 | `/call @user` | Birebir arama başlatır |
 | `/invite @user` | Birini sunucuya davet eder |
 
-> 📸 **Ekran görüntüsü:** bir kanala gönderilmiş, soruyu ve oylanabilir seçenekleri gösteren bir anket.
+> 📸 **Ekran görüntüsü:** `assets/commands-2.webp` — bir kanala gönderilmiş, soruyu ve oylanabilir seçenekleri gösteren bir anket.

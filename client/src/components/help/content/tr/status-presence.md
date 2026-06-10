@@ -11,7 +11,7 @@ mqvi seni otomatik olarak **çevrimiçi**, **boşta** ya da **çevrimdışı** y
 - **Rahatsız Etme** — çevrimiçi ama bildirimler susturulmuş
 - **Görünmez** — uygulamayı kullanmaya devam ederken çevrimdışı görün
 
-> 📸 **Ekran görüntüsü:** kullanıcı avatarındaki durum menüsü.
+> 📸 **Ekran görüntüsü:** `assets/status-presence-1.webp` — kullanıcı avatarındaki durum menüsü.
 
 ## Özel durum
 

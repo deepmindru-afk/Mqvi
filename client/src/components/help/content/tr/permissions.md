@@ -6,7 +6,7 @@
 
 Bir rolün izinleri tüm sunucu boyunca geçerli olur. Güvendiğin rollere daha fazlasını ver; varsayılan rolü kısıtlı tut.
 
-> 📸 **Ekran görüntüsü:** bir rolün izin anahtarları.
+> 📸 **Ekran görüntüsü:** `assets/permissions-1.webp` — bir rolün izin anahtarları.
 
 ## Kanal bazlı geçersiz kılmalar
 
@@ -18,4 +18,4 @@ Herhangi bir kanalda belirli roller veya üyeler için izinleri **geçersiz kıl
 
 Yönetici her zaman geçersiz kılmaları atlar.
 
-> 📸 **Ekran görüntüsü:** izin ver/reddet anahtarlarıyla kanal bazlı izin geçersiz kılmaları.
+> 📸 **Ekran görüntüsü:** `assets/permissions-2.webp` — izin ver/reddet anahtarlarıyla kanal bazlı izin geçersiz kılmaları.

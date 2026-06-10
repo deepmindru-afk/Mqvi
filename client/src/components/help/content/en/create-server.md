@@ -11,10 +11,10 @@ Click the **+** to add a server, give it a **name**, and choose how voice is hos
 
 You can add a **server icon** and description in **Server Settings**.
 
-> 📸 **Screenshot:** the Create Server wizard with the host-type choice.
+> 📸 **Screenshot:** `assets/create-server-1.webp` — the Create Server wizard with the host-type choice.
 
 ## Manage & leave
 
 Open **Server Settings** to manage channels, roles, members, and invites. You can **leave** a server any time; owners **delete** it (behind a confirmation) instead. A deleted server is **recoverable for 30 days** before it's permanently removed.
 
-> 📸 **Screenshot:** the Server Settings entry points.
+> 📸 **Screenshot:** `assets/create-server-2.webp` — the Server Settings entry points.

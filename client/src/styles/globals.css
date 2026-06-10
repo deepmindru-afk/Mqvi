@@ -1449,6 +1449,8 @@ button.ch-tree-vu-stream svg { width:21px;height:21px; }
 .fg-article-md blockquote { margin:0 0 14px;padding:8px 14px;border-left:3px solid var(--primary);background:rgba(255,255,255,0.05);border-radius:0 8px 8px 0;color:var(--t2); }
 .fg-article-md blockquote p { margin:0; }
 .fg-article-md img { max-width:100%;height:auto;border-radius:10px;border:1px solid var(--panel-border);margin:6px 0 14px; }
+.fg-article-md .fg-media { display:block;max-width:100%;height:auto;border-radius:10px;border:1px solid var(--panel-border);margin:6px 0 14px; }
+.fg-article-md .fg-img-missing { display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--t3);font-style:italic;background:rgba(255,255,255,0.04);border:1px dashed var(--panel-border);border-radius:8px;padding:6px 10px;margin:6px 0 14px; }
 .fg-article-md table { border-collapse:collapse;width:100%;margin:0 0 14px;font-size:13px;border:1px solid var(--panel-border);border-radius:8px;overflow:hidden; }
 .fg-article-md th,.fg-article-md td { border:1px solid var(--panel-border);padding:7px 10px;text-align:left; }
 .fg-article-md th { background:rgba(255,255,255,0.06);font-weight:700;color:var(--t0); }
