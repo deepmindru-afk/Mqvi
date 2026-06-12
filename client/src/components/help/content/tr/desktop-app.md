@@ -2,13 +2,13 @@
 
 **Ayarlar → Genel** (yalnızca masaüstü).
 
-## Başlangıç & tepsi
+## Başlangıç & bildirim alanı
 
 - **Girişte aç** — bilgisayarın açıldığında mqvi'yi başlat
-- **Küçültülmüş başlat** — sessizce sistem tepsisine açıl
-- **Tepsiye kapat** — pencereyi kapattığında arka planda çalışmaya devam et
+- **Küçültülmüş başlat** — sessizce bildirim alanına aç
+- **Bildirim alanına kapat** — pencereyi kapattığında arka planda çalışmaya devam et
 
-> 📸 **Ekran görüntüsü:** `assets/desktop-app-1.webp` — başlangıç ve tepsi anahtarları.
+> 📸 **Ekran görüntüsü:** `assets/desktop-app-1.webp` — başlangıç ve bildirim alanı anahtarları.
 
 ## Görünüm
 

@@ -1,6 +1,6 @@
 # Masaüstü uygulamasını edin
 
-mqvi tarayıcında çalışır, ama **masaüstü uygulaması** bas-konuş, global kısayollar, ekran paylaşımı için sistem sesi yakalama, tepsi simgesi ve otomatik güncellemeler ekler.
+mqvi tarayıcında çalışır, ama **masaüstü uygulaması** bas-konuş, global kısayollar, ekran paylaşımı için sistem sesi yakalama, bildirim alanı simgesi ve otomatik güncellemeler ekler.
 
 ## İndir
 
