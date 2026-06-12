@@ -6,13 +6,13 @@ Play short sounds for everyone in the voice channel — reactions, memes, stinge
 
 Open the **soundboard** and click a sound (you need to be in a voice channel). Adjust the **soundboard volume** or mute it entirely if you need quiet.
 
-> 📸 **Screenshot:** `assets/soundboard-1.webp` — the soundboard panel with a grid of sounds.
+![the soundboard panel with a grid of sounds](assets/soundboard-1.png)
 
 ## Add your own
 
 **Upload** a sound with a name and an emoji. You can **trim** it to just the part you want, and you can even drop in a short **video** — mqvi pulls the audio out for you. There are limits on length and file format.
 
-> 📸 **Screenshot:** `assets/soundboard-2.webp` — the upload dialog with the waveform trimmer.
+![the upload dialog with the waveform trimmer](assets/soundboard-2.png)
 
 ## Manage
 

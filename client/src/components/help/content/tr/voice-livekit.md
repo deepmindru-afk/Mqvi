@@ -30,7 +30,7 @@ Yukarıdakiyle aynı, ek olarak router portlarını UPnP üzerinden yönlendirme
 
 Betik bittiğinde **3 değer** yazdırır — bir **URL**, **API key** ve **API secret**. mqvi'de yeni bir sunucu oluştur, **Self-Hosted** seç ve bunları yapıştır. Hepsi bu.
 
-> 📸 **Ekran görüntüsü:** `assets/voice-livekit-1.webp` — 3 LiveKit değeriyle self-hosted sunucu formu.
+![3 LiveKit değeriyle self-hosted sunucu formu](assets/voice-livekit-1.png)
 
 ## Sorun giderme
 

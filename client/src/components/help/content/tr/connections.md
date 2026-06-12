@@ -6,6 +6,6 @@ Masaüstü uygulaması yalnızca varsayılana değil, **herhangi bir mqvi backen
 
 **Ayarlar → Bağlantılar** içinde bir **isim** ve sunucu **URL'i** ile bir bağlantı ekle, sonra aralarında geçiş yap — uygulama seçtiğin backend'e göre yeniden yüklenir.
 
-> 📸 **Ekran görüntüsü:** `assets/connections-1.webp` — kayıtlı girdiler ve bir bağlan butonu ile Bağlantılar ayarları.
+![kayıtlı girdiler ve bir bağlan butonu ile Bağlantılar ayarları](assets/connections-1.png)
 
 Uygulamayı bir **self-hosted** mqvi örneğine bu şekilde yönlendirirsin.

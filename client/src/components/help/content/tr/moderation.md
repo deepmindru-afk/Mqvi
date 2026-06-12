@@ -9,10 +9,10 @@ Bir sunucuyu düzende tutmaya yarayan araçlar (her biri ilgili izni gerektirir)
 - **Taşı / bağlantısını kes** — birini sesteyken başka yere taşı ya da sesten düşür
 - **Sunucu genelinde sustur / sağırlaştır** — birini bir voice kanalında sessize al
 
-> 📸 **Ekran görüntüsü:** `assets/moderation-1.webp` — bir üyenin moderasyon işlemlerini içeren sağ tık menüsü.
+![bir üyenin moderasyon işlemlerini içeren sağ tık menüsü](assets/moderation-1.png)
 
 ## Raporları ele alma
 
 Kullanıcıların gönderdiği raporlar (bkz. **Engelleme & raporlama**) **platform yöneticisi** paneline düşer; burada yöneticiler bunları inceler ve bir durum belirler — açık, inceleniyor, çözüldü veya reddedildi.
 
-> 📸 **Ekran görüntüsü:** `assets/moderation-2.webp` — durumlarıyla birlikte yönetici rapor listesi.
+![durumlarıyla birlikte yönetici rapor listesi](assets/moderation-2.png)

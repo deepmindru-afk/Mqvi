@@ -6,7 +6,7 @@ Voice is what mqvi is built for — and joining a call takes a single click.
 
 In the channel list, **click any voice channel** (the ones with a speaker icon). That's it — you're connected, and everyone else in the call appears in the main area.
 
-> 📸 **Screenshot:** `assets/first-voice-chat-1.webp` — a voice channel selected, with participants shown in the main area.
+![a voice channel selected, with participants shown in the main area](assets/first-voice-chat-1.webm)
 
 ## The basics while you're in
 
@@ -14,7 +14,7 @@ In the channel list, **click any voice channel** (the ones with a speaker icon).
 - **Deafen** — silence everyone (and yourself) when you need quiet
 - **Leave** — click the disconnect button to drop out
 
-> 📸 **Screenshot:** `assets/first-voice-chat-2.webp` — the mute / deafen / disconnect controls in the user bar.
+![the mute / deafen / disconnect controls in the user bar](assets/first-voice-chat-2.webm)
 
 ## Want more?
 

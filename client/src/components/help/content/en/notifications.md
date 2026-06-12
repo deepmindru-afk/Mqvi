@@ -4,7 +4,7 @@
 
 Mute a whole **server** or an individual **channel** — for an hour, eight hours, a week, or forever. Muted places stop pinging you but still show as unread.
 
-> 📸 **Screenshot:** `assets/notifications-1.webp` — the mute-duration menu on a server or channel.
+![the mute-duration menu on a server or channel](assets/notifications-1.png)
 
 ## Mentions & badges
 
@@ -14,4 +14,4 @@ You're still alerted when someone **@mentions** you or **replies**, even in mute
 
 Adjust the **notification** and **app sound** volumes in **Voice settings**, including the subtle voice **join/leave** sounds.
 
-> 📸 **Screenshot:** `assets/notifications-2.webp` — the notification and app-sound volume sliders.
+![the notification and app-sound volume sliders](assets/notifications-2.png)

@@ -4,13 +4,13 @@
 
 **Arkadaşlar** görünümünü aç, birini kullanıcı adıyla ara ve bir **arkadaşlık isteği** gönder. İstek, karşı taraf yanıtlayana kadar bekleyen istekleri arasında görünür.
 
-> 📸 **Ekran görüntüsü:** `assets/add-friends-1.webp` — Arkadaşlar görünümündeki arkadaş ekleme arama kutusu.
+![Arkadaşlar görünümündeki arkadaş ekleme arama kutusu](assets/add-friends-1.png)
 
 ## İstekler & sekmeler
 
 Arkadaşlar görünümünde sekmeler var — **Tümü**, **Çevrimiçi** ve **Bekleyen** (gelen ve giden). Sana gönderilen istekleri **kabul et** ya da **reddet**, ya da gönderdiklerini **iptal et**.
 
-> 📸 **Ekran görüntüsü:** `assets/add-friends-2.webp` — gelen ve giden isteklerle Bekleyen sekmesi.
+![gelen ve giden isteklerle Bekleyen sekmesi](assets/add-friends-2.png)
 
 ## Arkadaşı çıkar
 

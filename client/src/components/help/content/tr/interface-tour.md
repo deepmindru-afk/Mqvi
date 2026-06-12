@@ -2,7 +2,7 @@
 
 İşte ekranda neler var, soldan sağa.
 
-> 📸 **Ekran görüntüsü:** `assets/interface-tour-1.webp` — Her bölgesi etiketlenmiş tam uygulama penceresi.
+![Her bölgesi etiketlenmiş tam uygulama penceresi](assets/interface-tour-1.png)
 
 ## Sol — sunucular ve kanallar
 
@@ -24,4 +24,4 @@ Masaüstü başlık çubuğu **ⓘ bilgi** butonunu (bu rehber ve sürüm notlar
 
 Avatarın, adın ve hızlı **sustur / kulaklığı kapat / ayarlar** kontrolleri kenar çubuğunun altında durur.
 
-> 📸 **Ekran görüntüsü:** `assets/interface-tour-2.webp` — Sustur, kulaklığı kapat ve ayarlar simgeleriyle kullanıcı çubuğu.
+![Sustur, kulaklığı kapat ve ayarlar simgeleriyle kullanıcı çubuğu](assets/interface-tour-2.png)

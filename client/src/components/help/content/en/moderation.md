@@ -9,10 +9,10 @@ Tools for keeping a server in order (each requires the matching permission).
 - **Move / disconnect** — relocate someone in voice, or drop them from it
 - **Server-mute / deafen** — silence someone in a voice channel
 
-> 📸 **Screenshot:** `assets/moderation-1.webp` — a member's right-click menu with the moderation actions.
+![a member's right-click menu with the moderation actions](assets/moderation-1.png)
 
 ## Handling reports
 
 Reports that users submit (see **Blocking & reporting**) land in the **platform admin** panel, where admins review them and set a status — open, investigating, resolved, or rejected.
 
-> 📸 **Screenshot:** `assets/moderation-2.webp` — the admin report list with statuses.
+![the admin report list with statuses](assets/moderation-2.png)

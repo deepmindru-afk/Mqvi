@@ -8,7 +8,7 @@
 - **Start minimized** — open quietly to the system tray
 - **Close to tray** — keep running in the background when you close the window
 
-> 📸 **Screenshot:** `assets/desktop-app-1.webp` — the startup and tray toggles.
+![the startup and tray toggles](assets/desktop-app-1.png)
 
 ## Look
 
@@ -18,7 +18,7 @@ Enable a **transparent background** for a frosted-glass window (a restart applie
 
 Bind **global mute and deafen** keys that work even when mqvi isn't the focused window.
 
-> 📸 **Screenshot:** `assets/desktop-app-2.webp` — the global shortcut bindings.
+![the global shortcut bindings](assets/desktop-app-2.png)
 
 ## Updates
 

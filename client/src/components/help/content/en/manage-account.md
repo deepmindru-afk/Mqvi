@@ -4,13 +4,13 @@
 
 See how much **storage** your uploads use against your quota.
 
-> 📸 **Screenshot:** `assets/manage-account-1.webp` — the storage usage indicator.
+![the storage usage indicator](assets/manage-account-1.png)
 
 ## Deleted servers
 
 Servers you delete aren't gone right away — they're **recoverable for 30 days** from the deleted-servers list before they're permanently removed. Handy if you change your mind.
 
-> 📸 **Screenshot:** `assets/manage-account-2.webp` — the deleted-servers list with a restore option.
+![the deleted-servers list with a restore option](assets/manage-account-2.png)
 
 ## Delete your account
 

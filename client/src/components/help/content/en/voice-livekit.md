@@ -30,7 +30,7 @@ Same as above, plus it tries to forward your router ports via UPnP and sets Live
 
 When the script finishes it prints **3 values** — a **URL**, **API key**, and **API secret**. In mqvi, create a new server, choose **Self-Hosted**, and paste them in. That's it.
 
-> 📸 **Screenshot:** `assets/voice-livekit-1.webp` — the self-hosted server form with the 3 LiveKit values.
+![the self-hosted server form with the 3 LiveKit values](assets/voice-livekit-1.png)
 
 ## Troubleshooting
 

@@ -132,7 +132,7 @@ function SettingsContent({ activeTab }: { activeTab: string }) {
 
     case "help":
       return (
-        <div className="settings-section">
+        <div className="settings-section settings-help">
           <HelpCenter view="tabs" />
         </div>
       );

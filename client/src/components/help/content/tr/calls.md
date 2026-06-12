@@ -6,7 +6,7 @@ Bir arkadaşını doğrudan ara — sunucuya ya da kanala gerek yok.
 
 Bir **DM**'den ya da bir arkadaşın **profilinden** **sesli arama** veya **görüntülü arama** başlat.
 
-> 📸 **Ekran görüntüsü:** `assets/calls-1.webp` — profil kartındaki sesli/görüntülü arama düğmeleri.
+![profil kartındaki sesli/görüntülü arama düğmeleri](assets/calls-1.png)
 
 ## Arama sırasında
 

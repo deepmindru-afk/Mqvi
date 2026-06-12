@@ -4,13 +4,13 @@
 
 Yüklemelerinin kotandan ne kadar **depolama** kullandığını gör.
 
-> 📸 **Ekran görüntüsü:** `assets/manage-account-1.webp` — depolama kullanım göstergesi.
+![depolama kullanım göstergesi](assets/manage-account-1.png)
 
 ## Silinen sunucular
 
 Sildiğin sunucular hemen gitmez — kalıcı olarak kaldırılmadan önce silinen sunucular listesinden **30 gün boyunca kurtarılabilir** durumdadır. Fikrini değiştirirsen işine yarar.
 
-> 📸 **Ekran görüntüsü:** `assets/manage-account-2.webp` — geri yükleme seçenekli silinen sunucular listesi.
+![geri yükleme seçenekli silinen sunucular listesi](assets/manage-account-2.png)
 
 ## Hesabını sil
 

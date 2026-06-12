@@ -6,7 +6,7 @@ Find that message you know you saw somewhere.
 
 Open search (or press **Ctrl/Cmd + F**) and type what you're looking for. Results are listed with context, and you can page through them to jump straight to a message.
 
-> 📸 **Screenshot:** `assets/search-messages-1.webp` — the search box with a query and matching results.
+![the search box with a query and matching results](assets/search-messages-1.png)
 
 ## How it stays private
 

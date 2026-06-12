@@ -10,13 +10,13 @@ Open the mqvi landing page and click **Download** — it detects your operating 
 - **macOS** — disk image (`.dmg`)
 - **Linux** — AppImage
 
-> 📸 **Screenshot:** `assets/download-app-1.webp` — landing page hero with the Download button highlighted.
+![landing page hero with the Download button highlighted](assets/download-app-1.png)
 
 ## Windows SmartScreen
 
 The app isn't code-signed yet, so Windows may show a **SmartScreen** warning the first time you run it. Click **More info → Run anyway** — it's safe.
 
-> 📸 **Screenshot:** `assets/download-app-2.webp` — SmartScreen dialog showing "More info" then "Run anyway".
+![SmartScreen dialog showing "More info" then "Run anyway"](assets/download-app-2.png)
 
 ## Staying up to date
 

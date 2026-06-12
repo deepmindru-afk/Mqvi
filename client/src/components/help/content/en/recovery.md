@@ -6,7 +6,7 @@ Because encryption keys live on your devices, you need a way back in if you rein
 
 Set a **recovery password** to securely back up your keys. Keep it somewhere safe — it's what unlocks your encrypted history.
 
-> 📸 **Screenshot:** `assets/recovery-1.webp` — the set-recovery-password dialog.
+![the set-recovery-password dialog](assets/recovery-1.png)
 
 ## Restore on a new device
 

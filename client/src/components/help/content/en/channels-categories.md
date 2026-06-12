@@ -6,13 +6,13 @@ Channels are where conversations happen; categories keep them organized.
 
 In a server you manage, add a channel: give it a **name** and a **topic**, pick **text** or **voice**, and place it in a **category**.
 
-> 📸 **Screenshot:** `assets/channels-categories-1.webp` — the create-channel dialog with the text/voice choice.
+![the create-channel dialog with the text/voice choice](assets/channels-categories-1.png)
 
 ## Categories
 
 Create **categories** to group channels, then drag channels between them. Rename or delete categories whenever you like.
 
-> 📸 **Screenshot:** `assets/channels-categories-2.webp` — the channel list with collapsible categories.
+![the channel list with collapsible categories](assets/channels-categories-2.webm)
 
 ## Tidy up
 

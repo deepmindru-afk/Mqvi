@@ -4,13 +4,13 @@
 
 Toggle your **microphone** (mute) or silence **everyone including yourself** (deafen) from the bar at the bottom-left.
 
-> 📸 **Screenshot:** `assets/in-call-controls-1.webp` — the mute and deafen buttons.
+![the mute and deafen buttons](assets/in-call-controls-1.png)
 
 ## Adjust individual people
 
 **Right-click a participant** to set their volume *just for you*, or **locally mute** them — neither affects anyone else in the call.
 
-> 📸 **Screenshot:** `assets/in-call-controls-2.webp` — the per-user volume slider in a participant's right-click menu.
+![the per-user volume slider in a participant's right-click menu](assets/in-call-controls-2.png)
 
 ## Connection quality
 
@@ -20,7 +20,7 @@ A small **ping indicator** shows your connection health (good / medium / poor), 
 
 Open the **chat toggle** to get an ephemeral text chat beside the call — handy for links and quick notes. It clears when the channel empties.
 
-> 📸 **Screenshot:** `assets/in-call-controls-3.webp` — the side chat panel open next to a voice call.
+![the side chat panel open next to a voice call](assets/in-call-controls-3.png)
 
 ## Sounds & AFK
 

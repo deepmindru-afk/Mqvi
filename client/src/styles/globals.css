@@ -1405,6 +1405,12 @@ button.ch-tree-vu-stream svg { width:21px;height:21px; }
 .info-modal-tab:hover { color:var(--t0); }
 .info-modal-tab.active { color:var(--primary);border-bottom-color:var(--primary); }
 .info-modal-body { overflow-y:auto;max-height:60vh; }
+
+/* Settings "Help" panel — fill the panel height instead of the modal's 60vh cap */
+.settings-help { height:100%;margin-bottom:0;display:flex;flex-direction:column; }
+.settings-help .info-modal { flex:1;min-height:0; }
+.settings-help .info-modal-body { flex:1;min-height:0;max-height:none; }
+.settings-help .feature-guide { height:100%; }
 .info-modal-placeholder { padding:40px 16px;text-align:center;font-size:14px;color:var(--t3); }
 
 /* Feature guide (help center) — two-pane: collapsible nav + markdown article */
@@ -1421,10 +1427,10 @@ button.ch-tree-vu-stream svg { width:21px;height:21px; }
 .fg-cat-icon { display:flex;flex-shrink:0;color:var(--t3); }
 .fg-cat-icon svg { width:18px;height:18px; }
 .fg-cat-header.open .fg-cat-icon { color:var(--primary); }
-.fg-cat-label { flex:1;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.fg-cat-label { flex:1;font-size:14px;font-weight:600;line-height:1.35; }
 .fg-cat-chevron { color:var(--t3);font-size:13px;flex-shrink:0; }
 .fg-articles { display:flex;flex-direction:column;gap:1px;padding:2px 0 6px 38px; }
-.fg-article-link { text-align:left;background:none;border:none;padding:6px 10px;border-radius:6px;font-size:13px;color:var(--t2);cursor:pointer;transition:background .12s,color .12s; }
+.fg-article-link { text-align:left;background:none;border:none;padding:6px 10px;border-radius:6px;font-size:13px;line-height:1.35;white-space:normal;color:var(--t2);cursor:pointer;transition:background .12s,color .12s; }
 .fg-article-link:hover { background:rgba(255,255,255,0.06);color:var(--t0); }
 .fg-article-link.active { background:rgba(255,255,255,0.09);color:var(--primary);font-weight:600; }
 .fg-coming-soon { padding:4px 10px;font-size:13px;color:var(--t3);font-style:italic; }

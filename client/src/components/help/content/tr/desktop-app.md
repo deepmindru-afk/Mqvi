@@ -8,7 +8,7 @@
 - **Küçültülmüş başlat** — sessizce bildirim alanına aç
 - **Bildirim alanına kapat** — pencereyi kapattığında arka planda çalışmaya devam et
 
-> 📸 **Ekran görüntüsü:** `assets/desktop-app-1.webp` — başlangıç ve bildirim alanı anahtarları.
+![başlangıç ve bildirim alanı anahtarları](assets/desktop-app-1.png)
 
 ## Görünüm
 
@@ -18,7 +18,7 @@ Buzlu cam etkili bir pencere için **saydam arka planı** etkinleştir (uygulanm
 
 mqvi odakta olmadığında bile çalışan **global sustur ve sağırlaştır** tuşlarını ata.
 
-> 📸 **Ekran görüntüsü:** `assets/desktop-app-2.webp` — global kısayol atamaları.
+![global kısayol atamaları](assets/desktop-app-2.png)
 
 ## Güncellemeler
 

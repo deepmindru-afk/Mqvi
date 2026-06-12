@@ -6,7 +6,7 @@ Bir yerde gördüğünü bildiğin o mesajı bul.
 
 Aramayı aç (ya da **Ctrl/Cmd + F**'ye bas) ve aradığın şeyi yaz. Sonuçlar bağlamıyla birlikte listelenir ve doğrudan bir mesaja atlamak için aralarında sayfalar arasında gezinebilirsin.
 
-> 📸 **Ekran görüntüsü:** `assets/search-messages-1.webp` — bir sorgu ve eşleşen sonuçlarla arama kutusu.
+![bir sorgu ve eşleşen sonuçlarla arama kutusu](assets/search-messages-1.png)
 
 ## Gizliliğini nasıl korur
 

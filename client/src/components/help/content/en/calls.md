@@ -6,7 +6,7 @@ Call a friend directly — no server or channel needed.
 
 From a **DM** or a friend's **profile**, start a **voice call** or a **video call**.
 
-> 📸 **Screenshot:** `assets/calls-1.webp` — the voice/video call buttons on a profile card.
+![the voice/video call buttons on a profile card](assets/calls-1.png)
 
 ## In the call
 

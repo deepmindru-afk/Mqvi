@@ -6,7 +6,7 @@
 
 Anahtarlarını güvenli bir şekilde yedeklemek için bir **kurtarma parolası** belirle. Onu güvenli bir yerde sakla — şifreli geçmişinin kilidini açan şey odur.
 
-> 📸 **Ekran görüntüsü:** `assets/recovery-1.webp` — kurtarma parolası belirleme penceresi.
+![kurtarma parolası belirleme penceresi](assets/recovery-1.png)
 
 ## Yeni bir cihazda geri yükle
 

@@ -6,13 +6,13 @@ Sohbetler kanallarda gerçekleşir; kategoriler ise onları düzenli tutar.
 
 Yönettiğin bir sunucuda kanal ekle: ona bir **isim** ve bir **konu** ver, **metin** ya da **ses** seç ve onu bir **kategoriye** yerleştir.
 
-> 📸 **Ekran görüntüsü:** `assets/channels-categories-1.webp` — metin/ses seçimiyle kanal oluşturma penceresi.
+![metin/ses seçimiyle kanal oluşturma penceresi](assets/channels-categories-1.png)
 
 ## Kategoriler
 
 Kanalları gruplamak için **kategoriler** oluştur, sonra kanalları aralarında sürükle. Kategorileri istediğin zaman yeniden adlandırabilir ya da silebilirsin.
 
-> 📸 **Ekran görüntüsü:** `assets/channels-categories-2.webp` — açılıp kapanabilen kategorilerle kanal listesi.
+![açılıp kapanabilen kategorilerle kanal listesi](assets/channels-categories-2.webm)
 
 ## Düzene sok
 

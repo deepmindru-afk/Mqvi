@@ -10,13 +10,13 @@ Share images, documents, and more — right in the conversation.
 
 You'll see a preview before sending, so you can confirm or remove it.
 
-> 📸 **Screenshot:** `assets/attachments-1.webp` — the attachment preview above the composer before sending.
+![the attachment preview above the composer before sending](assets/attachments-1.png)
 
 ## View files inline
 
 Click an attachment to open the **viewer** without leaving the channel. It handles **images, video, audio, PDFs, and Office documents** (Word, Excel), with zoom for images. From the viewer you can **copy an image** straight to your clipboard or download the file.
 
-> 📸 **Screenshot:** `assets/attachments-2.webp` — the file viewer overlay showing an image with the copy/download actions.
+![the file viewer overlay showing an image with the copy/download actions](assets/attachments-2.png)
 
 ## On encrypted servers
 

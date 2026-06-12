@@ -6,13 +6,13 @@ Tam bir mesaj yazmadan yanıt vermenin iki hızlı yolu.
 
 Bir mesajın üzerine gel ve tepki eklemek için **emoji** düğmesine tıkla. Mevcut bir tepkiye kendininkini eklemek için ona tıkla ya da kaldırmak için tekrar tıkla. Tepkiler; onaylamanın, oy vermenin ya da sadece eğlenmenin hızlı bir yoludur.
 
-> 📸 **Ekran görüntüsü:** `assets/reactions-replies-1.webp` — birkaç emoji tepkisi olan bir mesaj ve açık tepki seçici.
+![birkaç emoji tepkisi olan bir mesaj ve açık tepki seçici](assets/reactions-replies-1.png)
 
 ## Bir mesaja yanıt ver
 
 Bir mesajın üzerine gel ve onu alıntılamak için **Yanıtla**'yı seç. Mesajın, orijinaline küçük bir referansla birlikte görünür; böylece neye yanıt verdiğin nettir — yoğun kanallarda işine yarar.
 
-> 📸 **Ekran görüntüsü:** `assets/reactions-replies-2.webp` — üstünde alıntılanmış orijinali gösteren bir yanıt.
+![üstünde alıntılanmış orijinali gösteren bir yanıt](assets/reactions-replies-2.png)
 
 ## Düzenle & sil
 

@@ -2,7 +2,7 @@
 
 Here's what's on screen, left to right.
 
-> 📸 **Screenshot:** `assets/interface-tour-1.webp` — the full app window with each region labelled.
+![the full app window with each region labelled](assets/interface-tour-1.png)
 
 ## Left — servers & channels
 
@@ -24,4 +24,4 @@ The desktop title bar holds the **ⓘ info** button (this guide and release note
 
 Your avatar, name, and quick **mute / deafen / settings** controls sit at the bottom of the sidebar.
 
-> 📸 **Screenshot:** `assets/interface-tour-2.webp` — the user bar with the mute, deafen, and settings icons.
+![the user bar with the mute, deafen, and settings icons](assets/interface-tour-2.png)
