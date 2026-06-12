@@ -11,6 +11,7 @@ import "../../styles/landing.css";
 
 import { detectOS } from "../../utils/detectOS";
 import SmartScreenGuide from "./SmartScreenGuide";
+import InfoModal from "../shared/InfoModal";
 
 const LANDING_ASSETS = "/static/landing";
 
@@ -27,6 +28,7 @@ function LandingPage() {
   const [totalUsers, setTotalUsers] = useState(0);
   const [guideOS, setGuideOS] = useState<"linux" | "windows">("linux");
   const [showSmartScreen, setShowSmartScreen] = useState(false);
+  const [infoView, setInfoView] = useState<"features" | "releaseNotes" | null>(null);
 
   useEffect(() => {
     getPublicStats().then((res) => {
@@ -45,6 +47,8 @@ function LandingPage() {
 
   return (
     <div className="landing-page">
+      <InfoModal isOpen={infoView !== null} view={infoView ?? "features"} onClose={() => setInfoView(null)} />
+
       {/* ── Aurora Background ── */}
       <div className="lp-aurora-wrap">
         <div className="lp-aurora-blob lp-aurora-blob--1" />
@@ -71,6 +75,12 @@ function LandingPage() {
                 {label}
               </button>
             ))}
+            <button className="lp-nav-link" onClick={() => setInfoView("features")}>
+              {t("nav_help")}
+            </button>
+            <button className="lp-nav-link" onClick={() => setInfoView("releaseNotes")}>
+              {t("nav_releaseNotes")}
+            </button>
           </div>
 
           <div className="lp-nav-lang">

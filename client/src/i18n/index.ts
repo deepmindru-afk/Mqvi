@@ -24,6 +24,7 @@ import enSoundboard from "./locales/en/soundboard.json";
 import enPrivacy from "./locales/en/privacy.json";
 import enTerms from "./locales/en/terms.json";
 import enViewer from "./locales/en/viewer.json";
+import enHelp from "./locales/en/help.json";
 
 // ─── TR Translation Files ───
 import trCommon from "./locales/tr/common.json";
@@ -40,6 +41,7 @@ import trSoundboard from "./locales/tr/soundboard.json";
 import trPrivacy from "./locales/tr/privacy.json";
 import trTerms from "./locales/tr/terms.json";
 import trViewer from "./locales/tr/viewer.json";
+import trHelp from "./locales/tr/help.json";
 
 export const SUPPORTED_LANGUAGES = {
   en: "English",
@@ -70,6 +72,7 @@ i18n
         privacy: enPrivacy,
         terms: enTerms,
         viewer: enViewer,
+        help: enHelp,
       },
       tr: {
         common: trCommon,
@@ -86,6 +89,7 @@ i18n
         privacy: trPrivacy,
         terms: trTerms,
         viewer: trViewer,
+        help: trHelp,
       },
     },
 
@@ -93,7 +97,7 @@ i18n
     supportedLngs: Object.keys(SUPPORTED_LANGUAGES),
 
     defaultNS: "common",
-    ns: ["common", "auth", "channels", "chat", "settings", "voice", "landing", "privacy", "terms", "servers", "dm", "e2ee", "soundboard", "viewer"],
+    ns: ["common", "auth", "channels", "chat", "settings", "voice", "landing", "privacy", "terms", "servers", "dm", "e2ee", "soundboard", "viewer", "help"],
 
     interpolation: {
       // React already handles XSS protection

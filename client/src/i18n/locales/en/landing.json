@@ -2,6 +2,8 @@
   "nav_features": "Features",
   "nav_compare": "Compare",
   "nav_selfhost": "Self-Host",
+  "nav_help": "Help",
+  "nav_releaseNotes": "Release Notes",
   "nav_login": "Log In",
 
   "hero_userCount": "{{count}} users and growing",

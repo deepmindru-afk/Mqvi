@@ -24,6 +24,7 @@ import GeneralSettings from "./GeneralSettings";
 import FeedbackSettings from "./FeedbackSettings";
 import BlockedUsersSettings from "./BlockedUsersSettings";
 import AdminFeedbackList from "./AdminFeedbackList";
+import HelpCenter from "../shared/HelpCenter";
 
 function SettingsModal() {
   const { t } = useTranslation("settings");
@@ -128,6 +129,13 @@ function SettingsContent({ activeTab }: { activeTab: string }) {
 
     case "blocked-users":
       return <BlockedUsersSettings />;
+
+    case "help":
+      return (
+        <div className="settings-section settings-help">
+          <HelpCenter view="tabs" />
+        </div>
+      );
 
     case "platform":
       return <PlatformSettings />;
