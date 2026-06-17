@@ -463,6 +463,25 @@ function VoiceStateManager() {
 
     room.on(RoomEvent.ActiveSpeakersChanged, handleActiveSpeakers);
 
+    // Clear a participant's speaking state the instant they leave this room
+    // (e.g. admin move/disconnect). ActiveSpeakersChanged isn't guaranteed to
+    // fire on removal, so without this their "speaking" entry can stay stuck —
+    // freezing a green ring on their new channel's tile and keeping the local
+    // AFK reporter from ever seeing the room go silent.
+    function handleSpeakerLeft(participant: RemoteParticipant) {
+      const identity = participant.identity;
+      const pending = holdTimers.get(identity);
+      if (pending) {
+        clearTimeout(pending);
+        holdTimers.delete(identity);
+      }
+      if (heldSpeakers.has(identity)) {
+        heldSpeakers.delete(identity);
+        updateStore();
+      }
+    }
+    room.on(RoomEvent.ParticipantDisconnected, handleSpeakerLeft);
+
     function handleLocalSpeaking(speaking: boolean) {
       setSpeakerRaw(localParticipant.identity, speaking);
     }
@@ -470,6 +489,7 @@ function VoiceStateManager() {
 
     return () => {
       room.off(RoomEvent.ActiveSpeakersChanged, handleActiveSpeakers);
+      room.off(RoomEvent.ParticipantDisconnected, handleSpeakerLeft);
       localParticipant.off(ParticipantEvent.IsSpeakingChanged, handleLocalSpeaking);
       holdTimers.forEach((timerId) => clearTimeout(timerId));
       holdTimers.clear();

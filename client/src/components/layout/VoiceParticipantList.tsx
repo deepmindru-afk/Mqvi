@@ -47,12 +47,18 @@ function VoiceParticipantList({
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const openTab = useUIStore((s) => s.openTab);
 
+  // activeSpeakers only reflects the local user's own LiveKit room, so the
+  // speaking ring is only valid for participants in the channel we're in.
+  // Showing it for other channels would leak a stale entry (e.g. a user moved
+  // out of our channel) as a frozen ring on their new channel's tile.
+  const isMyVoiceChannel = channelId === currentVoiceChannelId;
+
   return (
     <div className="ch-tree-voice-users">
       {participants.map((p) => {
         const isMe = p.user_id === currentUser?.id;
         const isLocalMuted = localMutedUsers[p.user_id] ?? false;
-        const isSpeaking = activeSpeakers[p.user_id] ?? false;
+        const isSpeaking = isMyVoiceChannel && (activeSpeakers[p.user_id] ?? false);
 
         return (
           <div
