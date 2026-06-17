@@ -1,21 +1,23 @@
 /**
  * usePushToTalk — Push-to-talk key listener.
  *
- * Two modes depending on runtime:
+ * Electron needs BOTH paths because the native global hook only covers the
+ * unfocused case:
+ * - uIOhook (native): fires when the app is in the background (e.g. in a game).
+ *   Windows does not surface low-level hook events to the app's own foreground
+ *   window, so this path goes silent while the app is focused.
+ * - document keydown/keyup: covers the focused case — the key reaches the
+ *   renderer as a normal DOM event only while the window has focus.
+ * The two overlap during focus transitions; isPressedRef dedupes them.
  *
- * Electron: Registers a global shortcut via uIOhook (native keyboard hook)
- * so PTT works even when the app window is not focused (e.g. in a game).
- * Falls back to document listeners when the window IS focused to avoid
- * double-firing and to respect the text input guard.
+ * Browser: only the document path (no native hook available).
  *
- * Browser: Document-level keydown/keyup listeners (only works when focused).
- *
- * Guards (browser path):
+ * Document path guards:
  * - Focus guard: disabled when typing in input/textarea/contentEditable
  * - Repeat filter: ignores e.repeat (browser auto-repeat on key hold)
  * - Mode guard: no-op if inputMode !== "push_to_talk"
  * - Connection guard: no-op if not in a voice channel
- * - Blur guard: releases mic on window blur (alt-tab)
+ * - Blur guard: releases mic on window blur (alt-tab) — the native path resumes
  */
 
 import { useEffect, useRef } from "react";
@@ -45,6 +47,9 @@ export function usePushToTalk({ setMicEnabled }: UsePushToTalkParams): void {
     api.removePTTListeners();
 
     api.onPTTGlobalDown(() => {
+      // Focused → the document path handles it (native hook is unreliable and
+      // its modifier mask can be stale while the app owns the foreground).
+      if (document.hasFocus()) return;
       if (isPressedRef.current) return;
       const { isMuted, isServerMuted } = useVoiceStore.getState();
       if (isMuted || isServerMuted) return;
@@ -52,6 +57,7 @@ export function usePushToTalk({ setMicEnabled }: UsePushToTalkParams): void {
       setMicEnabled(true);
     });
 
+    // Up is never focus-gated — always release so the mic can't get stuck on.
     api.onPTTGlobalUp(() => {
       if (!isPressedRef.current) return;
       isPressedRef.current = false;
@@ -72,10 +78,9 @@ export function usePushToTalk({ setMicEnabled }: UsePushToTalkParams): void {
     };
   }, [inputMode, pttKey, currentVoiceChannelId, setMicEnabled]);
 
-  // ─── Browser: document-level keydown/keyup (focus required) ───
+  // ─── Document-level keydown/keyup (focus required) ───
+  // Runs in Electron too: covers the focused case the native hook misses.
   useEffect(() => {
-    // Skip in Electron — global hook handles everything
-    if (isElectron()) return;
     if (inputMode !== "push_to_talk" || !currentVoiceChannelId) return;
 
     function isTextInput(el: Element | null): boolean {

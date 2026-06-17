@@ -217,9 +217,9 @@ export const useVoiceStore = create<VoiceStore>((set, get, store) => ({
         return null;
       }
 
-      // PTT mode forces muted (unmuted on key press), otherwise keep current state
-      const isPTT = get().inputMode === "push_to_talk";
-      const initialMuted = isPTT ? true : get().isMuted;
+      // isMuted is left untouched — PTT idle (mic off until key press) is
+      // enforced at the track level by VoiceStateManager, not via mute state.
+      const initialMuted = get().isMuted;
       const initialDeafened = get().isDeafened;
 
       set({
@@ -228,7 +228,6 @@ export const useVoiceStore = create<VoiceStore>((set, get, store) => ({
         livekitUrl: response.data.url,
         livekitToken: response.data.token,
         e2eePassphrase: response.data.e2ee_passphrase ?? null,
-        isMuted: initialMuted,
         isStreaming: false,
       });
 

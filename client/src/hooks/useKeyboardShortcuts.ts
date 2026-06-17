@@ -4,11 +4,13 @@
  * Mute / deafen bindings are read from voiceStore so the user can rebind
  * them in Settings → Voice. Ctrl+K (quick switcher) stays hardcoded.
  *
- * Mute / deafen detection depends on runtime:
- * - Electron: native global hook (uIOhook) via IPC, so toggles fire even when
- *   the window is unfocused (e.g. in a game). The document path below skips
- *   mute/deafen in Electron to avoid double-firing when focused.
- * - Browser: document-level keydown (only works when the window is focused).
+ * Mute / deafen need both paths in Electron, split by focus:
+ * - Native global hook (uIOhook): fires when the app is unfocused (e.g. in a
+ *   game). It's unreliable while the app owns the foreground — events go
+ *   missing and its modifier mask can stick (a missed Ctrl/Shift keyup makes a
+ *   bare key match a Ctrl/Shift binding). So native is ignored while focused.
+ * - Document keydown: handles the focused case with reliable browser modifiers.
+ * The two are mutually exclusive by focus, so no double-toggle.
  *
  * Singleton — called once in AppLayout.
  */
@@ -37,7 +39,8 @@ export function useKeyboardShortcuts({ toggleMute, toggleDeafen }: KeyboardShort
   const muteShortcut = useVoiceStore((s) => s.muteShortcut);
   const deafenShortcut = useVoiceStore((s) => s.deafenShortcut);
 
-  // ─── Document-level: Ctrl+K always; mute/deafen only in browser ───
+  // ─── Document-level: Ctrl+K always; mute/deafen when focused ───
+  // Runs in Electron too — covers the focused case the native hook misses.
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement;
@@ -53,8 +56,6 @@ export function useKeyboardShortcuts({ toggleMute, toggleDeafen }: KeyboardShort
         return;
       }
 
-      // In Electron the native global hook handles mute/deafen.
-      if (isElectron()) return;
       if (isInputFocused) return;
 
       const { muteShortcut: mute, deafenShortcut: deafen } = useVoiceStore.getState();
@@ -81,8 +82,10 @@ export function useKeyboardShortcuts({ toggleMute, toggleDeafen }: KeyboardShort
 
     api.removeMuteListeners();
     api.removeDeafenListeners();
-    api.onMuteGlobalToggle(() => toggleMute());
-    api.onDeafenGlobalToggle(() => toggleDeafen());
+    // Ignore native toggles while focused — the document path handles that case
+    // with reliable modifiers (native's mask can be stale in the foreground).
+    api.onMuteGlobalToggle(() => { if (!document.hasFocus()) toggleMute(); });
+    api.onDeafenGlobalToggle(() => { if (!document.hasFocus()) toggleDeafen(); });
 
     api.registerMuteShortcut(muteShortcut);
     api.registerDeafenShortcut(deafenShortcut);
