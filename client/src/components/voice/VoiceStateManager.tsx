@@ -64,16 +64,18 @@ function VoiceStateManager() {
 
   usePushToTalk({ setMicEnabled });
 
-  // Sync isMuted + isServerMuted -> LiveKit mic enabled
-  // Server mute overrides local state — mic is always off when server muted
+  // Sync mute/input-mode state -> LiveKit mic enabled.
+  // PTT keeps the mic off while idle — usePushToTalk enables it only while the
+  // key is held. Server mute overrides local state.
   useEffect(() => {
     if (!initialSyncDone.current) return;
 
-    const shouldEnable = !isMuted && !isServerMuted;
+    const shouldEnable =
+      inputMode === "push_to_talk" ? false : !isMuted && !isServerMuted;
     localParticipant.setMicrophoneEnabled(shouldEnable).catch((err: unknown) => {
       console.error("[VoiceStateManager] Failed to toggle microphone:", err);
     });
-  }, [isMuted, isServerMuted, localParticipant]);
+  }, [isMuted, isServerMuted, inputMode, localParticipant]);
 
   // Process-exclusive audio capture (Electron only).
   // Uses native audio-capture.exe to capture system audio excluding our
@@ -475,22 +477,6 @@ function VoiceStateManager() {
       setActiveSpeakers([]);
     };
   }, [room, localParticipant]);
-
-  // Sync inputMode changes: PTT -> mic off, voice activity -> restore isMuted
-  useEffect(() => {
-    if (!initialSyncDone.current) return;
-
-    if (inputMode === "push_to_talk") {
-      localParticipant.setMicrophoneEnabled(false).catch((err: unknown) => {
-        console.error("[VoiceStateManager] Failed to mute on PTT switch:", err);
-      });
-    } else {
-      const { isMuted: currentMuted, isServerMuted: srvMuted } = useVoiceStore.getState();
-      localParticipant.setMicrophoneEnabled(!currentMuted && !srvMuted).catch((err: unknown) => {
-        console.error("[VoiceStateManager] Failed to restore mic on VA switch:", err);
-      });
-    }
-  }, [inputMode, localParticipant]);
 
   // Volume sync: per-user + master + deafen -> RemoteParticipant.setVolume()
   // Requires webAudioMix: true for >100% amplification via GainNode.

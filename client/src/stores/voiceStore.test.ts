@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useVoiceStore } from "./voiceStore";
+import * as voiceApi from "../api/voice";
 
 // Mock external dependencies that voiceStore imports at module level
-vi.mock("../api/voice", () => ({}));
+vi.mock("../api/voice", () => ({ getVoiceToken: vi.fn() }));
 vi.mock("../api/client", () => ({ ensureFreshToken: vi.fn() }));
 vi.mock("../utils/sounds", () => ({
   playJoinSound: vi.fn(),
@@ -24,6 +25,7 @@ function resetStore() {
   useVoiceStore.setState({
     voiceStates: {},
     currentVoiceChannelId: null,
+    inputMode: "voice_activity",
     isMuted: false,
     isDeafened: false,
     isStreaming: false,
@@ -341,6 +343,33 @@ describe("voiceStore", () => {
 
       useVoiceStore.getState().toggleLocalMute("u1");
       expect(useVoiceStore.getState().userVolumes["u1"]).toBe(100);
+    });
+  });
+
+  // ─── Join Voice Channel ───
+
+  describe("joinVoiceChannel", () => {
+    beforeEach(() => {
+      vi.mocked(voiceApi.getVoiceToken).mockResolvedValue({
+        success: true,
+        data: { token: "tok", url: "wss://lk.example.com", channel_id: "ch1" },
+      });
+    });
+
+    it("should not force mute when joining in push_to_talk mode", async () => {
+      useVoiceStore.setState({ inputMode: "push_to_talk", isMuted: false });
+      await useVoiceStore.getState().joinVoiceChannel("ch1");
+      const state = useVoiceStore.getState();
+      expect(state.currentVoiceChannelId).toBe("ch1");
+      expect(state.isMuted).toBe(false);
+    });
+
+    it("should preserve muted state when joining while muted", async () => {
+      useVoiceStore.setState({ isMuted: true });
+      await useVoiceStore.getState().joinVoiceChannel("ch1");
+      const state = useVoiceStore.getState();
+      expect(state.currentVoiceChannelId).toBe("ch1");
+      expect(state.isMuted).toBe(true);
     });
   });
 

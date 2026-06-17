@@ -13,12 +13,31 @@ import type { VoiceStore } from "../voiceStore";
 export type InputMode = "voice_activity" | "push_to_talk";
 export type ScreenShareQuality = "720p" | "1080p";
 
-/** Configurable keyboard shortcut. `code` is KeyboardEvent.code (layout-agnostic). */
+/**
+ * Configurable shortcut. `code` is a KeyboardEvent.code (e.g. "KeyV") OR a
+ * mouse token ("Mouse3" middle, "Mouse4" back, "Mouse5" forward).
+ */
 export type ShortcutBinding = {
   code: string;
   ctrl: boolean;
   shift: boolean;
   alt: boolean;
+};
+
+/** True when a binding code is a mouse button rather than a keyboard key. */
+export function isMouseBinding(code: string): boolean {
+  return code === "Mouse3" || code === "Mouse4" || code === "Mouse5";
+}
+
+/**
+ * DOM MouseEvent.button → mouse token, for the rebind capture UI.
+ * Left (0) and right (2) are intentionally excluded — they're needed for normal
+ * interaction. 1=middle, 3=back, 4=forward.
+ */
+export const DOM_BUTTON_TO_MOUSE_TOKEN: Record<number, string> = {
+  1: "Mouse3",
+  3: "Mouse4",
+  4: "Mouse5",
 };
 
 export const DEFAULT_MUTE_SHORTCUT: ShortcutBinding = {
