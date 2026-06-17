@@ -362,6 +362,57 @@ func (s *voiceService) GetActiveChannelTimers() map[string]int64 {
 	return out
 }
 
+// SyncServerStatesToUser sends the current voice participants and channel timers
+// for serverID to a single user. Used on server join so a newcomer sees calls
+// already in progress immediately, instead of only after a reconnect's bulk sync.
+//
+// Emits incremental join + timer-start events (additive on the client) rather
+// than a full voice_states_sync — the bulk sync REPLACES the client's whole
+// voiceStates map, which would wipe the user's other servers' voice state.
+func (s *voiceService) SyncServerStatesToUser(userID, serverID string) {
+	s.mu.RLock()
+	var events []ws.Event
+	serverChannels := make(map[string]struct{})
+	for _, st := range s.states {
+		if st.ServerID != serverID {
+			continue
+		}
+		serverChannels[st.ChannelID] = struct{}{}
+		events = append(events, ws.Event{
+			Op: ws.OpVoiceStateUpdate,
+			Data: ws.VoiceStateUpdateBroadcast{
+				UserID:           st.UserID,
+				ChannelID:        st.ChannelID,
+				ChannelName:      st.ChannelName,
+				ServerID:         st.ServerID,
+				Username:         st.Username,
+				DisplayName:      st.DisplayName,
+				AvatarURL:        s.urlSigner.SignURL(st.AvatarURL),
+				IsMuted:          st.IsMuted,
+				IsDeafened:       st.IsDeafened,
+				IsStreaming:      st.IsStreaming,
+				IsServerMuted:    st.IsServerMuted,
+				IsServerDeafened: st.IsServerDeafened,
+				Action:           "join",
+			},
+		})
+	}
+	for cid := range serverChannels {
+		if t, ok := s.channelStartedAt[cid]; ok {
+			events = append(events, ws.Event{
+				Op:   ws.OpVoiceChannelTimerStart,
+				Data: ws.VoiceChannelTimerStartData{ChannelID: cid, StartedAt: t.UnixMilli()},
+			})
+		}
+	}
+	s.mu.RUnlock()
+
+	// Send outside the lock — BroadcastToUser takes the hub lock.
+	for _, e := range events {
+		s.hub.BroadcastToUser(userID, e)
+	}
+}
+
 // ─── Query Methods ───
 
 func (s *voiceService) GetChannelParticipants(channelID string) []models.VoiceState {

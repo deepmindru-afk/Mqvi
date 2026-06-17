@@ -56,6 +56,10 @@ type VoiceService interface {
 	GetUserVoiceState(userID string) *models.VoiceState
 	GetAllVoiceStates() []models.VoiceState
 	GetActiveChannelTimers() map[string]int64 // channelID → start time (Unix ms)
+	// SyncServerStatesToUser pushes a server's in-progress voice participants +
+	// channel timers to one user (used on server join so a newcomer sees active
+	// calls without reconnecting).
+	SyncServerStatesToUser(userID, serverID string)
 	// SetOnChannelEmpty installs a callback fired (in a goroutine) whenever the
 	// channel transitions to zero participants. Used by voiceMessageService to
 	// purge the ephemeral chat for that channel.

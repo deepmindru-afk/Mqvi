@@ -54,6 +54,12 @@ type ServerService interface {
 // hard-codes the same number in the i18n string — keep both in sync.
 const MaxMqviHostedServersPerUser = 3
 
+// VoiceStateSyncer pushes a server's in-progress voice participants to a single
+// user — used on server join so a newcomer sees active calls without reconnecting.
+type VoiceStateSyncer interface {
+	SyncServerStatesToUser(userID, serverID string)
+}
+
 type serverService struct {
 	db            *sql.DB // for WithTx in CreateServer
 	serverRepo    repository.ServerRepository
@@ -64,6 +70,7 @@ type serverService struct {
 	userRepo      repository.UserRepository
 	inviteService InviteService
 	hub           ws.BroadcastAndManage
+	voiceSync     VoiceStateSyncer
 	encryptionKey []byte // AES-256-GCM for LiveKit credentials
 	urlSigner     FileURLSigner
 	fileCleanup   FileCleanupService
@@ -79,6 +86,7 @@ func NewServerService(
 	userRepo repository.UserRepository,
 	inviteService InviteService,
 	hub ws.BroadcastAndManage,
+	voiceSync VoiceStateSyncer,
 	encryptionKey []byte,
 	urlSigner FileURLSigner,
 	fileCleanup FileCleanupService,
@@ -93,6 +101,7 @@ func NewServerService(
 		userRepo:      userRepo,
 		inviteService: inviteService,
 		hub:           hub,
+		voiceSync:     voiceSync,
 		encryptionKey: encryptionKey,
 		urlSigner:     urlSigner,
 		fileCleanup:   fileCleanup,
@@ -615,6 +624,11 @@ func (s *serverService) JoinServer(ctx context.Context, userID, inviteCode strin
 			IconURL: s.urlSigner.SignURLPtr(server.IconURL),
 		},
 	})
+
+	// Push in-progress voice participants for this server so the newcomer sees
+	// active calls immediately — connect-time voice_states_sync only covered
+	// servers they were already a member of.
+	s.voiceSync.SyncServerStatesToUser(userID, serverID)
 
 	// Notify server members: new member joined (full MemberWithRoles for frontend)
 	user, err := s.userRepo.GetByID(ctx, userID)
