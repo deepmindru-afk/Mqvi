@@ -7,6 +7,7 @@ import type { InputMode } from "../../stores/voiceStore";
 import {
   DEFAULT_MUTE_SHORTCUT,
   DEFAULT_DEAFEN_SHORTCUT,
+  DOM_BUTTON_TO_MOUSE_TOKEN,
   type ShortcutBinding,
 } from "../../stores/slices/voiceSettingsSlice";
 import { isElectron } from "../../utils/constants";
@@ -30,6 +31,9 @@ function formatKeyCode(code: string): string {
   if (code.startsWith("Digit")) return code.slice(5);
 
   const mapping: Record<string, string> = {
+    Mouse3: "Mouse 3 (Middle)",
+    Mouse4: "Mouse 4 (Back)",
+    Mouse5: "Mouse 5 (Forward)",
     Space: "Space",
     ControlLeft: "Left Ctrl",
     ControlRight: "Right Ctrl",
@@ -367,8 +371,29 @@ function VoiceSettings() {
       setListeningShortcut(null);
     }
 
+    function handleMouseDown(e: MouseEvent) {
+      const token = DOM_BUTTON_TO_MOUSE_TOKEN[e.button];
+      if (!token) return; // ignore left/right — needed for normal interaction
+      e.preventDefault();
+      e.stopPropagation();
+
+      const binding: ShortcutBinding = {
+        code: token,
+        ctrl: e.ctrlKey,
+        shift: e.shiftKey,
+        alt: e.altKey,
+      };
+      if (listeningShortcut === "mute") setMuteShortcut(binding);
+      else setDeafenShortcut(binding);
+      setListeningShortcut(null);
+    }
+
     document.addEventListener("keydown", handleKeyDown, { capture: true });
-    return () => document.removeEventListener("keydown", handleKeyDown, { capture: true });
+    document.addEventListener("mousedown", handleMouseDown, { capture: true });
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown, { capture: true });
+      document.removeEventListener("mousedown", handleMouseDown, { capture: true });
+    };
   }, [listeningShortcut, setMuteShortcut, setDeafenShortcut]);
 
   // ─── PTT Key Binding ───
@@ -389,10 +414,21 @@ function VoiceSettings() {
       setIsListeningKey(false);
     }
 
+    function handleMouseDown(e: MouseEvent) {
+      const token = DOM_BUTTON_TO_MOUSE_TOKEN[e.button];
+      if (!token) return; // ignore left/right — needed for normal interaction
+      e.preventDefault();
+      e.stopPropagation();
+      setPTTKey(token);
+      setIsListeningKey(false);
+    }
+
     document.addEventListener("keydown", handleKeyDown, { capture: true });
+    document.addEventListener("mousedown", handleMouseDown, { capture: true });
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown, { capture: true });
+      document.removeEventListener("mousedown", handleMouseDown, { capture: true });
     };
   }, [isListeningKey, setPTTKey]);
 

@@ -22,6 +22,7 @@
 
 import { useEffect, useRef } from "react";
 import { useVoiceStore } from "../stores/voiceStore";
+import { isMouseBinding } from "../stores/slices/voiceSettingsSlice";
 import { isElectron } from "../utils/constants";
 
 type UsePushToTalkParams = {
@@ -47,9 +48,11 @@ export function usePushToTalk({ setMicEnabled }: UsePushToTalkParams): void {
     api.removePTTListeners();
 
     api.onPTTGlobalDown(() => {
-      // Focused → the document path handles it (native hook is unreliable and
-      // its modifier mask can be stale while the app owns the foreground).
-      if (document.hasFocus()) return;
+      // Keyboard: focused → the document path handles it (native keyboard hook
+      // is unreliable in the foreground). Mouse: always native — DOM mouse
+      // events need the pointer over the window, so the native hook is the
+      // reliable source in both focus states.
+      if (!isMouseBinding(pttKey) && document.hasFocus()) return;
       if (isPressedRef.current) return;
       const { isMuted, isServerMuted } = useVoiceStore.getState();
       if (isMuted || isServerMuted) return;
@@ -80,8 +83,10 @@ export function usePushToTalk({ setMicEnabled }: UsePushToTalkParams): void {
 
   // ─── Document-level keydown/keyup (focus required) ───
   // Runs in Electron too: covers the focused case the native hook misses.
+  // Mouse bindings are handled solely by the native path above.
   useEffect(() => {
     if (inputMode !== "push_to_talk" || !currentVoiceChannelId) return;
+    if (isMouseBinding(pttKey)) return;
 
     function isTextInput(el: Element | null): boolean {
       if (!el) return false;

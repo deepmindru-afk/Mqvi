@@ -142,23 +142,24 @@ let captureHeaderBuffer = Buffer.alloc(0);
 // ─── Global PTT (Push-to-Talk) ───
 
 /**
- * uiohook keycode that the user has bound for PTT.
- * null = no global PTT active (user not in voice or PTT mode disabled).
- * When set, uIOhook keydown/keyup for this code toggle the mic via IPC.
+ * PTT target: either a uiohook keycode or a mouse button. null = inactive.
+ * When set, uIOhook keydown/keyup (or mousedown/mouseup) toggle the mic via IPC.
  */
 let pttTargetKeycode: number | null = null;
+let pttTargetMouseButton: number | null = null;
 
 /** Whether uIOhook is currently running (started/stopped on demand) */
 let uiohookRunning = false;
 
 /**
  * A toggle-style global shortcut (mute / deafen). Unlike PTT (hold), these
- * fire once on the keydown that completes the combo. `isDown` is the repeat
- * guard — uIOhook re-fires keydown while a key is held, so we only act on the
- * press→hold transition and reset on keyup of the main key.
+ * fire once on the press that completes the combo. Bound to a keyboard key
+ * (keycode) or a mouse button (mouseButton); exactly one is set. `isDown` is
+ * the repeat guard — uIOhook re-fires keydown while a key is held.
  */
 type ToggleShortcut = {
-  keycode: number;
+  keycode: number | null;
+  mouseButton: number | null;
   ctrl: boolean;
   shift: boolean;
   alt: boolean;
@@ -167,6 +168,13 @@ type ToggleShortcut = {
 
 let muteShortcut: ToggleShortcut | null = null;
 let deafenShortcut: ToggleShortcut | null = null;
+
+/** Mouse token (stored by frontend) → uiohook mouse button number. */
+const mouseTokenToUiohookButton: Record<string, number> = {
+  Mouse3: 3, // middle
+  Mouse4: 4, // back
+  Mouse5: 5, // forward
+};
 
 /**
  * Map KeyboardEvent.code (stored by frontend) → uiohook native keycode.
@@ -253,27 +261,47 @@ function stopUiohook(): void {
 /** Run the hook while any global shortcut is registered; stop when none are. */
 function refreshUiohookState(): void {
   const anyActive =
-    pttTargetKeycode !== null || muteShortcut !== null || deafenShortcut !== null;
+    pttTargetKeycode !== null ||
+    pttTargetMouseButton !== null ||
+    muteShortcut !== null ||
+    deafenShortcut !== null;
   if (anyActive) startUiohook();
   else stopUiohook();
 }
 
-/** Build a ToggleShortcut from a renderer ShortcutBinding, or null if the key is unknown. */
+/** Build a ToggleShortcut from a renderer ShortcutBinding, or null if unknown. */
 function buildToggleShortcut(binding: {
   code: string;
   ctrl: boolean;
   shift: boolean;
   alt: boolean;
 }): ToggleShortcut | null {
+  const mods = { ctrl: binding.ctrl, shift: binding.shift, alt: binding.alt, isDown: false };
+  const mouseButton = mouseTokenToUiohookButton[binding.code];
+  if (mouseButton !== undefined) {
+    return { keycode: null, mouseButton, ...mods };
+  }
   const keycode = codeToUiohook[binding.code];
   if (keycode === undefined) return null;
-  return { keycode, ctrl: binding.ctrl, shift: binding.shift, alt: binding.alt, isDown: false };
+  return { keycode, mouseButton: null, ...mods };
 }
 
-/** Whether a keydown event's key + modifier state matches a toggle shortcut. */
+/** Whether a keyboard event's key + modifiers match a keyboard toggle shortcut. */
 function matchesToggle(e: { keycode: number; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }, s: ToggleShortcut): boolean {
   return (
+    s.keycode !== null &&
     e.keycode === s.keycode &&
+    e.ctrlKey === s.ctrl &&
+    e.shiftKey === s.shift &&
+    e.altKey === s.alt
+  );
+}
+
+/** Whether a mouse event's button + modifiers match a mouse toggle shortcut. */
+function matchesToggleMouse(e: { button: number; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }, s: ToggleShortcut): boolean {
+  return (
+    s.mouseButton !== null &&
+    e.button === s.mouseButton &&
     e.ctrlKey === s.ctrl &&
     e.shiftKey === s.shift &&
     e.altKey === s.alt
@@ -310,6 +338,38 @@ uIOhook.on("keyup", (e) => {
   // Reset repeat guard when the main key of a toggle combo is released.
   if (muteShortcut && e.keycode === muteShortcut.keycode) muteShortcut.isDown = false;
   if (deafenShortcut && e.keycode === deafenShortcut.keycode) deafenShortcut.isDown = false;
+});
+
+// ─── uIOhook mouse handlers (side buttons for PTT / mute / deafen) ───
+
+uIOhook.on("mousedown", (e) => {
+  const m = { button: e.button as number, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey };
+
+  if (pttTargetMouseButton !== null && m.button === pttTargetMouseButton) {
+    mainWindow?.webContents.send("ptt-global-down");
+  }
+
+  if (muteShortcut && matchesToggleMouse(m, muteShortcut) && !muteShortcut.isDown) {
+    muteShortcut.isDown = true;
+    mainWindow?.webContents.send("mute-global-toggle");
+  }
+
+  if (deafenShortcut && matchesToggleMouse(m, deafenShortcut) && !deafenShortcut.isDown) {
+    deafenShortcut.isDown = true;
+    mainWindow?.webContents.send("deafen-global-toggle");
+  }
+});
+
+uIOhook.on("mouseup", (e) => {
+  const button = e.button as number;
+
+  if (pttTargetMouseButton !== null && button === pttTargetMouseButton) {
+    mainWindow?.webContents.send("ptt-global-up");
+  }
+
+  // Reset repeat guard when the toggle's mouse button is released.
+  if (muteShortcut && button === muteShortcut.mouseButton) muteShortcut.isDown = false;
+  if (deafenShortcut && button === deafenShortcut.mouseButton) deafenShortcut.isDown = false;
 });
 
 // ─── Window Bounds Persistence ───
@@ -951,6 +1011,15 @@ function setupIPC(): void {
   ipcMain.handle(
     "register-ptt-shortcut",
     (_e: Electron.IpcMainInvokeEvent, keyCode: string) => {
+      const mouseButton = mouseTokenToUiohookButton[keyCode];
+      if (mouseButton !== undefined) {
+        pttTargetMouseButton = mouseButton;
+        pttTargetKeycode = null;
+        refreshUiohookState();
+        console.log(`[main] PTT registered: ${keyCode} → uiohook mouse ${mouseButton}`);
+        return true;
+      }
+
       const uiCode = codeToUiohook[keyCode];
       if (uiCode === undefined) {
         console.warn(`[main] Unknown PTT key code: ${keyCode}`);
@@ -958,6 +1027,7 @@ function setupIPC(): void {
       }
 
       pttTargetKeycode = uiCode;
+      pttTargetMouseButton = null;
       refreshUiohookState();
       console.log(`[main] PTT registered: ${keyCode} → uiohook ${uiCode}`);
       return true;
@@ -966,6 +1036,7 @@ function setupIPC(): void {
 
   ipcMain.handle("unregister-ptt-shortcut", () => {
     pttTargetKeycode = null;
+    pttTargetMouseButton = null;
     refreshUiohookState();
     console.log("[main] PTT unregistered");
   });
@@ -1253,6 +1324,7 @@ app.on("before-quit", (e) => {
 
   stopUiohook();
   pttTargetKeycode = null;
+  pttTargetMouseButton = null;
   muteShortcut = null;
   deafenShortcut = null;
 

@@ -18,7 +18,7 @@
 import { useEffect } from "react";
 import { useUIStore } from "../stores/uiStore";
 import { useVoiceStore } from "../stores/voiceStore";
-import type { ShortcutBinding } from "../stores/slices/voiceSettingsSlice";
+import { isMouseBinding, type ShortcutBinding } from "../stores/slices/voiceSettingsSlice";
 import { isElectron } from "../utils/constants";
 
 type KeyboardShortcutActions = {
@@ -82,10 +82,16 @@ export function useKeyboardShortcuts({ toggleMute, toggleDeafen }: KeyboardShort
 
     api.removeMuteListeners();
     api.removeDeafenListeners();
-    // Ignore native toggles while focused — the document path handles that case
-    // with reliable modifiers (native's mask can be stale in the foreground).
-    api.onMuteGlobalToggle(() => { if (!document.hasFocus()) toggleMute(); });
-    api.onDeafenGlobalToggle(() => { if (!document.hasFocus()) toggleDeafen(); });
+    // Keyboard: ignore native toggles while focused — the document path handles
+    // that case with reliable modifiers (native's mask can be stale in the
+    // foreground). Mouse: always native (DOM mouse needs the pointer over the
+    // window), so don't focus-gate it.
+    api.onMuteGlobalToggle(() => {
+      if (isMouseBinding(muteShortcut.code) || !document.hasFocus()) toggleMute();
+    });
+    api.onDeafenGlobalToggle(() => {
+      if (isMouseBinding(deafenShortcut.code) || !document.hasFocus()) toggleDeafen();
+    });
 
     api.registerMuteShortcut(muteShortcut);
     api.registerDeafenShortcut(deafenShortcut);
