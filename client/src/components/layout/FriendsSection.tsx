@@ -3,6 +3,7 @@
  * Shows online friends (capped at 10) with context menu for profile, calls, DM.
  */
 
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useSidebarStore } from "../../stores/sidebarStore";
 import { useMobileStore } from "../../stores/mobileStore";
@@ -27,6 +28,8 @@ function FriendsSection({ onShowUserCard }: FriendsSectionProps) {
   const friends = useFriendStore((s) => s.friends);
   const incoming = useFriendStore((s) => s.incoming);
   const removeFriend = useFriendStore((s) => s.removeFriend);
+  const dmChannels = useDMStore((s) => s.channels);
+  const dmUnreadCounts = useDMStore((s) => s.dmUnreadCounts);
   const openTab = useUIStore((s) => s.openTab);
   const selectDM = useDMStore((s) => s.selectDM);
   const clearDMUnread = useDMStore((s) => s.clearDMUnread);
@@ -36,6 +39,17 @@ function FriendsSection({ onShowUserCard }: FriendsSectionProps) {
 
   const closeAllDrawers = useMobileStore((s) => s.closeAllDrawers);
   const isExpanded = expandedSections["friends"] ?? true;
+
+  // Map DM unread counts to the friend's user id so an unread DM also surfaces
+  // its badge on the friend's row in this list (not only in the DM section).
+  const unreadByUserId = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const ch of dmChannels) {
+      const count = dmUnreadCounts[ch.id] ?? 0;
+      if (count > 0) map[ch.other_user.id] = count;
+    }
+    return map;
+  }, [dmChannels, dmUnreadCounts]);
 
   function handleFriendsClick() {
     openTab("friends", "friends", t("friends"));
@@ -47,6 +61,7 @@ function FriendsSection({ onShowUserCard }: FriendsSectionProps) {
     const channelId = await useDMStore.getState().createOrGetChannel(friend.user_id);
     if (channelId) {
       openTab(channelId, "dm", name);
+      clearDMUnread(channelId);
       closeAllDrawers();
     }
   }
@@ -137,10 +152,12 @@ function FriendsSection({ onShowUserCard }: FriendsSectionProps) {
             {friends
               .filter((f) => f.user_status === "online" || f.user_status === "idle" || f.user_status === "dnd")
               .slice(0, 10)
-              .map((friend) => (
+              .map((friend) => {
+                const unread = unreadByUserId[friend.user_id] ?? 0;
+                return (
                 <button
                   key={friend.user_id}
-                  className="ch-tree-item"
+                  className={`ch-tree-item${unread > 0 ? " has-unread" : ""}`}
                   onClick={() => { void handleFriendClick(friend); }}
                   onContextMenu={(e) => handleFriendContextMenu(e, friend)}
                 >
@@ -163,8 +180,10 @@ function FriendsSection({ onShowUserCard }: FriendsSectionProps) {
                   <span className="ch-tree-label">
                     {friend.display_name ?? friend.username}
                   </span>
+                  {unread > 0 && <span className="ch-tree-badge">{unread}</span>}
                 </button>
-              ))}
+                );
+              })}
           </div>
         )}
       </div>
