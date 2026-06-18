@@ -254,6 +254,9 @@ select option:disabled {
 .ch-tree-section-header { display:flex;align-items:center;gap:5px;width:100%;padding:7px 10px;border:none;background:transparent;color:var(--t2);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;transition:color .1s; }
 .ch-tree-section-header:hover { color:var(--t0); }
 .ch-tree-section-body { padding:0 4px; }
+/* Bounded + scrollable section body (Friends, DMs) so long lists don't push the
+   server list below them out of view. Shared so future collapsible lists reuse it. */
+.ch-tree-section-body--scroll { max-height:30vh;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--bg-5) transparent; }
 
 /* Server section header — server icon + name */
 .ch-tree-server-header-row { display:flex;align-items:center;width:100%; }

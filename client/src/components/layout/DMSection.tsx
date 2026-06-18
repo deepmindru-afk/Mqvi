@@ -262,7 +262,7 @@ function DMSection({ onShowUserCard }: DMSectionProps) {
         </button>
 
         {isExpanded && (
-          <div className="ch-tree-section-body">
+          <div className="ch-tree-section-body ch-tree-section-body--scroll">
             {/* ── Message Requests (collapsible, default collapsed) ── */}
             {pendingChannels.length > 0 && (
               <div className="ch-tree-dm-requests">

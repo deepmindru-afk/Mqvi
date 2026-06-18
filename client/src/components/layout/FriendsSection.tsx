@@ -1,6 +1,6 @@
 /**
  * FriendsSection — Collapsible friends list in the sidebar channel tree.
- * Shows online friends (capped at 10) with context menu for profile, calls, DM.
+ * Shows online friends (scrollable) with context menu for profile, calls, DM.
  */
 
 import { useMemo } from "react";
@@ -140,7 +140,7 @@ function FriendsSection({ onShowUserCard }: FriendsSectionProps) {
         </button>
 
         {isExpanded && (
-          <div className="ch-tree-section-body">
+          <div className="ch-tree-section-body ch-tree-section-body--scroll">
             <button className="ch-tree-item" onClick={handleFriendsClick}>
               <IconFriends className="ch-tree-icon" width={15} height={15} />
               <span className="ch-tree-label">{t("friends")}</span>
@@ -151,7 +151,6 @@ function FriendsSection({ onShowUserCard }: FriendsSectionProps) {
 
             {friends
               .filter((f) => f.user_status === "online" || f.user_status === "idle" || f.user_status === "dnd")
-              .slice(0, 10)
               .map((friend) => {
                 const unread = unreadByUserId[friend.user_id] ?? 0;
                 return (
