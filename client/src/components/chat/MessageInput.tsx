@@ -27,6 +27,7 @@ import FilePreview from "./FilePreview";
 import MentionAutocomplete, { type MentionSelection } from "./MentionAutocomplete";
 import CommandAutocomplete from "./CommandAutocomplete";
 import ReplyBar from "./ReplyBar";
+import VoiceRecordButton from "./VoiceRecordButton";
 
 type MessageInputProps = {
   openSearch: (query: string) => void;
@@ -555,6 +556,14 @@ function MessageInput({ openSearch }: MessageInputProps) {
             </div>
           )}
         </div>
+
+        <VoiceRecordButton
+          disabled={isSending}
+          onRecorded={(file) => {
+            const valid = validateFiles([file]);
+            if (valid.length > 0) setFiles((prev) => [...prev, ...valid]);
+          }}
+        />
       </div>
 
       {content.length > MAX_MESSAGE_LENGTH - 100 && (

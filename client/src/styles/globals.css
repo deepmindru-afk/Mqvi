@@ -797,10 +797,23 @@ button.ch-tree-vu-stream svg { width:21px;height:21px; }
 }
 @keyframes spin { to { transform:rotate(360deg); } }
 
-.input-box { background:var(--panel-bg);backdrop-filter:var(--panel-backdrop);-webkit-backdrop-filter:var(--panel-backdrop);border:1px solid var(--panel-border);border-radius:var(--panel-radius);box-shadow:var(--panel-inset),var(--panel-shadow);display:flex;align-items:flex-end;padding:4px;transition:border-color .15s; }
+.input-box { background:var(--panel-bg);backdrop-filter:var(--panel-backdrop);-webkit-backdrop-filter:var(--panel-backdrop);border:1px solid var(--panel-border);border-radius:var(--panel-radius);box-shadow:var(--panel-inset),var(--panel-shadow);display:flex;align-items:flex-end;padding:4px;transition:border-color .15s;position:relative; }
 .input-box:focus-within { border-color:var(--primary); }
 .input-action-btn { width:36px;height:36px;border:none;background:transparent;color:var(--t2);cursor:pointer;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:color .1s,background .1s; }
 .input-action-btn:hover { color:var(--t0);background:var(--bg-h); }
+
+/* Voice message recording */
+.voice-rec-btn { touch-action:none; } /* drag-to-lock must not scroll the page on touch */
+.voice-rec-overlay { position:absolute;inset:0;display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--bg-4);border-radius:var(--panel-radius);z-index:5; }
+.voice-rec-dot { width:10px;height:10px;border-radius:50%;background:var(--red);flex-shrink:0;animation:vrecPulse 1s ease-in-out infinite; }
+@keyframes vrecPulse { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+.voice-rec-time { font-size:14px;color:var(--t0);font-variant-numeric:tabular-nums; }
+.voice-rec-hint { font-size:13px;color:var(--t2);margin-left:auto; }
+.voice-rec-actions { margin-left:auto;display:flex;gap:8px; }
+.voice-rec-overlay .voice-rec-cancel, .voice-rec-overlay .voice-rec-done { width:auto;height:auto;border:none;border-radius:6px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer; }
+.voice-rec-overlay .voice-rec-cancel { background:transparent;color:var(--t2); }
+.voice-rec-overlay .voice-rec-cancel:hover { color:var(--t0); }
+.voice-rec-overlay .voice-rec-done { background:var(--primary);color:#fff; }
 .input-box button { width:36px;height:36px;border:none;background:transparent;color:var(--t3);cursor:pointer;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px; }
 .input-box button:hover { color:var(--t1);background:var(--bg-h); }
 .send-btn { color:var(--primary) !important; }
