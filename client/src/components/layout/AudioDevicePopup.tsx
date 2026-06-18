@@ -113,10 +113,17 @@ function AudioDevicePopup({ kind, anchorEl, onClose }: AudioDevicePopupProps) {
       if (anchorEl.contains(target)) return;
       onClose();
     }
-    requestAnimationFrame(() => {
+    // Defer one frame so the click that opened the popup doesn't immediately
+    // close it. Cancel on cleanup — without this, StrictMode's mount-time
+    // setup→cleanup→setup leaks a listener (the rAF fires after cleanup), which
+    // later fires onClose with a null popupRef and closes the popup on any click.
+    const rafId = requestAnimationFrame(() => {
       document.addEventListener("mousedown", handleClick);
     });
-    return () => document.removeEventListener("mousedown", handleClick);
+    return () => {
+      cancelAnimationFrame(rafId);
+      document.removeEventListener("mousedown", handleClick);
+    };
   }, [onClose, anchorEl]);
 
   // Close on Escape

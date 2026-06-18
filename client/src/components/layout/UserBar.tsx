@@ -370,8 +370,13 @@ function ScreenShareQualityPopup({
       if (anchorEl.contains(target)) return;
       onClose();
     }
-    requestAnimationFrame(() => document.addEventListener("mousedown", handleClick));
-    return () => document.removeEventListener("mousedown", handleClick);
+    // Cancel on cleanup — otherwise StrictMode's mount-time setup→cleanup→setup
+    // leaks a listener (rAF fires after cleanup) that later closes the popup.
+    const rafId = requestAnimationFrame(() => document.addEventListener("mousedown", handleClick));
+    return () => {
+      cancelAnimationFrame(rafId);
+      document.removeEventListener("mousedown", handleClick);
+    };
   }, [onClose, anchorEl]);
 
   // Close on Escape
