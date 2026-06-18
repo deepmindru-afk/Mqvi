@@ -26,6 +26,7 @@ type P2PCall struct {
 	CallType   P2PCallType   `json:"call_type"`
 	Status     P2PCallStatus `json:"status"`
 	CreatedAt  time.Time     `json:"created_at"`
+	AcceptedAt time.Time     `json:"accepted_at,omitempty"` // set when answered; basis for call duration
 }
 
 // P2PCallBroadcast — broadcast payload carrying both caller and receiver info.

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -235,7 +236,7 @@ func (r *sqliteDMRepo) GetMessages(ctx context.Context, channelID string, before
 		query = `
 			SELECT m.id, m.dm_channel_id, m.user_id, m.content, m.edited_at, m.created_at,
 			       m.reply_to_id, m.is_pinned,
-			       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata,
+			       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata, m.message_type, m.call_meta,
 			       u.id, u.username, u.display_name, u.avatar_url, u.status, u.deleted_at, u.is_hard_deleted,
 			       rm.id, rm.content,
 			       ru.id, ru.username, ru.display_name, ru.avatar_url, ru.deleted_at, ru.is_hard_deleted
@@ -251,7 +252,7 @@ func (r *sqliteDMRepo) GetMessages(ctx context.Context, channelID string, before
 		query = `
 			SELECT m.id, m.dm_channel_id, m.user_id, m.content, m.edited_at, m.created_at,
 			       m.reply_to_id, m.is_pinned,
-			       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata,
+			       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata, m.message_type, m.call_meta,
 			       u.id, u.username, u.display_name, u.avatar_url, u.status, u.deleted_at, u.is_hard_deleted,
 			       rm.id, rm.content,
 			       ru.id, ru.username, ru.display_name, ru.avatar_url, ru.deleted_at, ru.is_hard_deleted
@@ -295,7 +296,7 @@ func (r *sqliteDMRepo) GetMessageByID(ctx context.Context, id string) (*models.D
 	query := `
 		SELECT m.id, m.dm_channel_id, m.user_id, m.content, m.edited_at, m.created_at,
 		       m.reply_to_id, m.is_pinned,
-		       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata,
+		       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata, m.message_type, m.call_meta,
 		       u.id, u.username, u.display_name, u.avatar_url, u.status, u.deleted_at, u.is_hard_deleted,
 		       rm.id, rm.content,
 		       ru.id, ru.username, ru.display_name, ru.avatar_url, ru.deleted_at, ru.is_hard_deleted
@@ -306,6 +307,7 @@ func (r *sqliteDMRepo) GetMessageByID(ctx context.Context, id string) (*models.D
 		WHERE m.id = ?`
 
 	var msg models.DMMessage
+	var callMetaRaw sql.NullString
 	var author models.User
 	var authorID sql.NullString
 	var content sql.NullString
@@ -321,7 +323,7 @@ func (r *sqliteDMRepo) GetMessageByID(ctx context.Context, id string) (*models.D
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&msg.ID, &msg.DMChannelID, &msg.UserID, &content, &editedAt, &msg.CreatedAt,
 		&msg.ReplyToID, &isPinned,
-		&msg.EncryptionVersion, &msg.Ciphertext, &msg.SenderDeviceID, &msg.E2EEMetadata,
+		&msg.EncryptionVersion, &msg.Ciphertext, &msg.SenderDeviceID, &msg.E2EEMetadata, &msg.MessageType, &callMetaRaw,
 		&authorID, &author.Username, &displayName, &avatarURL, &author.Status, &author.DeletedAt, &author.IsHardDeleted,
 		&refMsgID, &refMsgContent,
 		&refAuthorID, &refAuthorUsername, &refAuthorDisplayName, &refAuthorAvatarURL, &refAuthorDeletedAt, &refAuthorIsHardDeleted,
@@ -334,6 +336,7 @@ func (r *sqliteDMRepo) GetMessageByID(ctx context.Context, id string) (*models.D
 		return nil, fmt.Errorf("failed to get DM message: %w", err)
 	}
 
+	msg.CallMeta = parseCallMeta(callMetaRaw)
 	msg.IsPinned = isPinned == 1
 	if content.Valid {
 		msg.Content = &content.String
@@ -368,17 +371,30 @@ func (r *sqliteDMRepo) CreateMessage(ctx context.Context, msg *models.DMMessage)
 		contentPtr = msg.Content
 	}
 
+	messageType := msg.MessageType
+	if messageType == "" {
+		messageType = models.MessageTypeText
+	}
+	var callMetaJSON *string
+	if msg.CallMeta != nil {
+		if b, mErr := json.Marshal(msg.CallMeta); mErr == nil {
+			s := string(b)
+			callMetaJSON = &s
+		}
+	}
+
 	err := r.db.QueryRowContext(ctx,
 		`INSERT INTO dm_messages (dm_channel_id, user_id, content, reply_to_id,
-			encryption_version, ciphertext, sender_device_id, e2ee_metadata)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, created_at`,
+			encryption_version, ciphertext, sender_device_id, e2ee_metadata, message_type, call_meta)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, created_at`,
 		msg.DMChannelID, msg.UserID, contentPtr, msg.ReplyToID,
-		msg.EncryptionVersion, msg.Ciphertext, msg.SenderDeviceID, msg.E2EEMetadata,
+		msg.EncryptionVersion, msg.Ciphertext, msg.SenderDeviceID, msg.E2EEMetadata, messageType, callMetaJSON,
 	).Scan(&msg.ID, &msg.CreatedAt)
 
 	if err != nil {
 		return fmt.Errorf("failed to create DM message: %w", err)
 	}
+	msg.MessageType = messageType
 	msg.CreatedAt = msg.CreatedAt.UTC()
 	return nil
 }
@@ -575,7 +591,7 @@ func (r *sqliteDMRepo) GetPinnedMessages(ctx context.Context, channelID string) 
 	query := `
 		SELECT m.id, m.dm_channel_id, m.user_id, m.content, m.edited_at, m.created_at,
 		       m.reply_to_id, m.is_pinned,
-		       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata,
+		       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata, m.message_type, m.call_meta,
 		       u.id, u.username, u.display_name, u.avatar_url, u.status, u.deleted_at, u.is_hard_deleted,
 		       rm.id, rm.content,
 		       ru.id, ru.username, ru.display_name, ru.avatar_url, ru.deleted_at, ru.is_hard_deleted
@@ -707,7 +723,7 @@ func (r *sqliteDMRepo) SearchMessages(ctx context.Context, channelID string, sea
 	dataQuery := `
 		SELECT m.id, m.dm_channel_id, m.user_id, m.content, m.edited_at, m.created_at,
 		       m.reply_to_id, m.is_pinned,
-		       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata,
+		       m.encryption_version, m.ciphertext, m.sender_device_id, m.e2ee_metadata, m.message_type, m.call_meta,
 		       u.id, u.username, u.display_name, u.avatar_url, u.status, u.deleted_at, u.is_hard_deleted,
 		       rm.id, rm.content,
 		       ru.id, ru.username, ru.display_name, ru.avatar_url, ru.deleted_at, ru.is_hard_deleted
@@ -747,9 +763,23 @@ func (r *sqliteDMRepo) SearchMessages(ctx context.Context, channelID string, sea
 
 // ─── Scan Helpers ───
 
+// parseCallMeta unmarshals a nullable call_meta JSON column into *CallMeta.
+// Returns nil for normal (non-call) messages or malformed JSON.
+func parseCallMeta(raw sql.NullString) *models.CallMeta {
+	if !raw.Valid || raw.String == "" {
+		return nil
+	}
+	var cm models.CallMeta
+	if err := json.Unmarshal([]byte(raw.String), &cm); err != nil {
+		return nil
+	}
+	return &cm
+}
+
 // scanDMMessageRow parses a standard DM message query row including author and reply reference.
 func scanDMMessageRow(rows *sql.Rows) (*models.DMMessage, error) {
 	var msg models.DMMessage
+	var callMetaRaw sql.NullString
 	var author models.User
 	var authorID sql.NullString
 	var content sql.NullString
@@ -765,7 +795,7 @@ func scanDMMessageRow(rows *sql.Rows) (*models.DMMessage, error) {
 	if err := rows.Scan(
 		&msg.ID, &msg.DMChannelID, &msg.UserID, &content, &editedAt, &msg.CreatedAt,
 		&msg.ReplyToID, &isPinned,
-		&msg.EncryptionVersion, &msg.Ciphertext, &msg.SenderDeviceID, &msg.E2EEMetadata,
+		&msg.EncryptionVersion, &msg.Ciphertext, &msg.SenderDeviceID, &msg.E2EEMetadata, &msg.MessageType, &callMetaRaw,
 		&authorID, &author.Username, &displayName, &avatarURL, &author.Status, &author.DeletedAt, &author.IsHardDeleted,
 		&refMsgID, &refMsgContent,
 		&refAuthorID, &refAuthorUsername, &refAuthorDisplayName, &refAuthorAvatarURL, &refAuthorDeletedAt, &refAuthorIsHardDeleted,
@@ -773,6 +803,7 @@ func scanDMMessageRow(rows *sql.Rows) (*models.DMMessage, error) {
 		return nil, fmt.Errorf("failed to scan DM message: %w", err)
 	}
 
+	msg.CallMeta = parseCallMeta(callMetaRaw)
 	msg.IsPinned = isPinned == 1
 	if content.Valid {
 		msg.Content = &content.String

@@ -34,6 +34,12 @@ type P2PAppLogger interface {
 	Log(level models.LogLevel, category models.LogCategory, userID, serverID *string, message string, metadata map[string]string)
 }
 
+// CallLogger records a finished call as a DM message. ISP — satisfied by dmService.
+// Injected via SetCallLogger (dmService is built after p2pCallService).
+type CallLogger interface {
+	CreateCallLog(ctx context.Context, callerID, receiverID string, meta models.CallMeta) error
+}
+
 type P2PCallService interface {
 	InitiateCall(callerID, receiverID string, callType models.P2PCallType) error
 	AcceptCall(userID, callID string) error
@@ -46,6 +52,7 @@ type P2PCallService interface {
 	// Status is read under the lock — no mutable pointer escapes.
 	HasActiveCall(userID string) bool
 	SetAppLogger(logger P2PAppLogger)
+	SetCallLogger(logger CallLogger)
 }
 
 type p2pCallService struct {
@@ -53,6 +60,7 @@ type p2pCallService struct {
 	userGetter    UserInfoGetter
 	hub           ws.BroadcastAndOnline
 	appLogger     P2PAppLogger
+	callLogger    CallLogger
 	urlSigner     FileURLSigner
 
 	// In-memory state, cleared on server restart.
@@ -69,6 +77,41 @@ const ringingTimeout = 60 * time.Second
 
 func (s *p2pCallService) SetAppLogger(logger P2PAppLogger) {
 	s.appLogger = logger
+}
+
+func (s *p2pCallService) SetCallLogger(logger CallLogger) {
+	s.callLogger = logger
+}
+
+// logCall writes a call-log DM message (best-effort, async — never blocks call
+// teardown). Caller MUST NOT hold s.mu (does DB I/O).
+func (s *p2pCallService) logCall(callerID, receiverID string, callType models.P2PCallType, outcome string, durationSec int) {
+	if s.callLogger == nil {
+		return
+	}
+	go func() {
+		meta := models.CallMeta{
+			CallerID:    callerID,
+			CallType:    string(callType),
+			Outcome:     outcome,
+			DurationSec: durationSec,
+		}
+		if err := s.callLogger.CreateCallLog(context.Background(), callerID, receiverID, meta); err != nil {
+			log.Printf("[p2p] call log failed (caller=%s receiver=%s outcome=%s): %v", callerID, receiverID, outcome, err)
+		}
+	}()
+}
+
+// callDurationSec returns whole seconds since the call was accepted, clamped to >= 0.
+func callDurationSec(acceptedAt time.Time) int {
+	if acceptedAt.IsZero() {
+		return 0
+	}
+	d := int(time.Since(acceptedAt).Seconds())
+	if d < 0 {
+		return 0
+	}
+	return d
 }
 
 func (s *p2pCallService) logError(userID *string, message string, metadata map[string]string) {
@@ -137,6 +180,8 @@ func (s *p2pCallService) timeoutRinging(callID string) {
 			Data: map[string]string{"call_id": callID, "reason": "timeout"},
 		})
 	}
+
+	s.logCall(call.CallerID, call.ReceiverID, call.CallType, models.CallOutcomeMissed, 0)
 }
 
 func (s *p2pCallService) InitiateCall(callerID, receiverID string, callType models.P2PCallType) error {
@@ -270,6 +315,7 @@ func (s *p2pCallService) AcceptCall(userID, callID string) error {
 	}
 
 	call.Status = models.P2PCallStatusActive
+	call.AcceptedAt = time.Now().UTC()
 	s.userCalls[userID] = callID
 	s.stopRingTimer(callID)
 	s.mu.Unlock()
@@ -321,6 +367,17 @@ func (s *p2pCallService) DeclineCall(userID, callID string) error {
 		Data: map[string]string{"call_id": callID},
 	})
 
+	// Outcome: an answered call torn down here is completed; otherwise the
+	// receiver declining is "declined", the caller cancelling is "missed".
+	switch {
+	case call.Status == models.P2PCallStatusActive:
+		s.logCall(call.CallerID, call.ReceiverID, call.CallType, models.CallOutcomeCompleted, callDurationSec(call.AcceptedAt))
+	case userID == call.ReceiverID:
+		s.logCall(call.CallerID, call.ReceiverID, call.CallType, models.CallOutcomeDeclined, 0)
+	default:
+		s.logCall(call.CallerID, call.ReceiverID, call.CallType, models.CallOutcomeMissed, 0)
+	}
+
 	return nil
 }
 
@@ -357,6 +414,12 @@ func (s *p2pCallService) EndCall(userID string) error {
 		Op:   ws.OpP2PCallEnd,
 		Data: map[string]string{"call_id": callID},
 	})
+
+	if call.Status == models.P2PCallStatusActive {
+		s.logCall(call.CallerID, call.ReceiverID, call.CallType, models.CallOutcomeCompleted, callDurationSec(call.AcceptedAt))
+	} else {
+		s.logCall(call.CallerID, call.ReceiverID, call.CallType, models.CallOutcomeMissed, 0)
+	}
 
 	return nil
 }
@@ -442,6 +505,12 @@ func (s *p2pCallService) HandleDisconnect(userID string) {
 		Op:   ws.OpP2PCallEnd,
 		Data: map[string]string{"call_id": callID, "reason": "disconnect"},
 	})
+
+	if call.Status == models.P2PCallStatusActive {
+		s.logCall(call.CallerID, call.ReceiverID, call.CallType, models.CallOutcomeCompleted, callDurationSec(call.AcceptedAt))
+	} else {
+		s.logCall(call.CallerID, call.ReceiverID, call.CallType, models.CallOutcomeMissed, 0)
+	}
 }
 
 // GetUserCall returns the user's active call, or nil if not in a call.

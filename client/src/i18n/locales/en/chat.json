@@ -1,4 +1,12 @@
 {
+  "callVoice": "Voice call",
+  "callVideo": "Video call",
+  "callMissedVoice": "Missed voice call",
+  "callMissedVideo": "Missed video call",
+  "callOutgoingVoice": "Outgoing voice call",
+  "callOutgoingVideo": "Outgoing video call",
+  "callDeclined": "Call declined",
+  "callYouDeclined": "You declined the call",
   "messagePlaceholder": "Message #{{channel}}",
   "editMessage": "Edit Message",
   "deleteMessage": "Delete Message",

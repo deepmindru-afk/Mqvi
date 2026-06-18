@@ -1,4 +1,12 @@
 {
+  "callVoice": "Sesli arama",
+  "callVideo": "Görüntülü arama",
+  "callMissedVoice": "Cevapsız sesli arama",
+  "callMissedVideo": "Cevapsız görüntülü arama",
+  "callOutgoingVoice": "Giden sesli arama",
+  "callOutgoingVideo": "Giden görüntülü arama",
+  "callDeclined": "Arama reddedildi",
+  "callYouDeclined": "Aramayı reddettin",
   "messagePlaceholder": "#{{channel}} kanalına mesaj yaz",
   "editMessage": "Mesajı Düzenle",
   "deleteMessage": "Mesajı Sil",

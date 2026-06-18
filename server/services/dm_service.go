@@ -27,6 +27,7 @@ type DMService interface {
 	GetMessages(ctx context.Context, userID, channelID string, beforeID string, limit int) (*models.DMMessagePage, error)
 	SendMessage(ctx context.Context, userID, channelID string, req *models.CreateDMMessageRequest) (*models.DMMessage, error)
 	BroadcastCreate(message *models.DMMessage)
+	CreateCallLog(ctx context.Context, callerID, receiverID string, meta models.CallMeta) error
 	EditMessage(ctx context.Context, userID, messageID string, req *models.UpdateDMMessageRequest) (*models.DMMessage, error)
 	DeleteMessage(ctx context.Context, userID, messageID string) error
 

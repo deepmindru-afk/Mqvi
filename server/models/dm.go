@@ -38,6 +38,27 @@ type DMChannelWithUser struct {
 	IsMuted       bool       `json:"is_muted"`
 }
 
+// DM message types.
+const (
+	MessageTypeText = "text"
+	MessageTypeCall = "call"
+)
+
+// Call-log outcomes (CallMeta.Outcome).
+const (
+	CallOutcomeCompleted = "completed"
+	CallOutcomeMissed    = "missed"
+	CallOutcomeDeclined  = "declined"
+)
+
+// CallMeta is the JSON payload of a message_type="call" DM log entry.
+type CallMeta struct {
+	CallerID    string `json:"caller_id"`
+	CallType    string `json:"call_type"` // "voice" | "video"
+	Outcome     string `json:"outcome"`   // completed | missed | declined
+	DurationSec int    `json:"duration_sec"`
+}
+
 type DMMessage struct {
 	ID          string     `json:"id"`
 	DMChannelID string     `json:"dm_channel_id"`
@@ -47,6 +68,11 @@ type DMMessage struct {
 	CreatedAt   time.Time  `json:"created_at"`
 	ReplyToID   *string    `json:"reply_to_id"`
 	IsPinned    bool       `json:"is_pinned"`
+
+	// message_type distinguishes system messages from normal chat. "text" (default)
+	// is a normal/E2EE message; "call" is a plaintext P2P call-log entry.
+	MessageType string    `json:"message_type"`
+	CallMeta    *CallMeta `json:"call_meta,omitempty"`
 
 	// E2EE — same pattern as Message: Content is nil, payload in Ciphertext
 	EncryptionVersion int     `json:"encryption_version"`         // 0=plaintext, 1=E2EE

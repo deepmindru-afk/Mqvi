@@ -222,6 +222,47 @@ func (s *dmService) SendMessage(ctx context.Context, userID, channelID string, r
 	return msg, nil
 }
 
+// CreateCallLog writes a plaintext system message recording a finished P2P call
+// into the DM channel between the two users and broadcasts it to both. Plaintext
+// (encryption_version=0) — it carries call metadata, not private content. Bypasses
+// the DM-request/privacy gate of SendMessage: the parties are friends (P2P calls
+// require it) and this is server-generated.
+func (s *dmService) CreateCallLog(ctx context.Context, callerID, receiverID string, meta models.CallMeta) error {
+	channel, err := s.GetOrCreateChannel(ctx, callerID, receiverID)
+	if err != nil {
+		return fmt.Errorf("call log: get/create channel: %w", err)
+	}
+
+	msg := &models.DMMessage{
+		DMChannelID: channel.ID,
+		UserID:      meta.CallerID,
+		MessageType: models.MessageTypeCall,
+		CallMeta:    &meta,
+	}
+	if err := s.dmRepo.CreateMessage(ctx, msg); err != nil {
+		return fmt.Errorf("call log: create message: %w", err)
+	}
+
+	if author, aErr := s.userRepo.GetByID(ctx, meta.CallerID); aErr == nil && author != nil {
+		author.PasswordHash = ""
+		author.AvatarURL = s.urlSigner.SignURLPtr(author.AvatarURL)
+		msg.Author = author
+	}
+	msg.Attachments = []models.DMAttachment{}
+	msg.Reactions = []models.ReactionGroup{}
+
+	// Resurface a hidden DM on a missed/finished call (best-effort).
+	if s.unhider != nil {
+		_ = s.unhider.UnhideForNewMessage(ctx, callerID, channel.ID)
+		_ = s.unhider.UnhideForNewMessage(ctx, receiverID, channel.ID)
+	}
+
+	event := ws.Event{Op: ws.OpDMMessageCreate, Data: msg}
+	s.hub.BroadcastToUser(callerID, event)
+	s.hub.BroadcastToUser(receiverID, event)
+	return nil
+}
+
 // BroadcastCreate sends the DM message to both users after file uploads complete.
 func (s *dmService) BroadcastCreate(message *models.DMMessage) {
 	channel, err := s.dmRepo.GetChannelByID(context.Background(), message.DMChannelID)

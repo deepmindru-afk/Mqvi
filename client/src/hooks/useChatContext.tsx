@@ -8,7 +8,7 @@
  */
 
 import { createContext, useContext, type RefObject } from "react";
-import type { User, ReactionGroup, MessageReference, MemberWithRoles } from "../types";
+import type { User, ReactionGroup, MessageReference, MemberWithRoles, CallMeta } from "../types";
 import type { EncryptedFileMeta } from "../crypto/fileEncryption";
 
 // ─── ChatMessage — Common message type ───
@@ -42,6 +42,9 @@ export type ChatMessage = {
   encryption_version?: number;
   /** E2EE: File encryption keys (index-matched to attachments) */
   e2ee_file_keys?: EncryptedFileMeta[];
+  /** DM-only: "text" (default) or "call" — a system call-log entry. */
+  message_type?: string;
+  call_meta?: CallMeta | null;
 };
 
 // ─── Context Value ───

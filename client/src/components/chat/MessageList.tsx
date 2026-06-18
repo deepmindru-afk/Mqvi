@@ -8,6 +8,7 @@ import { useActiveMembers } from "../../stores/memberStore";
 import { useReadStateStore } from "../../stores/readStateStore";
 import { MessageSkeleton } from "../shared/Skeleton";
 import Message from "./Message";
+import CallLogRow from "./CallLogRow";
 
 /** Compact threshold for consecutive messages from same author (ms) */
 const COMPACT_THRESHOLD = 5 * 60 * 1000;
@@ -263,10 +264,14 @@ function MessageList() {
           <div ref={contentRef} style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: "8px 0" }}>
             {messages.map((msg, index) => (
               <div key={msg.id} id={`msg-${msg.id}`}>
-                <Message
-                  message={msg}
-                  isCompact={isCompact(index)}
-                />
+                {msg.message_type === "call" && msg.call_meta ? (
+                  <CallLogRow meta={msg.call_meta} createdAt={msg.created_at} />
+                ) : (
+                  <Message
+                    message={msg}
+                    isCompact={isCompact(index)}
+                  />
+                )}
               </div>
             ))}
           </div>

@@ -328,6 +328,13 @@ export type DMChannelWithUser = {
   is_muted: boolean;
 };
 
+export type CallMeta = {
+  caller_id: string;
+  call_type: "voice" | "video";
+  outcome: "completed" | "missed" | "declined";
+  duration_sec: number;
+};
+
 export type DMMessage = {
   id: string;
   dm_channel_id: string;
@@ -337,6 +344,9 @@ export type DMMessage = {
   created_at: string;
   reply_to_id: string | null;
   is_pinned: boolean;
+  /** "text" (default) or "call" — a system call-log entry. */
+  message_type?: string;
+  call_meta?: CallMeta | null;
   author: User;
   attachments: DMAttachment[];
   reactions: ReactionGroup[];

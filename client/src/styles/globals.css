@@ -584,6 +584,13 @@ button.ch-tree-vu-stream svg { width:21px;height:21px; }
 .date-divider::before,.date-divider::after { content:'';flex:1;height:1px;background:var(--b1); }
 .date-divider span { font-size:13px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap; }
 
+/* Call-log entry (DM): centered system row, not a message bubble. */
+.call-log-row { display:flex;align-items:center;justify-content:center;gap:8px;padding:6px 16px;color:var(--t2);font-size:13px; }
+.call-log-row .call-log-icon { display:flex;color:var(--t3); }
+.call-log-row .call-log-time { color:var(--t3);font-size:13px; }
+.call-log-row.missed { color:var(--red); }
+.call-log-row.missed .call-log-icon { color:var(--red); }
+
 .msg { padding:2px 14px;position:relative; }
 .msg.first-of-group { margin-top:10px; }
 .msg-row { display:flex;gap:9px;align-items:flex-start; }

@@ -159,6 +159,103 @@ func TestRelaySignalRejectsNonActive(t *testing.T) {
 	}
 }
 
+// recordingCallLogger captures call-log metadata for assertions. logCall runs
+// in a goroutine, so the test synchronizes by receiving from the channel.
+type recordingCallLogger struct {
+	ch chan models.CallMeta
+}
+
+func (r *recordingCallLogger) CreateCallLog(_ context.Context, _, _ string, meta models.CallMeta) error {
+	r.ch <- meta
+	return nil
+}
+
+func waitCallLog(t *testing.T, ch chan models.CallMeta) models.CallMeta {
+	t.Helper()
+	select {
+	case m := <-ch:
+		return m
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected a call-log entry, got none")
+		return models.CallMeta{}
+	}
+}
+
+// TestCallLogging verifies each call-end path writes a call-log entry with the
+// correct outcome (and duration for completed calls).
+func TestCallLogging(t *testing.T) {
+	newSvc := func(logger CallLogger, calls map[string]*models.P2PCall, userCalls map[string]string) *p2pCallService {
+		return &p2pCallService{
+			hub:         fakeHub{},
+			callLogger:  logger,
+			activeCalls: calls,
+			userCalls:   userCalls,
+			ringTimers:  map[string]*time.Timer{},
+		}
+	}
+	ringing := func(t models.P2PCallType) *models.P2PCall {
+		return &models.P2PCall{ID: "x", CallerID: "caller", ReceiverID: "rcv", CallType: t, Status: models.P2PCallStatusRinging}
+	}
+	active := func(since time.Duration) *models.P2PCall {
+		return &models.P2PCall{ID: "x", CallerID: "caller", ReceiverID: "rcv", CallType: models.P2PCallTypeVoice, Status: models.P2PCallStatusActive, AcceptedAt: time.Now().Add(-since)}
+	}
+
+	t.Run("missed on ring timeout", func(t *testing.T) {
+		rec := &recordingCallLogger{ch: make(chan models.CallMeta, 1)}
+		svc := newSvc(rec, map[string]*models.P2PCall{"x": ringing(models.P2PCallTypeVoice)}, map[string]string{"caller": "x", "rcv": "x"})
+		svc.timeoutRinging("x")
+		if m := waitCallLog(t, rec.ch); m.Outcome != models.CallOutcomeMissed || m.CallerID != "caller" {
+			t.Errorf("got outcome=%q caller=%q, want missed/caller", m.Outcome, m.CallerID)
+		}
+	})
+
+	t.Run("declined by receiver", func(t *testing.T) {
+		rec := &recordingCallLogger{ch: make(chan models.CallMeta, 1)}
+		svc := newSvc(rec, map[string]*models.P2PCall{"x": ringing(models.P2PCallTypeVideo)}, map[string]string{"caller": "x", "rcv": "x"})
+		if err := svc.DeclineCall("rcv", "x"); err != nil {
+			t.Fatal(err)
+		}
+		if m := waitCallLog(t, rec.ch); m.Outcome != models.CallOutcomeDeclined {
+			t.Errorf("outcome=%q, want declined", m.Outcome)
+		}
+	})
+
+	t.Run("missed when caller cancels ringing", func(t *testing.T) {
+		rec := &recordingCallLogger{ch: make(chan models.CallMeta, 1)}
+		svc := newSvc(rec, map[string]*models.P2PCall{"x": ringing(models.P2PCallTypeVoice)}, map[string]string{"caller": "x", "rcv": "x"})
+		if err := svc.DeclineCall("caller", "x"); err != nil {
+			t.Fatal(err)
+		}
+		if m := waitCallLog(t, rec.ch); m.Outcome != models.CallOutcomeMissed {
+			t.Errorf("outcome=%q, want missed", m.Outcome)
+		}
+	})
+
+	t.Run("completed with duration on end", func(t *testing.T) {
+		rec := &recordingCallLogger{ch: make(chan models.CallMeta, 1)}
+		svc := newSvc(rec, map[string]*models.P2PCall{"x": active(5 * time.Second)}, map[string]string{"caller": "x", "rcv": "x"})
+		if err := svc.EndCall("caller"); err != nil {
+			t.Fatal(err)
+		}
+		m := waitCallLog(t, rec.ch)
+		if m.Outcome != models.CallOutcomeCompleted {
+			t.Errorf("outcome=%q, want completed", m.Outcome)
+		}
+		if m.DurationSec < 4 {
+			t.Errorf("duration=%d, want >= 4", m.DurationSec)
+		}
+	})
+
+	t.Run("completed on disconnect during active call", func(t *testing.T) {
+		rec := &recordingCallLogger{ch: make(chan models.CallMeta, 1)}
+		svc := newSvc(rec, map[string]*models.P2PCall{"x": active(3 * time.Second)}, map[string]string{"caller": "x", "rcv": "x"})
+		svc.HandleDisconnect("caller")
+		if m := waitCallLog(t, rec.ch); m.Outcome != models.CallOutcomeCompleted {
+			t.Errorf("outcome=%q, want completed", m.Outcome)
+		}
+	})
+}
+
 // TestTimeoutRinging verifies an unanswered ringing call is cleaned up, while an
 // already-accepted call is left intact (timer fired after accept).
 func TestTimeoutRinging(t *testing.T) {
