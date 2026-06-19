@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useVoiceStore } from "../../stores/voiceStore";
 import { useAuthStore } from "../../stores/authStore";
+import { useSoundboardStore } from "../../stores/soundboardStore";
 import { useUIStore, type TabServerInfo } from "../../stores/uiStore";
 import Avatar from "../shared/Avatar";
 import type { VoiceState, User } from "../../types";
@@ -45,6 +46,7 @@ function VoiceParticipantList({
   const screenShareViewers = useVoiceStore((s) => s.screenShareViewers);
   const toggleWatchScreenShare = useVoiceStore((s) => s.toggleWatchScreenShare);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
+  const playingSound = useSoundboardStore((s) => s.playingSound);
   const openTab = useUIStore((s) => s.openTab);
 
   // activeSpeakers only reflects the local user's own LiveKit room, so the
@@ -58,7 +60,8 @@ function VoiceParticipantList({
       {participants.map((p) => {
         const isMe = p.user_id === currentUser?.id;
         const isLocalMuted = localMutedUsers[p.user_id] ?? false;
-        const isSpeaking = isMyVoiceChannel && (activeSpeakers[p.user_id] ?? false);
+        const isPlayingSound = isMyVoiceChannel && playingSound?.userId === p.user_id;
+        const isSpeaking = isMyVoiceChannel && ((activeSpeakers[p.user_id] ?? false) || isPlayingSound);
 
         return (
           <div

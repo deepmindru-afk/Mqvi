@@ -145,20 +145,41 @@ function SoundUploadForm({ onClose }: Props) {
   useEffect(() => { setStartInput((trimStart / 1000).toFixed(1)); }, [trimStart]);
   useEffect(() => { setEndInput((trimEnd / 1000).toFixed(1)); }, [trimEnd]);
 
+  // Manual time edits push the other handle instead of being clamped: moving
+  // start past end drags end forward (preserving region length), and vice
+  // versa. Only when a value stays in bounds does the other handle stay put.
   const commitStart = useCallback((raw: string) => {
     const sec = parseFloat(raw);
     if (isNaN(sec)) { setStartInput((trimStart / 1000).toFixed(1)); return; }
-    let ms = Math.max(0, Math.min(Math.round(sec * 1000), trimEnd - 200));
-    if (trimEnd - ms > MAX_DURATION_MS) ms = trimEnd - MAX_DURATION_MS;
-    setTrimStart(ms);
-  }, [trimStart, trimEnd]);
+    const ns = Math.max(0, Math.min(Math.round(sec * 1000), totalDurationMs));
+    const region = Math.min(Math.max(trimEnd - trimStart, 200), MAX_DURATION_MS);
+    let ne = trimEnd;
+    let start = ns;
+    if (ne < start + 200) {
+      ne = start + region;
+      if (ne > totalDurationMs) { ne = totalDurationMs; start = Math.max(0, ne - region); }
+    } else if (ne - start > MAX_DURATION_MS) {
+      ne = start + MAX_DURATION_MS;
+    }
+    setTrimStart(start);
+    setTrimEnd(ne);
+  }, [trimStart, trimEnd, totalDurationMs]);
 
   const commitEnd = useCallback((raw: string) => {
     const sec = parseFloat(raw);
     if (isNaN(sec)) { setEndInput((trimEnd / 1000).toFixed(1)); return; }
-    let ms = Math.min(totalDurationMs, Math.max(Math.round(sec * 1000), trimStart + 200));
-    if (ms - trimStart > MAX_DURATION_MS) ms = trimStart + MAX_DURATION_MS;
-    setTrimEnd(ms);
+    const ne = Math.max(0, Math.min(Math.round(sec * 1000), totalDurationMs));
+    const region = Math.min(Math.max(trimEnd - trimStart, 200), MAX_DURATION_MS);
+    let ns = trimStart;
+    let end = ne;
+    if (ns > end - 200) {
+      ns = end - region;
+      if (ns < 0) { ns = 0; end = Math.min(totalDurationMs, ns + region); }
+    } else if (end - ns > MAX_DURATION_MS) {
+      ns = end - MAX_DURATION_MS;
+    }
+    setTrimStart(ns);
+    setTrimEnd(end);
   }, [trimStart, trimEnd, totalDurationMs]);
 
   const loadAudioMeta = useCallback((audioFile: File) => {
