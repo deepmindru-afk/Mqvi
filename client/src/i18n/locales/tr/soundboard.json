@@ -1,4 +1,6 @@
 {
+  "startTime": "Başlangıç (sn)",
+  "endTime": "Bitiş (sn)",
   "soundboard": "Ses Paneli",
   "sounds": "Sesler",
   "noSounds": "Henüz ses yok",

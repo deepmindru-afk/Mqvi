@@ -4036,6 +4036,9 @@ button.ch-tree-vu-stream svg { width:21px;height:21px; }
   font-size: 14px;
 }
 .sb-input:focus { border-color: var(--accent); outline: none; }
+.sb-trim-times { display:flex; gap:8px; }
+.sb-trim-field { display:flex; flex-direction:column; gap:4px; flex:1; font-size:13px; color:var(--t2); }
+.sb-trim-input { width:100%; }
 .sb-emoji-row {
   position: relative;
   display: flex;

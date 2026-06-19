@@ -117,6 +117,8 @@ function SoundUploadForm({ onClose }: Props) {
   const [totalDurationMs, setTotalDurationMs] = useState(0);
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
+  const [startInput, setStartInput] = useState("0.0");
+  const [endInput, setEndInput] = useState("0.0");
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -138,6 +140,26 @@ function SoundUploadForm({ onClose }: Props) {
       if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     };
   }, [objectUrl]);
+
+  // Keep the manual time fields in sync when trim changes from dragging or load.
+  useEffect(() => { setStartInput((trimStart / 1000).toFixed(1)); }, [trimStart]);
+  useEffect(() => { setEndInput((trimEnd / 1000).toFixed(1)); }, [trimEnd]);
+
+  const commitStart = useCallback((raw: string) => {
+    const sec = parseFloat(raw);
+    if (isNaN(sec)) { setStartInput((trimStart / 1000).toFixed(1)); return; }
+    let ms = Math.max(0, Math.min(Math.round(sec * 1000), trimEnd - 200));
+    if (trimEnd - ms > MAX_DURATION_MS) ms = trimEnd - MAX_DURATION_MS;
+    setTrimStart(ms);
+  }, [trimStart, trimEnd]);
+
+  const commitEnd = useCallback((raw: string) => {
+    const sec = parseFloat(raw);
+    if (isNaN(sec)) { setEndInput((trimEnd / 1000).toFixed(1)); return; }
+    let ms = Math.min(totalDurationMs, Math.max(Math.round(sec * 1000), trimStart + 200));
+    if (ms - trimStart > MAX_DURATION_MS) ms = trimStart + MAX_DURATION_MS;
+    setTrimEnd(ms);
+  }, [trimStart, trimEnd, totalDurationMs]);
 
   const loadAudioMeta = useCallback((audioFile: File) => {
     if (objectUrl) URL.revokeObjectURL(objectUrl);
@@ -262,6 +284,37 @@ function SoundUploadForm({ onClose }: Props) {
             isPlaying={isPlaying}
             onTogglePlay={handlePreview}
           />
+        )}
+
+        {file && totalDurationMs > 0 && (
+          <div className="sb-trim-times">
+            <label className="sb-trim-field">
+              <span>{t("startTime")}</span>
+              <input
+                type="number"
+                className="sb-input sb-trim-input"
+                step={0.1}
+                min={0}
+                value={startInput}
+                onChange={(e) => setStartInput(e.target.value)}
+                onBlur={(e) => commitStart(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") commitStart((e.target as HTMLInputElement).value); }}
+              />
+            </label>
+            <label className="sb-trim-field">
+              <span>{t("endTime")}</span>
+              <input
+                type="number"
+                className="sb-input sb-trim-input"
+                step={0.1}
+                min={0}
+                value={endInput}
+                onChange={(e) => setEndInput(e.target.value)}
+                onBlur={(e) => commitEnd(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") commitEnd((e.target as HTMLInputElement).value); }}
+              />
+            </label>
+          </div>
         )}
 
         <label className="sb-label">{t("soundName")}</label>

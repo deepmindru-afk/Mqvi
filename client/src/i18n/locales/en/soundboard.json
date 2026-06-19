@@ -1,4 +1,6 @@
 {
+  "startTime": "Start (s)",
+  "endTime": "End (s)",
   "soundboard": "Soundboard",
   "sounds": "Sounds",
   "noSounds": "No sounds yet",

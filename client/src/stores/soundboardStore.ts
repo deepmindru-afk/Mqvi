@@ -116,12 +116,14 @@ export const useSoundboardStore = create<SoundboardState>((set, get) => ({
 
   setVolume: (v) => {
     set({ volume: v });
+    if (currentAudio) currentAudio.volume = v; // apply live to the playing clip
     saveSettings(v, get().muted);
   },
 
   toggleMuted: () => {
     const next = !get().muted;
     set({ muted: next });
+    if (currentAudio) currentAudio.volume = next ? 0 : get().volume; // live mute/unmute
     saveSettings(get().volume, next);
   },
 

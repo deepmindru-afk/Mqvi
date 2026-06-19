@@ -152,12 +152,20 @@ function WaveformTrimmer({
     const startX = msToX(trimStart);
     const endX = msToX(trimEnd);
 
-    // Check if near handles (within 12px)
-    if (Math.abs(x - startX) < 12) {
+    // Handle hit zones shrink for narrow regions (e.g. a 7s clip of a 3-min
+    // file) so the center stays grabbable for region-drag instead of being
+    // fully covered by the two edge zones. Ambiguous/center clicks move the
+    // whole region; only a click clearly on one edge drags that handle.
+    const regionWidth = endX - startX;
+    const handleZone = Math.min(10, Math.max(3, regionWidth / 4));
+    const nearStart = Math.abs(x - startX) <= handleZone;
+    const nearEnd = Math.abs(x - endX) <= handleZone;
+
+    if (nearStart && !nearEnd) {
       draggingRef.current = "start";
-    } else if (Math.abs(x - endX) < 12) {
+    } else if (nearEnd && !nearStart) {
       draggingRef.current = "end";
-    } else if (x > startX && x < endX) {
+    } else if (x >= startX - handleZone && x <= endX + handleZone) {
       draggingRef.current = "region";
       dragOffsetRef.current = x - startX;
     } else {
