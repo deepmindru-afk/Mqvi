@@ -63,10 +63,10 @@ Thumbs.db
 desktop.ini
 
 # ========================
-# Docker
+# Server runtime data
 # ========================
-data/
-uploads/
+/server/data/
+/uploads/
 
 # ========================
 # Documents (private)
