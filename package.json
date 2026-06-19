@@ -24,6 +24,7 @@
   "build": {
     "appId": "net.mqvi.app",
     "productName": "mqvi",
+    "npmRebuild": false,
     "directories": {
       "output": "release"
     },
