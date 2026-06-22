@@ -15,6 +15,12 @@ import (
 	"github.com/akinalp/mqvi/ws"
 )
 
+// SetPushNotifier wires the (optional) push notifier. No-op safe: BroadcastCreate
+// guards on nil, so push stays disabled when never set.
+func (s *dmService) SetPushNotifier(n PushNotifier) {
+	s.pushNotifier = n
+}
+
 func (s *dmService) GetMessages(ctx context.Context, userID, channelID string, beforeID string, limit int) (*models.DMMessagePage, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
@@ -275,6 +281,27 @@ func (s *dmService) BroadcastCreate(message *models.DMMessage) {
 		Data: message,
 	}
 	s.broadcastToBothUsers(channel, event)
+
+	// Push the offline recipient (mobile). Skip call-log system messages and
+	// conversations the recipient has muted. Mute-check failure fails open (push)
+	// so a transient DB error never silently swallows notifications.
+	if s.pushNotifier != nil && message.MessageType != models.MessageTypeCall {
+		recipientID := channel.User1ID
+		if recipientID == message.UserID {
+			recipientID = channel.User2ID
+		}
+		muted, err := s.dmRepo.IsChannelMuted(context.Background(), recipientID, channel.ID)
+		if err != nil {
+			log.Printf("[dm] push mute check failed for %s/%s: %v", recipientID, channel.ID, err)
+		}
+		if !muted {
+			content := ""
+			if message.Content != nil {
+				content = *message.Content
+			}
+			s.pushNotifier.NotifyDM(recipientID, pushDisplayName(message.Author), content, message.EncryptionVersion == 1, channel.ID, message.UserID)
+		}
+	}
 
 	// If channel just became pending, notify both users
 	if channel.Status == models.DMStatusPending {

@@ -53,6 +53,7 @@ type P2PCallService interface {
 	HasActiveCall(userID string) bool
 	SetAppLogger(logger P2PAppLogger)
 	SetCallLogger(logger CallLogger)
+	SetPushNotifier(n PushNotifier)
 }
 
 type p2pCallService struct {
@@ -61,6 +62,7 @@ type p2pCallService struct {
 	hub           ws.BroadcastAndOnline
 	appLogger     P2PAppLogger
 	callLogger    CallLogger
+	pushNotifier  PushNotifier
 	urlSigner     FileURLSigner
 
 	// In-memory state, cleared on server restart.
@@ -184,6 +186,12 @@ func (s *p2pCallService) timeoutRinging(callID string) {
 	s.logCall(call.CallerID, call.ReceiverID, call.CallType, models.CallOutcomeMissed, 0)
 }
 
+// SetPushNotifier wires the (optional) push notifier. InitiateCall guards on nil,
+// so push stays disabled when never set.
+func (s *p2pCallService) SetPushNotifier(n PushNotifier) {
+	s.pushNotifier = n
+}
+
 func (s *p2pCallService) InitiateCall(callerID, receiverID string, callType models.P2PCallType) error {
 	if callerID == receiverID {
 		return fmt.Errorf("%w: cannot call yourself", pkg.ErrBadRequest)
@@ -284,6 +292,11 @@ func (s *p2pCallService) InitiateCall(callerID, receiverID string, callType mode
 		Op:   ws.OpP2PCallInitiate,
 		Data: broadcast,
 	})
+
+	// Push the receiver if offline (mobile). Online receivers get the WS event.
+	if s.pushNotifier != nil {
+		s.pushNotifier.NotifyCall(receiverID, pushDisplayName(caller), callType, call.ID, callerID)
+	}
 
 	return nil
 }

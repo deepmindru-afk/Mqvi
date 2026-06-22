@@ -20,8 +20,17 @@ type Config struct {
 	Email           EmailConfig
 	Klipy           KlipyConfig
 	TURN            TURNConfig
+	Push            PushConfig
 	EncryptionKey   string // AES-256 key (64 hex chars = 32 bytes) for LiveKit credential encryption
 	HetznerAPIToken string // Hetzner Cloud API token (read-only) — optional
+}
+
+// PushConfig — optional. If CredentialsFile is missing or invalid, push is disabled
+// and the server still starts (same pattern as Email/Klipy).
+type PushConfig struct {
+	// CredentialsFile is the path to the Firebase service-account JSON used by the
+	// Admin SDK to send FCM messages.
+	CredentialsFile string
 }
 
 // TURNConfig holds the STUN/TURN servers handed to P2P call clients.
@@ -284,6 +293,9 @@ func Load() (*Config, error) {
 			URLs:                 turnURLs,
 			STUNURLs:             stunURLs,
 			CredentialTTLSeconds: turnTTL,
+		},
+		Push: PushConfig{
+			CredentialsFile: getEnv("FCM_CREDENTIALS_FILE", "./firebase-service-account.json"),
 		},
 		EncryptionKey:   encKey,
 		HetznerAPIToken: getEnv("HETZNER_API_TOKEN", ""),

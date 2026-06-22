@@ -49,6 +49,7 @@ type Handlers struct {
 	LiveKitWebhook    *handlers.LiveKitWebhookHandler
 	VoiceMessage      *handlers.VoiceMessageHandler
 	ICEServer         *handlers.ICEServerHandler
+	PushToken         *handlers.PushTokenHandler
 	WS                *ws.Handler
 }
 
@@ -92,6 +93,7 @@ func initHandlers(svcs *Services, repos *Repositories, limiters *RateLimiters, h
 		LiveKitWebhook:    handlers.NewLiveKitWebhookHandler(repos.LiveKit, encryptionKey, svcs.AppLog),
 		VoiceMessage:      handlers.NewVoiceMessageHandler(svcs.VoiceMessage, svcs.UploadPipeline, urlSigner, limiters.Message, cfg.Upload.MaxSize),
 		ICEServer:         handlers.NewICEServerHandler(svcs.TURN, svcs.P2PCall, limiters.ICE),
+		PushToken:         handlers.NewPushTokenHandler(svcs.PushToken),
 		WS:                ws.NewHandler(hub, svcs.Auth, nil, svcs.Voice, repos.User, repos.Server, svcs.ServerMute, svcs.ChannelMute, urlSigner),
 	}
 }

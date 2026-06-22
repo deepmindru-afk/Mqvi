@@ -12,6 +12,7 @@ import (
 	"github.com/akinalp/mqvi/pkg/antivirus"
 	"github.com/akinalp/mqvi/pkg/email"
 	"github.com/akinalp/mqvi/pkg/files"
+	"github.com/akinalp/mqvi/pkg/push"
 	"github.com/akinalp/mqvi/pkg/ratelimit"
 	"github.com/akinalp/mqvi/services"
 	"github.com/akinalp/mqvi/ws"
@@ -63,6 +64,7 @@ type Services struct {
 	Cleanup           services.CleanupService
 	SettingsBadge     services.SettingsBadgeService
 	VoiceMessage      services.VoiceMessageService
+	PushToken         services.PushTokenService
 	EmailSender       email.EmailSender
 }
 
@@ -169,6 +171,20 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 	dmService := services.NewDMService(repos.DM, repos.User, hub, blockService, friendshipService, dmSettingsService, urlSigner, fileLocator, storageService)
 	friendshipService.SetDMAcceptor(dmService) // auto-accept pending DMs when friendship is accepted
 	p2pCallService.SetCallLogger(dmService)    // P2P calls write a call-log entry into the DM history
+
+	// Push notifications (FCM) — optional. A missing/invalid credentials file yields
+	// a disabled (no-op) sender; the server still starts.
+	pushSender, err := push.NewSender(context.Background(), cfg.Push.CredentialsFile)
+	if err != nil {
+		log.Printf("[main] push notifications disabled: %v", err)
+	} else if pushSender.Enabled() {
+		log.Println("[main] push notifications enabled (FCM)")
+	} else {
+		log.Println("[main] push notifications disabled (no credentials file)")
+	}
+	pushService := services.NewPushService(pushSender, repos.PushToken, repos.User, hub)
+	dmService.SetPushNotifier(pushService)
+	p2pCallService.SetPushNotifier(pushService)
 	dmUploadService := services.NewDMUploadService(repos.DM, uploadPipeline, cfg.Upload.MaxSize)
 	reactionService := services.NewReactionService(repos.Reaction, repos.Message, repos.Channel, hub, channelPermService)
 	serverMuteService := services.NewServerMuteService(repos.ServerMute)
@@ -178,6 +194,7 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 
 	deviceService := services.NewDeviceService(repos.Device, hub)
 	e2eeService := services.NewE2EEService(repos.E2EEBackup, repos.GroupSession, hub)
+	pushTokenService := services.NewPushTokenService(repos.PushToken)
 
 	adminUserService := services.NewAdminUserService(db, repos.User, repos.Session, repos.Server, hub, voiceService, emailSender, fileCleanupService)
 	adminServerService := services.NewAdminServerService(repos.Server, repos.User, repos.LiveKit, hub, emailSender, fileCleanupService)
@@ -271,6 +288,7 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 		Cleanup:           cleanupService,
 		SettingsBadge:     settingsBadgeService,
 		VoiceMessage:      voiceMessageService,
+		PushToken:         pushTokenService,
 		EmailSender:       emailSender,
 	}
 

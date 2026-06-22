@@ -41,6 +41,8 @@ type DMService interface {
 	GetPinnedMessages(ctx context.Context, userID, channelID string) ([]models.DMMessage, error)
 	SearchMessages(ctx context.Context, userID, channelID, query string, limit, offset int) (*models.DMSearchResult, error)
 	ToggleE2EE(ctx context.Context, userID, channelID string, enabled bool) (*models.DMChannel, error)
+
+	SetPushNotifier(n PushNotifier)
 }
 
 // FriendshipChecker is a minimal ISP interface for friend checks (used by dmService).
@@ -58,6 +60,7 @@ type dmService struct {
 	urlSigner      FileURLSigner
 	fileDeleter    FileDeleter
 	storageService StorageService
+	pushNotifier   PushNotifier
 }
 
 func NewDMService(

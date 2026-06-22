@@ -88,6 +88,18 @@ Copy-Item (Join-Path $PSScriptRoot "start.sh")    (Join-Path $DeployDir "start.s
 Copy-Item (Join-Path $PSScriptRoot ".env.example") (Join-Path $DeployDir ".env")
 Copy-Item (Join-Path $PSScriptRoot "livekit.yaml") (Join-Path $DeployDir "livekit.yaml")
 
+# Firebase service-account JSON for push notifications — optional, operator-supplied,
+# git-ignored. Bundled into the initial deploy package when present so a freshly
+# provisioned backend node gets it. Absence is fine: the server runs with push
+# disabled. (redeploy uploads only the binary + start.sh, so it never carries this.)
+$FcmCreds = Join-Path $ServerDir "firebase-service-account.json"
+if (Test-Path $FcmCreds) {
+    Copy-Item $FcmCreds (Join-Path $DeployDir "firebase-service-account.json")
+    Write-Host "  FCM credentials included (push enabled)" -ForegroundColor Green
+} else {
+    Write-Host "  No FCM credentials found - push will be disabled on the server" -ForegroundColor DarkGray
+}
+
 # Remove temp binary from root
 Remove-Item $OutputBinary -Force
 

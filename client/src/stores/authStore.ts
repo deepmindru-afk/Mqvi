@@ -11,6 +11,7 @@ import { useE2EEStore } from "./e2eeStore";
 import { usePreferencesStore } from "./preferencesStore";
 import { useVoiceStore } from "./voiceStore";
 import { useSettingsStore } from "./settingsStore";
+import { unregisterCurrentPushToken } from "../hooks/usePushNotifications";
 import type { User, UserStatus } from "../types";
 
 const MANUAL_STATUS_KEY = "mqvi_manual_status";
@@ -168,6 +169,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Reset E2EE state (IndexedDB keys preserved)
     await useE2EEStore.getState().reset();
     usePreferencesStore.getState().reset();
+
+    // Unregister this device's push token while the access token is still valid.
+    await unregisterCurrentPushToken();
 
     const refreshToken = localStorage.getItem("refresh_token");
     if (refreshToken) {
