@@ -1,9 +1,9 @@
 /**
- * usePushNotifications — registers the device for FCM push notifications.
+ * usePushNotifications — registers the device for FCM push notifications and wires
+ * up notification channels, tap-to-navigate, and foreground handling.
  *
- * Capacitor (mobile) only; a no-op on web and Electron. Called once from
- * AppLayout while authenticated. The FCM token is cached in localStorage so
- * logout can unregister it from the backend.
+ * Capacitor (mobile) only; a no-op on web and Electron. Called once from AppLayout
+ * while authenticated.
  */
 
 import { useEffect } from "react";
@@ -11,29 +11,41 @@ import { PushNotifications } from "@capacitor/push-notifications";
 import type { PluginListenerHandle } from "@capacitor/core";
 
 import { isCapacitor, getCapacitorPlatform } from "../utils/constants";
-import { registerPushToken, unregisterPushToken } from "../api/push";
+import { syncPushToken } from "../utils/pushToken";
+import { useDMStore } from "../stores/dmStore";
+import { useUIStore } from "../stores/uiStore";
+import i18n from "../i18n";
 
-const PUSH_TOKEN_KEY = "mqvi_push_token";
-
-async function syncToken(value: string): Promise<void> {
-  const platform = getCapacitorPlatform();
-  if (platform !== "android" && platform !== "ios") return;
-  localStorage.setItem(PUSH_TOKEN_KEY, value);
-  const res = await registerPushToken({ token: value, platform });
-  if (!res.success) {
-    console.error("[push] failed to register token:", res.error);
-  }
+// Android notification channels. Channel IDs must match the FCM payload
+// (pkg/push androidConfig). "calls" is MAX importance so incoming-call
+// notifications are heads-up with sound.
+async function ensureChannels(): Promise<void> {
+  if (getCapacitorPlatform() !== "android") return;
+  await PushNotifications.createChannel({
+    id: "messages",
+    name: i18n.t("notifChannels.messages"),
+    description: i18n.t("notifChannels.messagesDesc"),
+    importance: 4, // HIGH — heads-up banner
+    visibility: 1, // PUBLIC
+  });
+  await PushNotifications.createChannel({
+    id: "calls",
+    name: i18n.t("notifChannels.calls"),
+    description: i18n.t("notifChannels.callsDesc"),
+    importance: 5, // MAX — heads-up + sound
+    visibility: 1,
+    sound: "default",
+  });
 }
 
-/** Removes this device's push token from the backend. Called on logout. */
-export async function unregisterCurrentPushToken(): Promise<void> {
-  const token = localStorage.getItem(PUSH_TOKEN_KEY);
-  if (!token) return;
-  try {
-    await unregisterPushToken(token);
-  } finally {
-    localStorage.removeItem(PUSH_TOKEN_KEY);
+// Tapping a notification opens the relevant conversation.
+function handleNotificationTap(data: Record<string, unknown>, title?: string): void {
+  if (data.type === "dm" && typeof data.dm_channel_id === "string") {
+    useDMStore.getState().selectDM(data.dm_channel_id);
+    useUIStore.getState().openTab(data.dm_channel_id, "dm", title ?? "");
   }
+  // type === "call": the tap foregrounds the app; the connect-time call replay
+  // re-delivers the ringing call, which raises the incoming-call overlay.
 }
 
 export function usePushNotifications(): void {
@@ -44,16 +56,21 @@ export function usePushNotifications(): void {
     let cancelled = false;
 
     async function setup(): Promise<void> {
-      const perm = await PushNotifications.requestPermissions();
-      if (perm.receive !== "granted") {
-        console.warn("[push] permission not granted:", perm.receive);
-        return;
-      }
-      if (cancelled) return;
-
+      // Attach listeners FIRST — before the permission round-trip — so the tap action
+      // of a notification that cold-launched the app isn't missed.
+      handles.push(
+        await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
+          handleNotificationTap(action.notification?.data ?? {}, action.notification?.title);
+        }),
+      );
+      // Foreground receipt: the live WS connection already delivers the message/call
+      // in-app, so we intentionally don't raise a duplicate OS notification.
+      handles.push(
+        await PushNotifications.addListener("pushNotificationReceived", () => {}),
+      );
       handles.push(
         await PushNotifications.addListener("registration", (token) => {
-          void syncToken(token.value);
+          void syncPushToken(token.value);
         }),
       );
       handles.push(
@@ -61,7 +78,15 @@ export function usePushNotifications(): void {
           console.error("[push] registration error:", err.error);
         }),
       );
+      if (cancelled) return;
 
+      const perm = await PushNotifications.requestPermissions();
+      if (perm.receive !== "granted") {
+        console.warn("[push] permission not granted:", perm.receive);
+        return;
+      }
+
+      await ensureChannels();
       await PushNotifications.register();
     }
 

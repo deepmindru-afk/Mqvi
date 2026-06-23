@@ -48,6 +48,9 @@ type P2PCallService interface {
 	RelaySignal(senderID, callID string, signal ws.P2PSignalData) error
 	HandleDisconnect(userID string)
 	GetUserCall(userID string) *models.P2PCall
+	// PendingIncomingCall returns the broadcast for a user's active RINGING incoming
+	// call (they are the receiver), or nil — used to re-deliver it on (re)connect.
+	PendingIncomingCall(userID string) *models.P2PCallBroadcast
 	// HasActiveCall reports whether the user is in an ACCEPTED (active) call.
 	// Status is read under the lock — no mutable pointer escapes.
 	HasActiveCall(userID string) bool
@@ -498,6 +501,16 @@ func (s *p2pCallService) HandleDisconnect(userID string) {
 		return
 	}
 
+	// A receiver whose socket drops while the call is still RINGING may be a mobile
+	// client backgrounding to answer from its push notification. Keep the call alive
+	// so reconnect + PendingIncomingCall can re-deliver the incoming call; the ring
+	// timer still times it out at 60s if they never return. Active calls — and a
+	// caller dropping — still tear down here.
+	if call.Status == models.P2PCallStatusRinging && call.ReceiverID == userID {
+		s.mu.Unlock()
+		return
+	}
+
 	delete(s.activeCalls, callID)
 	s.removeUserMapping(call.CallerID, callID)
 	s.removeUserMapping(call.ReceiverID, callID)
@@ -569,6 +582,38 @@ func (s *p2pCallService) cleanupCall(callID string) {
 	s.removeUserMapping(call.CallerID, callID)
 	s.removeUserMapping(call.ReceiverID, callID)
 	s.stopRingTimer(callID)
+}
+
+// PendingIncomingCall re-delivers a ringing incoming call to a receiver who
+// connects after missing the live event (was offline, or tapped a push). Returns
+// nil unless the user is the receiver of a still-ringing call.
+func (s *p2pCallService) PendingIncomingCall(userID string) *models.P2PCallBroadcast {
+	// Snapshot the call under the lock — the live pointer can be mutated concurrently.
+	s.mu.RLock()
+	var call *models.P2PCall
+	if callID, ok := s.userCalls[userID]; ok {
+		if c := s.activeCalls[callID]; c != nil {
+			snapshot := *c
+			call = &snapshot
+		}
+	}
+	s.mu.RUnlock()
+
+	if call == nil || call.Status != models.P2PCallStatusRinging || call.ReceiverID != userID {
+		return nil
+	}
+
+	ctx := context.Background()
+	caller, err := s.userGetter.GetByID(ctx, call.CallerID)
+	if err != nil {
+		return nil
+	}
+	receiver, err := s.userGetter.GetByID(ctx, call.ReceiverID)
+	if err != nil {
+		return nil
+	}
+	bc := s.buildBroadcast(call, caller, receiver)
+	return &bc
 }
 
 func (s *p2pCallService) buildBroadcast(call *models.P2PCall, caller, receiver *models.User) models.P2PCallBroadcast {

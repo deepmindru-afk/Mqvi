@@ -182,7 +182,7 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 	} else {
 		log.Println("[main] push notifications disabled (no credentials file)")
 	}
-	pushService := services.NewPushService(pushSender, repos.PushToken, repos.User, hub)
+	pushService := services.NewPushService(pushSender, repos.PushToken, repos.User)
 	dmService.SetPushNotifier(pushService)
 	p2pCallService.SetPushNotifier(pushService)
 	dmUploadService := services.NewDMUploadService(repos.DM, uploadPipeline, cfg.Upload.MaxSize)

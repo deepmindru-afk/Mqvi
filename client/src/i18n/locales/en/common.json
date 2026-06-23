@@ -1,5 +1,11 @@
 {
   "appName": "mqvi",
+  "notifChannels": {
+    "messages": "Messages",
+    "messagesDesc": "Direct messages",
+    "calls": "Calls",
+    "callsDesc": "Incoming calls"
+  },
   "loading": "Loading...",
   "save": "Save",
   "cancel": "Cancel",

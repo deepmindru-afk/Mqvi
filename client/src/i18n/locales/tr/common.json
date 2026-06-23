@@ -1,5 +1,11 @@
 {
   "appName": "mqvi",
+  "notifChannels": {
+    "messages": "Mesajlar",
+    "messagesDesc": "Direkt mesajlar",
+    "calls": "Aramalar",
+    "callsDesc": "Gelen aramalar"
+  },
   "loading": "Yükleniyor...",
   "save": "Kaydet",
   "cancel": "İptal",

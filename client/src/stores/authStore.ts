@@ -11,7 +11,7 @@ import { useE2EEStore } from "./e2eeStore";
 import { usePreferencesStore } from "./preferencesStore";
 import { useVoiceStore } from "./voiceStore";
 import { useSettingsStore } from "./settingsStore";
-import { unregisterCurrentPushToken } from "../hooks/usePushNotifications";
+import { unregisterCurrentPushToken, clearCachedPushToken } from "../utils/pushToken";
 import type { User, UserStatus } from "../types";
 
 const MANUAL_STATUS_KEY = "mqvi_manual_status";
@@ -202,6 +202,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       usePreferencesStore.getState().fetchAndApply();
     } else {
       clearTokens();
+      // Session restore failed: drop the local push-token cache. Can't unregister
+      // server-side (token already invalid); re-login re-registers and reassigns it.
+      clearCachedPushToken();
       set({ isInitialized: true });
     }
   },

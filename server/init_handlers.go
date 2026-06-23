@@ -55,7 +55,7 @@ type Handlers struct {
 
 func initHandlers(svcs *Services, repos *Repositories, limiters *RateLimiters, hub *ws.Hub, cfg *config.Config, encryptionKey []byte, urlSigner services.FileURLSigner) *Handlers {
 	fileLocator := files.NewLocator(cfg.Upload.Dir, cfg.Upload.PublicURL)
-	return &Handlers{
+	h := &Handlers{
 		Auth:              handlers.NewAuthHandler(svcs.Auth, limiters.Login, limiters.Register, limiters.ForgotPwd, limiters.ResetPwd, urlSigner, time.Duration(cfg.JWT.RefreshTokenExpiry)*24*time.Hour),
 		Channel:           handlers.NewChannelHandler(svcs.Channel),
 		Category:          handlers.NewCategoryHandler(svcs.Category),
@@ -96,4 +96,7 @@ func initHandlers(svcs *Services, repos *Repositories, limiters *RateLimiters, h
 		PushToken:         handlers.NewPushTokenHandler(svcs.PushToken),
 		WS:                ws.NewHandler(hub, svcs.Auth, nil, svcs.Voice, repos.User, repos.Server, svcs.ServerMute, svcs.ChannelMute, urlSigner),
 	}
+	// Re-deliver a ringing incoming call to a receiver on (re)connect (offline/push tap).
+	h.WS.SetIncomingCallProvider(svcs.P2PCall)
+	return h
 }
