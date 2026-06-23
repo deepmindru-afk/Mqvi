@@ -90,7 +90,7 @@ export function usePushNotifications(): void {
       await PushNotifications.register();
     }
 
-    void setup();
+    void setup().catch((err) => console.error("[push] setup failed:", err));
 
     return () => {
       cancelled = true;

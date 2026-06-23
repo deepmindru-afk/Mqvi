@@ -49,6 +49,11 @@ func (s *pushService) NotifyDM(recipientID, senderName, content string, encrypte
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
+		lang, suppressed := s.recipientPush(ctx, recipientID)
+		if suppressed {
+			return // recipient is in DND / invisible — honor "Pause notifications"
+		}
+
 		// Fallback if the caller couldn't supply a name (message.Author not populated).
 		if senderName == "" {
 			if u, err := s.users.GetByID(ctx, senderID); err == nil && u != nil {
@@ -56,7 +61,7 @@ func (s *pushService) NotifyDM(recipientID, senderName, content string, encrypte
 			}
 		}
 
-		loc := i18n.NewLocalizer(s.recipientLang(ctx, recipientID))
+		loc := i18n.NewLocalizer(lang)
 
 		// Plaintext shows content; E2EE can't be read by the server -> generic.
 		body := loc.T("push.newMessage")
@@ -85,7 +90,12 @@ func (s *pushService) NotifyCall(receiverID, callerName string, callType models.
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
-		loc := i18n.NewLocalizer(s.recipientLang(ctx, receiverID))
+		lang, suppressed := s.recipientPush(ctx, receiverID)
+		if suppressed {
+			return // receiver is in DND / invisible
+		}
+
+		loc := i18n.NewLocalizer(lang)
 
 		bodyKey := "push.incomingVoiceCall"
 		if callType == models.P2PCallTypeVideo {
@@ -135,12 +145,20 @@ func (s *pushService) send(ctx context.Context, userID string, n push.Notificati
 	}
 }
 
-func (s *pushService) recipientLang(ctx context.Context, userID string) string {
+// recipientPush fetches the recipient once and returns their notification language
+// plus whether push must be suppressed. Suppression honors the client contract
+// ("DND: You will not receive notifications" / "Pause notifications"): a DND or
+// invisible (manual offline) recipient gets no push, matching the in-app
+// notification-sound suppression in sounds.ts.
+func (s *pushService) recipientPush(ctx context.Context, userID string) (lang string, suppressed bool) {
 	u, err := s.users.GetByID(ctx, userID)
 	if err != nil || u == nil {
-		return i18n.DefaultLanguage
+		return i18n.DefaultLanguage, false
 	}
-	return u.Language
+	if u.PrefStatus == models.UserStatusDND || u.PrefStatus == models.UserStatusOffline {
+		return u.Language, true
+	}
+	return u.Language, false
 }
 
 // pushDisplayName resolves a user's notification title: display name if set,
