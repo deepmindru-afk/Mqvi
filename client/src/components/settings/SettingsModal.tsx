@@ -155,7 +155,7 @@ function SettingsContent({ activeTab }: { activeTab: string }) {
     case "platform-feedback":
       return <AdminFeedbackList />;
 
-    case "platform-connections":
+    case "connections":
       return <ConnectionsSettings />;
 
     default:

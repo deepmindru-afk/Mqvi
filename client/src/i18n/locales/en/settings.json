@@ -557,7 +557,7 @@
   "platformReportNoAttachments": "No attachments",
   "platformReportFileCount": "{{count}} file(s)",
 
-  "platformConnections": "Connections",
+  "connections": "Connections",
   "connectionsTitle": "Server Connections",
   "connectionsDescription": "Manage backend server connections. Switch between production and test servers.",
   "connectionsAddNew": "Add Connection",

@@ -557,7 +557,7 @@
   "platformReportNoAttachments": "Dosya yok",
   "platformReportFileCount": "{{count}} dosya",
 
-  "platformConnections": "Bağlantılar",
+  "connections": "Bağlantılar",
   "connectionsTitle": "Sunucu Bağlantıları",
   "connectionsDescription": "Backend sunucu bağlantılarını yönet. Üretim ve test sunucuları arasında geçiş yap.",
   "connectionsAddNew": "Bağlantı Ekle",
