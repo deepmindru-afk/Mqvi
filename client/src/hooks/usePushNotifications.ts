@@ -16,9 +16,9 @@ import { useDMStore } from "../stores/dmStore";
 import { useUIStore } from "../stores/uiStore";
 import i18n from "../i18n";
 
-// Android notification channels. Channel IDs must match the FCM payload
-// (pkg/push androidConfig). "calls" is MAX importance so incoming-call
-// notifications are heads-up with sound.
+// Android notification channel for DM/message pushes (id matches pkg/push androidConfig).
+// The incoming-call channel ("incoming_call") is created natively by IncomingCallService,
+// which owns its own looping ringtone + vibration — see android/.../IncomingCallService.kt.
 async function ensureChannels(): Promise<void> {
   if (getCapacitorPlatform() !== "android") return;
   await PushNotifications.createChannel({
@@ -27,14 +27,6 @@ async function ensureChannels(): Promise<void> {
     description: i18n.t("notifChannels.messagesDesc"),
     importance: 4, // HIGH — heads-up banner
     visibility: 1, // PUBLIC
-  });
-  await PushNotifications.createChannel({
-    id: "calls",
-    name: i18n.t("notifChannels.calls"),
-    description: i18n.t("notifChannels.callsDesc"),
-    importance: 5, // MAX — heads-up + sound
-    visibility: 1,
-    sound: "default",
   });
 }
 

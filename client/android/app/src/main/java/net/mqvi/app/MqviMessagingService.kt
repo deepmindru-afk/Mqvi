@@ -1,31 +1,38 @@
 package net.mqvi.app
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.capacitorjs.plugins.pushnotifications.MessagingService
 import com.google.firebase.messaging.RemoteMessage
 
 /**
- * Intercepts incoming-call data messages to show a full-screen incoming-call
- * notification — so a killed app still rings over the lock screen — and delegates
- * every other message (DM notifications, token refresh) to the Capacitor base
- * service via super. The base MessagingService drives token registration and the
- * pushNotificationReceived event, so DMs and token sync keep working unchanged.
+ * Intercepts incoming-call data messages to show a ringing notification, and delegates
+ * every other message — DM notifications, token refresh — to the Capacitor base service
+ * via super (so DMs + token sync are unchanged).
  *
- * Registered in AndroidManifest in place of the plugin's MessagingService (only one
- * FirebaseMessagingService can win the MESSAGING_EVENT intent).
+ * The call notification is posted directly (no foreground service — starting a FGS from
+ * a background FCM throws on Android 12+ and dropped the notification entirely). The
+ * ringtone loops via FLAG_INSISTENT until the user taps/dismisses it or it times out at
+ * ~50s (the server's ring window is 60s). The channel uses the ringtone sound + a long
+ * vibration pattern so it rings like a call, not a one-shot message beep.
  */
 class MqviMessagingService : MessagingService() {
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         if (remoteMessage.data["type"] == "call") {
-            showIncomingCall(remoteMessage.data)
-            return // handled natively — do not let Capacitor fire pushNotificationReceived
+            // Foreground: the in-app overlay rings; don't double up.
+            if (!MainActivity.isAppForeground) {
+                showIncomingCall(remoteMessage.data)
+            }
+            return // handled natively — don't let Capacitor fire pushNotificationReceived
         }
         super.onMessageReceived(remoteMessage)
     }
@@ -37,9 +44,7 @@ class MqviMessagingService : MessagingService() {
         val title = data["title"] ?: getString(R.string.app_name)
         val body = data["body"].orEmpty()
 
-        // Launch the app for the call; the in-app overlay handles answer/decline once
-        // the WebSocket reconnects and the server re-delivers the still-ringing call.
-        val launch = Intent(this, MainActivity::class.java).apply {
+        val open = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(MainActivity.EXTRA_INCOMING_CALL, true)
             putExtra(MainActivity.EXTRA_CALL_ID, callId)
@@ -47,7 +52,7 @@ class MqviMessagingService : MessagingService() {
         val pi = PendingIntent.getActivity(
             this,
             callId.hashCode(),
-            launch,
+            open,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
@@ -57,36 +62,46 @@ class MqviMessagingService : MessagingService() {
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setOngoing(true)
             .setAutoCancel(true)
-            // Mirror the server's 60s ring timeout so a missed call's notification clears.
-            .setTimeoutAfter(60_000)
             .setContentIntent(pi)
-            .setFullScreenIntent(pi, true)
+            // Auto-stop the ring around the server's 60s ring window.
+            .setTimeoutAfter(50_000L)
             .build()
+        // Loop the ringtone until the user taps/dismisses (or the timeout cancels it).
+        notification.flags = notification.flags or Notification.FLAG_INSISTENT
 
         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-            .notify(callId.hashCode(), notification)
+            .notify(CALL_NOTIFICATION_ID, notification)
     }
 
-    // Ensures the "calls" channel exists for the killed-app case where the JS
-    // createChannel hasn't run this session. Matches the channel id the FCM payload
-    // and the JS hook use.
+    // Fresh channel id (a prior build created "incoming_call" silent, and channel
+    // settings are immutable once created) so the ringtone sound + vibration apply.
     private fun ensureCallChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (nm.getNotificationChannel(CALLS_CHANNEL) != null) return
         val channel = NotificationChannel(
             CALLS_CHANNEL,
-            "Calls",
+            "Incoming Calls",
             NotificationManager.IMPORTANCE_HIGH,
         ).apply {
-            description = "Incoming calls"
+            description = "Incoming call ringing"
+            setSound(
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build(),
+            )
             enableVibration(true)
+            vibrationPattern = longArrayOf(0, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000)
         }
         nm.createNotificationChannel(channel)
     }
 
     companion object {
-        private const val CALLS_CHANNEL = "calls"
+        private const val CALLS_CHANNEL = "incoming_call_alert"
+        private const val CALL_NOTIFICATION_ID = 42
     }
 }

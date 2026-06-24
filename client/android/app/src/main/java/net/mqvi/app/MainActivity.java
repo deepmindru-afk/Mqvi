@@ -13,6 +13,9 @@ public class MainActivity extends BridgeActivity {
 
     public static final String EXTRA_INCOMING_CALL = "incoming_call";
     public static final String EXTRA_CALL_ID = "call_id";
+    // Toggled by onResume/onPause so MqviMessagingService rings natively only when the
+    // app isn't in the foreground (foreground = the in-app overlay handles the ring).
+    public static volatile boolean isAppForeground = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,5 +79,17 @@ public class MainActivity extends BridgeActivity {
                     | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
             );
         }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        isAppForeground = true;
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        isAppForeground = false;
     }
 }
