@@ -31,6 +31,11 @@ type Sender interface {
 	// permanently unregistered so the caller can prune them. A nil error with a
 	// non-empty invalid slice is normal (partial success).
 	Send(ctx context.Context, tokens []string, n Notification) (invalid []string, err error)
+	// SendData delivers a data-only high-priority message (no notification payload) so
+	// the app's FirebaseMessagingService receives it even when killed — used for calls
+	// (the native side builds a full-screen-intent notification). Returns unregistered
+	// tokens to prune.
+	SendData(ctx context.Context, tokens []string, data map[string]string) (invalid []string, err error)
 	// Enabled reports whether a real FCM client is configured.
 	Enabled() bool
 }
@@ -86,6 +91,33 @@ func (s *fcmSender) Send(ctx context.Context, tokens []string, n Notification) (
 	for i, r := range resp.Responses {
 		// Prune only on UNREGISTERED — a token FCM confirms is permanently dead.
 		// Other failures (transient, malformed payload) must not delete live tokens.
+		if !r.Success && messaging.IsUnregistered(r.Error) {
+			invalid = append(invalid, tokens[i])
+		}
+	}
+	return invalid, nil
+}
+
+func (s *fcmSender) SendData(ctx context.Context, tokens []string, data map[string]string) ([]string, error) {
+	if s.client == nil || len(tokens) == 0 {
+		return nil, nil
+	}
+
+	msg := &messaging.MulticastMessage{
+		Tokens: tokens,
+		Data:   data,
+		// Data-only + high priority -> delivered to onMessageReceived (native FMS)
+		// even in the background / when killed. No Notification payload on purpose.
+		Android: &messaging.AndroidConfig{Priority: "high"},
+	}
+
+	resp, err := s.client.SendEachForMulticast(ctx, msg)
+	if err != nil {
+		return nil, fmt.Errorf("fcm data multicast send: %w", err)
+	}
+
+	var invalid []string
+	for i, r := range resp.Responses {
 		if !r.Success && messaging.IsUnregistered(r.Error) {
 			invalid = append(invalid, tokens[i])
 		}

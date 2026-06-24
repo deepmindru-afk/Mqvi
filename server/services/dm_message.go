@@ -282,25 +282,28 @@ func (s *dmService) BroadcastCreate(message *models.DMMessage) {
 	}
 	s.broadcastToBothUsers(channel, event)
 
-	// Push the offline recipient (mobile). Skip call-log system messages and
-	// conversations the recipient has muted. Mute-check failure fails open (push)
-	// so a transient DB error never silently swallows notifications.
+	// Push the offline recipient (mobile), off the WS/response path. Skips call-log
+	// system messages and conversations the recipient muted. Mute-check failure fails
+	// open (push) so a transient DB error never silently swallows notifications.
 	if s.pushNotifier != nil && message.MessageType != models.MessageTypeCall {
-		recipientID := channel.User1ID
-		if recipientID == message.UserID {
-			recipientID = channel.User2ID
-		}
-		muted, err := s.dmRepo.IsChannelMuted(context.Background(), recipientID, channel.ID)
-		if err != nil {
-			log.Printf("[dm] push mute check failed for %s/%s: %v", recipientID, channel.ID, err)
-		}
-		if !muted {
+		go func() {
+			recipientID := channel.User1ID
+			if recipientID == message.UserID {
+				recipientID = channel.User2ID
+			}
+			muted, err := s.dmRepo.IsChannelMuted(context.Background(), recipientID, channel.ID)
+			if err != nil {
+				log.Printf("[dm] push mute check failed for %s/%s: %v", recipientID, channel.ID, err)
+			}
+			if muted {
+				return
+			}
 			content := ""
 			if message.Content != nil {
 				content = *message.Content
 			}
 			s.pushNotifier.NotifyDM(recipientID, pushDisplayName(message.Author), content, message.EncryptionVersion == 1, channel.ID, message.UserID)
-		}
+		}()
 	}
 
 	// If channel just became pending, notify both users

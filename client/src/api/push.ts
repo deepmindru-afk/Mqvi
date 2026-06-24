@@ -7,6 +7,7 @@ import { apiClient } from "./client";
 export function registerPushToken(req: {
   token: string;
   platform: "android" | "ios" | "web";
+  token_type?: "fcm" | "apns_voip";
   device_label?: string;
 }) {
   return apiClient<{ id: string }>("/push/tokens", {

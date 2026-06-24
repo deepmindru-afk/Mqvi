@@ -2,10 +2,12 @@ package services
 
 import (
 	"context"
+	"errors"
 	"log"
 	"time"
 
 	"github.com/akinalp/mqvi/models"
+	"github.com/akinalp/mqvi/pkg/apns"
 	"github.com/akinalp/mqvi/pkg/i18n"
 	"github.com/akinalp/mqvi/pkg/push"
 	"github.com/akinalp/mqvi/repository"
@@ -16,9 +18,12 @@ import (
 //
 // Delivery is NOT gated on WebSocket presence. The mobile OS shows the notification
 // only when the app is backgrounded/killed and delivers it silently to a foregrounded
-// app (which already renders the message/call in-app over WS). Gating on "any WS
-// connection" wrongly suppressed notifications for a backgrounded mobile app that
-// still held its socket — exactly the case the feature exists for.
+// app (which already renders the message/call in-app over WS). A DND or invisible
+// recipient is suppressed (matches the in-app notification-sound contract).
+//
+// Calls fork by token: Android FCM tokens get an FCM notification, iOS PushKit
+// (apns_voip) tokens get a direct APNs VoIP push (CallKit). iOS FCM tokens are
+// skipped for calls — the VoIP token is the iOS call path.
 type PushNotifier interface {
 	NotifyDM(recipientID, senderName, content string, encrypted bool, dmChannelID, senderID string)
 	NotifyCall(receiverID, callerName string, callType models.P2PCallType, callID, callerID string)
@@ -26,23 +31,24 @@ type PushNotifier interface {
 
 const pushBodyMaxLen = 140
 
-// pushUserLookup is the minimal user-read interface push needs (names + language).
+// pushUserLookup is the minimal user-read interface push needs (names + language + status).
 type pushUserLookup interface {
 	GetByID(ctx context.Context, id string) (*models.User, error)
 }
 
 type pushService struct {
-	sender    push.Sender
+	fcm       push.Sender
+	apns      apns.Sender
 	tokenRepo repository.PushTokenRepository
 	users     pushUserLookup
 }
 
-func NewPushService(sender push.Sender, tokenRepo repository.PushTokenRepository, users pushUserLookup) PushNotifier {
-	return &pushService{sender: sender, tokenRepo: tokenRepo, users: users}
+func NewPushService(fcm push.Sender, apnsSender apns.Sender, tokenRepo repository.PushTokenRepository, users pushUserLookup) PushNotifier {
+	return &pushService{fcm: fcm, apns: apnsSender, tokenRepo: tokenRepo, users: users}
 }
 
 func (s *pushService) NotifyDM(recipientID, senderName, content string, encrypted bool, dmChannelID, senderID string) {
-	if !s.sender.Enabled() {
+	if !s.fcm.Enabled() {
 		return
 	}
 	go func() {
@@ -69,7 +75,7 @@ func (s *pushService) NotifyDM(recipientID, senderName, content string, encrypte
 			body = truncateRunes(content, pushBodyMaxLen)
 		}
 
-		s.send(ctx, recipientID, push.Notification{
+		s.sendFCM(ctx, recipientID, push.Notification{
 			Title:    senderName,
 			Body:     body,
 			Category: push.CategoryMessage,
@@ -83,7 +89,7 @@ func (s *pushService) NotifyDM(recipientID, senderName, content string, encrypte
 }
 
 func (s *pushService) NotifyCall(receiverID, callerName string, callType models.P2PCallType, callID, callerID string) {
-	if !s.sender.Enabled() {
+	if !s.fcm.Enabled() && !s.apns.Enabled() {
 		return
 	}
 	go func() {
@@ -92,48 +98,100 @@ func (s *pushService) NotifyCall(receiverID, callerName string, callType models.
 
 		lang, suppressed := s.recipientPush(ctx, receiverID)
 		if suppressed {
-			return // receiver is in DND / invisible
+			return
 		}
 
-		loc := i18n.NewLocalizer(lang)
-
-		bodyKey := "push.incomingVoiceCall"
-		if callType == models.P2PCallTypeVideo {
-			bodyKey = "push.incomingVideoCall"
+		tokens, err := s.tokenRepo.ListByUser(ctx, receiverID)
+		if err != nil {
+			log.Printf("[push] list tokens for %s: %v", receiverID, err)
+			return
 		}
 
-		s.send(ctx, receiverID, push.Notification{
-			Title:    callerName,
-			Body:     loc.T(bodyKey),
-			Category: push.CategoryCall,
-			Data: map[string]string{
+		var androidFCM, voip []string
+		for _, t := range tokens {
+			if t.TokenType == models.PushTokenTypeAPNsVoIP {
+				voip = append(voip, t.Token)
+			} else if t.Platform == "android" {
+				androidFCM = append(androidFCM, t.Token)
+			}
+			// iOS FCM tokens are skipped for calls — the VoIP token (CallKit) is the iOS path.
+		}
+
+		// Android — high-priority DATA message so the native FirebaseMessagingService
+		// builds a full-screen incoming-call notification even when the app is killed.
+		// The localized title/body travel in the data so the native side stays i18n-free.
+		if len(androidFCM) > 0 && s.fcm.Enabled() {
+			loc := i18n.NewLocalizer(lang)
+			bodyKey := "push.incomingVoiceCall"
+			if callType == models.P2PCallTypeVideo {
+				bodyKey = "push.incomingVideoCall"
+			}
+			callData := map[string]string{
 				"type":      "call",
 				"call_id":   callID,
 				"caller_id": callerID,
 				"call_type": string(callType),
-			},
-		})
+				"title":     callerName,
+				"body":      loc.T(bodyKey),
+			}
+			invalid, err := s.fcm.SendData(ctx, androidFCM, callData)
+			if err != nil {
+				log.Printf("[push] call FCM to %s: %v", receiverID, err)
+			} else if len(invalid) > 0 {
+				if delErr := s.tokenRepo.DeleteTokens(ctx, invalid); delErr != nil {
+					log.Printf("[push] prune fcm tokens: %v", delErr)
+				}
+			}
+		}
+
+		// iOS — APNs VoIP (CallKit). caller_name carried for the native call UI.
+		if len(voip) > 0 && s.apns.Enabled() {
+			payload := map[string]any{
+				"call_id":     callID,
+				"caller_id":   callerID,
+				"caller_name": callerName,
+				"call_type":   string(callType),
+			}
+			var dead []string
+			for _, vt := range voip {
+				if err := s.apns.SendVoIP(ctx, vt, payload); err != nil {
+					if errors.Is(err, apns.ErrTokenUnregistered) {
+						dead = append(dead, vt)
+					} else {
+						log.Printf("[push] voip to %s: %v", receiverID, err)
+					}
+				}
+			}
+			if len(dead) > 0 {
+				if delErr := s.tokenRepo.DeleteTokens(ctx, dead); delErr != nil {
+					log.Printf("[push] prune voip tokens: %v", delErr)
+				}
+			}
+		}
 	}()
 }
 
-// send delivers to all of a user's device tokens, pruning any FCM reports as
-// permanently unregistered.
-func (s *pushService) send(ctx context.Context, userID string, n push.Notification) {
+// sendFCM delivers a notification message to the user's FCM tokens — excluding VoIP
+// tokens, which are not FCM-addressable (sending them to FCM would fail and wrongly
+// prune them) — pruning any FCM reports as permanently unregistered.
+func (s *pushService) sendFCM(ctx context.Context, userID string, n push.Notification) {
 	tokens, err := s.tokenRepo.ListByUser(ctx, userID)
 	if err != nil {
 		log.Printf("[push] list tokens for %s: %v", userID, err)
 		return
 	}
-	if len(tokens) == 0 {
+
+	var values []string
+	for _, t := range tokens {
+		if t.TokenType == models.PushTokenTypeFCM {
+			values = append(values, t.Token)
+		}
+	}
+	if len(values) == 0 {
 		return
 	}
 
-	values := make([]string, len(tokens))
-	for i, t := range tokens {
-		values[i] = t.Token
-	}
-
-	invalid, err := s.sender.Send(ctx, values, n)
+	invalid, err := s.fcm.Send(ctx, values, n)
 	if err != nil {
 		log.Printf("[push] send to %s: %v", userID, err)
 		return

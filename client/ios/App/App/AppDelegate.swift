@@ -37,6 +37,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             object: audioSession
         )
 
+        // Register for VoIP pushes + CallKit at launch so a cold-launch incoming-call
+        // push is reported to CallKit before the WebView loads.
+        CallManager.shared.start()
+
         return true
     }
 

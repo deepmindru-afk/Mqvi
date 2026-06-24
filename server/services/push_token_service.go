@@ -29,10 +29,15 @@ func (s *pushTokenService) RegisterToken(ctx context.Context, userID string, req
 		return nil, fmt.Errorf("%w: %s", pkg.ErrBadRequest, err.Error())
 	}
 
+	tokenType := req.TokenType
+	if tokenType == "" {
+		tokenType = models.PushTokenTypeFCM
+	}
 	t := &models.PushToken{
-		UserID:   userID,
-		Token:    req.Token,
-		Platform: req.Platform,
+		UserID:    userID,
+		Token:     req.Token,
+		Platform:  req.Platform,
+		TokenType: tokenType,
 	}
 	if req.DeviceLabel != "" {
 		t.DeviceLabel = &req.DeviceLabel

@@ -10,6 +10,7 @@ import (
 	"github.com/akinalp/mqvi/config"
 	"github.com/akinalp/mqvi/models"
 	"github.com/akinalp/mqvi/pkg/antivirus"
+	"github.com/akinalp/mqvi/pkg/apns"
 	"github.com/akinalp/mqvi/pkg/email"
 	"github.com/akinalp/mqvi/pkg/files"
 	"github.com/akinalp/mqvi/pkg/push"
@@ -182,7 +183,19 @@ func initServices(db *sql.DB, repos *Repositories, hub ws.EventPublisher, cfg *c
 	} else {
 		log.Println("[main] push notifications disabled (no credentials file)")
 	}
-	pushService := services.NewPushService(pushSender, repos.PushToken, repos.User)
+	apnsSender, err := apns.NewSender(apns.Config{
+		KeyPath:    cfg.Push.APNs.KeyPath,
+		KeyID:      cfg.Push.APNs.KeyID,
+		TeamID:     cfg.Push.APNs.TeamID,
+		BundleID:   cfg.Push.APNs.BundleID,
+		Production: cfg.Push.APNs.Production,
+	})
+	if err != nil {
+		log.Printf("[main] APNs VoIP (iOS calls) disabled: %v", err)
+	} else if apnsSender.Enabled() {
+		log.Println("[main] APNs VoIP enabled (iOS CallKit)")
+	}
+	pushService := services.NewPushService(pushSender, apnsSender, repos.PushToken, repos.User)
 	dmService.SetPushNotifier(pushService)
 	p2pCallService.SetPushNotifier(pushService)
 	dmUploadService := services.NewDMUploadService(repos.DM, uploadPipeline, cfg.Upload.MaxSize)
