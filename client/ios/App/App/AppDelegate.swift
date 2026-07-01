@@ -95,4 +95,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
     }
 
+    // Forward APNs registration to Capacitor so @capacitor/push-notifications emits the
+    // device token to JS (its "registration" event). Without this the plugin never fires,
+    // so the iOS APNs message token is never registered and DM pushes never arrive. (VoIP
+    // is unaffected — PushKit is wired directly in CallManager, not via this delegate.)
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications, object: deviceToken)
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)
+    }
+
 }
