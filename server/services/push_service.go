@@ -48,7 +48,7 @@ func NewPushService(fcm push.Sender, apnsSender apns.Sender, tokenRepo repositor
 }
 
 func (s *pushService) NotifyDM(recipientID, senderName, content string, encrypted bool, dmChannelID, senderID string) {
-	if !s.fcm.Enabled() {
+	if !s.fcm.Enabled() && !s.apns.Enabled() {
 		return
 	}
 	go func() {
@@ -75,17 +75,64 @@ func (s *pushService) NotifyDM(recipientID, senderName, content string, encrypte
 			body = truncateRunes(content, pushBodyMaxLen)
 		}
 
-		s.sendFCM(ctx, recipientID, push.Notification{
-			Title:    senderName,
-			Body:     body,
-			Category: push.CategoryMessage,
-			Data: map[string]string{
-				"type":          "dm",
-				"dm_channel_id": dmChannelID,
-				"sender_id":     senderID,
-			},
-		})
+		data := map[string]string{
+			"type":          "dm",
+			"dm_channel_id": dmChannelID,
+			"sender_id":     senderID,
+		}
+
+		// Android FCM tokens get an FCM notification; iOS APNs tokens get a direct APNs
+		// alert push (iOS has no FCM). VoIP tokens are for calls only, skipped here.
+		if s.fcm.Enabled() {
+			s.sendFCM(ctx, recipientID, push.Notification{
+				Title:    senderName,
+				Body:     body,
+				Category: push.CategoryMessage,
+				Data:     data,
+			})
+		}
+		if s.apns.Enabled() {
+			s.sendAPNsAlert(ctx, recipientID, senderName, body, data)
+		}
 	}()
+}
+
+// sendAPNsAlert delivers a user-visible alert push to the recipient's iOS APNs tokens
+// (messages/DMs). Prunes tokens APNs reports permanently invalid.
+func (s *pushService) sendAPNsAlert(ctx context.Context, userID, title, body string, data map[string]string) {
+	tokens, err := s.tokenRepo.ListByUser(ctx, userID)
+	if err != nil {
+		log.Printf("[push] list tokens for %s: %v", userID, err)
+		return
+	}
+
+	aps := map[string]any{
+		"alert": map[string]any{"title": title, "body": body},
+		"sound": "default",
+	}
+	payload := map[string]any{"aps": aps}
+	for k, v := range data {
+		payload[k] = v
+	}
+
+	var dead []string
+	for _, t := range tokens {
+		if t.TokenType != models.PushTokenTypeAPNs {
+			continue
+		}
+		if err := s.apns.SendAlert(ctx, t.Token, payload); err != nil {
+			if errors.Is(err, apns.ErrTokenUnregistered) {
+				dead = append(dead, t.Token)
+			} else {
+				log.Printf("[push] apns alert to %s: %v", userID, err)
+			}
+		}
+	}
+	if len(dead) > 0 {
+		if delErr := s.tokenRepo.DeleteTokens(ctx, dead); delErr != nil {
+			log.Printf("[push] prune apns tokens: %v", delErr)
+		}
+	}
 }
 
 func (s *pushService) NotifyCall(receiverID, callerName string, callType models.P2PCallType, callID, callerID string) {

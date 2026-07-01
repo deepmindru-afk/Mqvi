@@ -44,20 +44,24 @@ type Config struct {
 	Production bool
 }
 
-// Sender delivers VoIP pushes to iOS devices over APNs.
+// Sender delivers pushes to iOS devices over APNs.
 type Sender interface {
 	// SendVoIP posts a VoIP push to deviceToken. Returns ErrTokenUnregistered if APNs
 	// reports the token permanently invalid.
 	SendVoIP(ctx context.Context, deviceToken string, payload map[string]any) error
+	// SendAlert posts a user-visible alert push (messages/DMs) to deviceToken. Returns
+	// ErrTokenUnregistered if APNs reports the token permanently invalid.
+	SendAlert(ctx context.Context, deviceToken string, payload map[string]any) error
 	Enabled() bool
 }
 
 type sender struct {
 	cfg    Config
 	key    *ecdsa.PrivateKey // nil => disabled
-	client *http.Client
-	host   string
-	topic  string
+	client     *http.Client
+	host       string
+	voipTopic  string // <bundle>.voip — PushKit VoIP pushes
+	alertTopic string // <bundle> — user-visible alert pushes
 
 	mu    sync.Mutex
 	jwt   string
@@ -93,11 +97,12 @@ func NewSender(cfg Config) (Sender, error) {
 		host = productionHost
 	}
 	return &sender{
-		cfg:    cfg,
-		key:    key,
-		client: &http.Client{Timeout: 10 * time.Second},
-		host:   host,
-		topic:  cfg.BundleID + ".voip",
+		cfg:        cfg,
+		key:        key,
+		client:     &http.Client{Timeout: 10 * time.Second},
+		host:       host,
+		voipTopic:  cfg.BundleID + ".voip",
+		alertTopic: cfg.BundleID,
 	}, nil
 }
 
@@ -125,6 +130,20 @@ func (s *sender) authToken() (string, error) {
 }
 
 func (s *sender) SendVoIP(ctx context.Context, deviceToken string, payload map[string]any) error {
+	// Drop the push if undelivered within the ring window so APNs can't ring a call
+	// that already timed out / ended (ghost ring).
+	expiry := time.Now().Add(60 * time.Second).Unix()
+	return s.post(ctx, deviceToken, payload, s.voipTopic, "voip", expiry, "voip push")
+}
+
+func (s *sender) SendAlert(ctx context.Context, deviceToken string, payload map[string]any) error {
+	// expiration 0 => APNs stores and retries delivery for offline devices.
+	return s.post(ctx, deviceToken, payload, s.alertTopic, "alert", 0, "alert push")
+}
+
+// post signs and delivers a single push over APNs HTTP/2. topic + pushType select the
+// delivery kind (VoIP vs alert); expiry 0 leaves the header unset (store-and-forward).
+func (s *sender) post(ctx context.Context, deviceToken string, payload map[string]any, topic, pushType string, expiry int64, kind string) error {
 	if s.key == nil {
 		return nil
 	}
@@ -142,12 +161,12 @@ func (s *sender) SendVoIP(ctx context.Context, deviceToken string, payload map[s
 		return fmt.Errorf("apns: build request: %w", err)
 	}
 	req.Header.Set("authorization", "bearer "+auth)
-	req.Header.Set("apns-topic", s.topic)
-	req.Header.Set("apns-push-type", "voip")
+	req.Header.Set("apns-topic", topic)
+	req.Header.Set("apns-push-type", pushType)
 	req.Header.Set("apns-priority", "10")
-	// Drop the push if undelivered within the ring window so APNs can't ring a call
-	// that already timed out / ended (ghost ring).
-	req.Header.Set("apns-expiration", strconv.FormatInt(time.Now().Add(60*time.Second).Unix(), 10))
+	if expiry > 0 {
+		req.Header.Set("apns-expiration", strconv.FormatInt(expiry, 10))
+	}
 	req.Header.Set("content-type", "application/json")
 
 	resp, err := s.client.Do(req)
@@ -164,5 +183,5 @@ func (s *sender) SendVoIP(ctx context.Context, deviceToken string, payload map[s
 	if resp.StatusCode == http.StatusGone || bytes.Contains(respBody, []byte("BadDeviceToken")) {
 		return ErrTokenUnregistered
 	}
-	return fmt.Errorf("apns: voip push failed: status %d: %s", resp.StatusCode, respBody)
+	return fmt.Errorf("apns: %s failed: status %d: %s", kind, resp.StatusCode, respBody)
 }

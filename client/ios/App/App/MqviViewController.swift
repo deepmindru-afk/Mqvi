@@ -9,6 +9,7 @@ class MqviViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(VoiceCallPlugin())
         bridge?.registerPluginInstance(ScreenSharePlugin())
         bridge?.registerPluginInstance(NativeVoicePlugin())
+        bridge?.registerPluginInstance(P2PCallPlugin())
     }
 
     override func viewDidLoad() {

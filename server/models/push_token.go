@@ -11,7 +11,7 @@ type PushToken struct {
 	UserID      string    `json:"user_id"`
 	Token       string    `json:"token"`
 	Platform    string    `json:"platform"`
-	TokenType   string    `json:"token_type"` // "fcm" | "apns_voip"
+	TokenType   string    `json:"token_type"` // "fcm" | "apns" | "apns_voip"
 	DeviceLabel *string   `json:"device_label,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 	LastSeenAt  time.Time `json:"last_seen_at"`
@@ -19,7 +19,8 @@ type PushToken struct {
 
 // Push token types.
 const (
-	PushTokenTypeFCM      = "fcm"       // FCM registration token (Android + iOS messages)
+	PushTokenTypeFCM      = "fcm"       // FCM registration token (Android messages + calls)
+	PushTokenTypeAPNs     = "apns"      // iOS APNs device token (messages/DMs, via direct APNs alert)
 	PushTokenTypeAPNsVoIP = "apns_voip" // iOS PushKit VoIP token (calls, via direct APNs)
 )
 
@@ -41,9 +42,9 @@ func (r *RegisterPushTokenRequest) Validate() error {
 		return errors.New("platform must be one of: android, ios, web")
 	}
 	switch r.TokenType {
-	case "", PushTokenTypeFCM, PushTokenTypeAPNsVoIP:
+	case "", PushTokenTypeFCM, PushTokenTypeAPNs, PushTokenTypeAPNsVoIP:
 		return nil
 	default:
-		return errors.New("token_type must be fcm or apns_voip")
+		return errors.New("token_type must be fcm, apns or apns_voip")
 	}
 }

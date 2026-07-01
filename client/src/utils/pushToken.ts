@@ -11,12 +11,15 @@ import { getCapacitorPlatform } from "./constants";
 const PUSH_TOKEN_KEY = "mqvi_push_token";
 const VOIP_TOKEN_KEY = "mqvi_voip_token";
 
-/** Caches the FCM token locally and registers it with the backend. */
+/** Caches the message push token locally and registers it with the backend. Android
+ * gets an FCM token; iOS gets a raw APNs device token (no Firebase on iOS) delivered as
+ * a direct APNs alert — so the token_type must match the platform. */
 export async function syncPushToken(value: string): Promise<void> {
   const platform = getCapacitorPlatform();
   if (platform !== "android" && platform !== "ios") return;
   localStorage.setItem(PUSH_TOKEN_KEY, value);
-  const res = await registerPushToken({ token: value, platform });
+  const token_type = platform === "ios" ? "apns" : "fcm";
+  const res = await registerPushToken({ token: value, platform, token_type });
   if (!res.success) {
     console.error("[push] failed to register token:", res.error);
   }
