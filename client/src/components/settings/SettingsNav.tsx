@@ -8,7 +8,7 @@ import { useActiveMembers } from "../../stores/memberStore";
 import { useSettingsBadgeStore } from "../../stores/settingsBadgeStore";
 import { hasPermission, Permissions } from "../../utils/permissions";
 import { useIsMobile } from "../../hooks/useMediaQuery";
-import { isElectron } from "../../utils/constants";
+import { isElectron, isNativeApp } from "../../utils/constants";
 import type { SettingsTab } from "../../stores/settingsStore";
 
 /** Single nav item definition */
@@ -47,7 +47,6 @@ const PLATFORM_ITEMS: NavItem[] = [
   { id: "platform-reports", labelKey: "platformReportsTab" },
   { id: "platform-feedback", labelKey: "platformFeedbackTab" },
   { id: "platform-logs", labelKey: "platformLogsTab" },
-  { id: "platform-connections", labelKey: "platformConnections" },
 ];
 
 function SettingsNav() {
@@ -108,6 +107,16 @@ function SettingsNav() {
         </button>
       )}
 
+      {/* Connections (self-host backend switch) — native apps: Electron + mobile */}
+      {isNativeApp() && (
+        <button
+          className={`settings-nav-item${activeTab === "connections" ? " active" : ""}`}
+          onClick={() => setActiveTab("connections")}
+        >
+          {t("connections")}
+        </button>
+      )}
+
       {/* Server Settings (permission-gated) */}
       {canSeeServerSettings && (
         <>
@@ -130,9 +139,7 @@ function SettingsNav() {
         <>
           {!isMobile && <div className="settings-nav-divider" />}
           <h3 className="settings-nav-label">{t("platformSettings")}</h3>
-          {PLATFORM_ITEMS
-            .filter((item) => item.id !== "platform-connections" || isElectron())
-            .map((item) => {
+          {PLATFORM_ITEMS.map((item) => {
               const showDot =
                 (item.id === "platform-reports" && hasNewReports) ||
                 (item.id === "platform-feedback" && hasNewFeedback);

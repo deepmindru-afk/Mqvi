@@ -53,6 +53,7 @@
 	<array>
 		<string>audio</string>
 		<string>voip</string>
+		<string>remote-notification</string>
 	</array>
 
 	<!-- Privacy usage descriptions — required for mic/camera access -->

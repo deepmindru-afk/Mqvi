@@ -26,6 +26,8 @@
 		F424E60D2F78618B0001B5DF /* MqviViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F424E60B2F78618B0001B5DF /* MqviViewController.swift */; };
 		F424E60E2F78618B0001B5DF /* VoiceCallPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F424E60C2F78618B0001B5DF /* VoiceCallPlugin.swift */; };
 		F4BE564F2F830F7A001A1477 /* NativeVoicePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4BE564E2F830F7A001A1477 /* NativeVoicePlugin.swift */; };
+		F4FC1F6D2FEC13D8007B44CC /* CallManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4FC1F6B2FEC13D8007B44CC /* CallManager.swift */; };
+		F4FC1F6E2FEC13D8007B44CC /* P2PCallPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4FC1F6C2FEC13D8007B44CC /* P2PCallPlugin.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -81,6 +83,8 @@
 		F424E60C2F78618B0001B5DF /* VoiceCallPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCallPlugin.swift; sourceTree = "<group>"; };
 		F4BE564D2F830C76001A1477 /* App-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "App-Bridging-Header.h"; sourceTree = "<group>"; };
 		F4BE564E2F830F7A001A1477 /* NativeVoicePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeVoicePlugin.swift; sourceTree = "<group>"; };
+		F4FC1F6B2FEC13D8007B44CC /* CallManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallManager.swift; sourceTree = "<group>"; };
+		F4FC1F6C2FEC13D8007B44CC /* P2PCallPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = P2PCallPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -161,6 +165,8 @@
 		504EC3061FED79650016851F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				F4FC1F6B2FEC13D8007B44CC /* CallManager.swift */,
+				F4FC1F6C2FEC13D8007B44CC /* P2PCallPlugin.swift */,
 				F4BE564E2F830F7A001A1477 /* NativeVoicePlugin.swift */,
 				F424E60B2F78618B0001B5DF /* MqviViewController.swift */,
 				F424E60C2F78618B0001B5DF /* VoiceCallPlugin.swift */,
@@ -346,6 +352,8 @@
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				F424E60D2F78618B0001B5DF /* MqviViewController.swift in Sources */,
 				F4BE564F2F830F7A001A1477 /* NativeVoicePlugin.swift in Sources */,
+				F4FC1F6D2FEC13D8007B44CC /* CallManager.swift in Sources */,
+				F4FC1F6E2FEC13D8007B44CC /* P2PCallPlugin.swift in Sources */,
 				F424E60E2F78618B0001B5DF /* VoiceCallPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

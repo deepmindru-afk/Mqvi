@@ -196,6 +196,10 @@ func initRoutes(
 	mux.Handle("GET /api/users/{userId}/devices", auth(h.Device.ListPublicDevices))
 	mux.Handle("GET /api/users/{userId}/prekey-bundles", auth(h.Device.GetPrekeyBundles))
 
+	// Push Notifications
+	mux.Handle("POST /api/push/tokens", auth(h.PushToken.Register))
+	mux.Handle("DELETE /api/push/tokens", auth(h.PushToken.Unregister))
+
 	// Channel mutes — literal path before {serverId} wildcard
 	mux.Handle("GET /api/channels/mutes", auth(h.ChannelMute.ListMuted))
 

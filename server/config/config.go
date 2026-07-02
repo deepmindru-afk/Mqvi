@@ -20,8 +20,29 @@ type Config struct {
 	Email           EmailConfig
 	Klipy           KlipyConfig
 	TURN            TURNConfig
+	Push            PushConfig
 	EncryptionKey   string // AES-256 key (64 hex chars = 32 bytes) for LiveKit credential encryption
 	HetznerAPIToken string // Hetzner Cloud API token (read-only) — optional
+}
+
+// PushConfig — optional. If CredentialsFile is missing or invalid, push is disabled
+// and the server still starts (same pattern as Email/Klipy).
+type PushConfig struct {
+	// CredentialsFile is the path to the Firebase service-account JSON used by the
+	// Admin SDK to send FCM messages.
+	CredentialsFile string
+	// APNs — optional iOS VoIP (PushKit/CallKit) push via direct APNs.
+	APNs APNsConfig
+}
+
+// APNsConfig holds token-based (.p8) APNs auth for iOS VoIP pushes. Disabled if any
+// of KeyPath/KeyID/TeamID is unset. The same .p8 uploaded to Firebase for FCM works.
+type APNsConfig struct {
+	KeyPath    string // path to the AuthKey_XXXX.p8
+	KeyID      string
+	TeamID     string
+	BundleID   string // voip topic = BundleID + ".voip"
+	Production bool   // false => APNs sandbox (Xcode dev builds); true => production
 }
 
 // TURNConfig holds the STUN/TURN servers handed to P2P call clients.
@@ -228,6 +249,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	// Optional iOS VoIP push flag — invalid value defaults to sandbox (push is optional).
+	apnsProduction, _ := strconv.ParseBool(getEnv("APNS_PRODUCTION", "false"))
+
 	cfg := &Config{
 		Server: ServerConfig{
 			Host: getEnv("SERVER_HOST", "0.0.0.0"),
@@ -284,6 +308,16 @@ func Load() (*Config, error) {
 			URLs:                 turnURLs,
 			STUNURLs:             stunURLs,
 			CredentialTTLSeconds: turnTTL,
+		},
+		Push: PushConfig{
+			CredentialsFile: getEnv("FCM_CREDENTIALS_FILE", "./firebase-service-account.json"),
+			APNs: APNsConfig{
+				KeyPath:    getEnv("APNS_KEY_FILE", "./apns-key.p8"),
+				KeyID:      getEnv("APNS_KEY_ID", ""),
+				TeamID:     getEnv("APNS_TEAM_ID", ""),
+				BundleID:   getEnv("APNS_BUNDLE_ID", "net.mqvi.app"),
+				Production: apnsProduction,
+			},
 		},
 		EncryptionKey:   encKey,
 		HetznerAPIToken: getEnv("HETZNER_API_TOKEN", ""),

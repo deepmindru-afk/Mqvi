@@ -18,6 +18,9 @@ type DMRepository interface {
 	CountMessagesBySender(ctx context.Context, channelID, userID string) (int, error)
 	DeleteChannel(ctx context.Context, channelID string) error
 	SetE2EEEnabled(ctx context.Context, channelID string, enabled bool) error
+	// IsChannelMuted reports whether the user has an active mute (muted_until in the
+	// future) on the DM channel — used to suppress push notifications.
+	IsChannelMuted(ctx context.Context, userID, channelID string) (bool, error)
 
 	// Message operations
 	GetMessages(ctx context.Context, channelID string, beforeID string, limit int) ([]models.DMMessage, error)

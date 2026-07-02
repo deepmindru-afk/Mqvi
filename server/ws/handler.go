@@ -28,6 +28,13 @@ type VoiceStatesProvider interface {
 	GetActiveChannelTimers() map[string]int64
 }
 
+// IncomingCallProvider returns a pending RINGING incoming-call payload for a user,
+// re-delivered on (re)connect so a receiver who missed the live event (offline, or
+// just tapped a push) still gets the incoming-call overlay.
+type IncomingCallProvider interface {
+	PendingIncomingCall(userID string) *models.P2PCallBroadcast
+}
+
 // UserInfoProvider fetches user profile from DB for Hub cache.
 // JWT claims only contain userID + username; display_name/avatar_url need DB lookup.
 type UserInfoProvider interface {
@@ -97,15 +104,22 @@ var upgrader = websocket.Upgrader{
 
 // Handler handles WebSocket connection upgrades.
 type Handler struct {
-	hub                 *Hub
-	tokenValidator      TokenValidator
-	banChecker          BanChecker
-	voiceStatesProvider VoiceStatesProvider
-	userInfoProvider    UserInfoProvider
-	serverListProvider  ServerListProvider
-	muteChecker         MuteChecker
-	channelMuteChecker  ChannelMuteChecker
-	urlSigner           URLSigner
+	hub                  *Hub
+	tokenValidator       TokenValidator
+	banChecker           BanChecker
+	voiceStatesProvider  VoiceStatesProvider
+	userInfoProvider     UserInfoProvider
+	serverListProvider   ServerListProvider
+	muteChecker          MuteChecker
+	channelMuteChecker   ChannelMuteChecker
+	urlSigner            URLSigner
+	incomingCallProvider IncomingCallProvider
+}
+
+// SetIncomingCallProvider wires the (optional) provider used to re-deliver a ringing
+// incoming call on connect. Set post-construction to avoid a ws->services dependency.
+func (h *Handler) SetIncomingCallProvider(p IncomingCallProvider) {
+	h.incomingCallProvider = p
 }
 
 func NewHandler(
@@ -334,6 +348,14 @@ func (h *Handler) HandleConnection(w http.ResponseWriter, r *http.Request) {
 			Op:   OpVoiceStatesSync,
 			Data: VoiceStatesSyncData{States: items, ChannelTimers: timers},
 		})
+	}
+
+	// Re-deliver a ringing incoming call so a receiver who connects after missing the
+	// live event (was offline / tapped a push notification) still sees the overlay.
+	if h.incomingCallProvider != nil {
+		if bc := h.incomingCallProvider.PendingIncomingCall(claims.UserID); bc != nil {
+			client.sendEvent(Event{Op: OpP2PCallInitiate, Data: bc})
+		}
 	}
 
 	// Start pumps — WritePump in goroutine, ReadPump blocks until disconnect

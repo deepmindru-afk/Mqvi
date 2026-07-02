@@ -44,6 +44,12 @@ dependencies {
     // Kotlin coroutines — required by LiveKit SDK
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
 
+    // firebase-messaging on the app classpath so MqviMessagingService can resolve its
+    // FirebaseMessagingService supertype — the push plugin declares this as
+    // `implementation` (not transitive), so the app module doesn't get it otherwise.
+    // Version pinned to match @capacitor/push-notifications (firebaseMessagingVersion).
+    implementation 'com.google.firebase:firebase-messaging:25.0.1'
+
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

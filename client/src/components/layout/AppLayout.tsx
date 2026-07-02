@@ -32,6 +32,8 @@ import { useIdleDetection } from "../../hooks/useIdleDetection";
 import { useVoiceActivityReporter } from "../../hooks/useVoiceActivityReporter";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { useP2PCall } from "../../hooks/useP2PCall";
+import { usePushNotifications } from "../../hooks/usePushNotifications";
+import { useCallKit } from "../../hooks/useCallKit";
 import { useE2EE } from "../../hooks/useE2EE";
 import { useE2EEStore } from "../../stores/e2eeStore";
 import RecoveryPasswordPrompt from "../shared/RecoveryPasswordPrompt";
@@ -60,6 +62,11 @@ import { ChatCommandActionsProvider } from "../../hooks/useChatCommandActions";
 function AppLayout() {
   const { sendTyping, sendDMTyping, sendPresenceUpdate, sendVoiceJoin, sendVoiceLeave, sendVoiceStateUpdate, sendWS, connectionStatus, reconnectAttempt } =
     useWebSocket();
+
+  // Register for push notifications (mobile only; no-op on web/Electron).
+  usePushNotifications();
+  // iOS VoIP/CallKit bridge (no-op on other platforms).
+  useCallKit();
 
   // Idle detection — auto-set "idle" after 5min inactivity
   useIdleDetection({ sendPresenceUpdate });

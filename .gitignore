@@ -45,6 +45,17 @@ native/*.obj
 *.pem
 *.key
 
+# Push notifications / Firebase secrets (NEVER commit)
+*.p8
+firebase-service-account*.json
+server/firebase-service-account.json
+# Firebase client config — git-ignored because the repo is public. Not strict
+# secrets (package-restricted, shipped inside the app) but exposing a real
+# project's config publicly invites abuse. Keep locally; inject via CI secret
+# when Android/iOS CI builds are set up.
+client/android/app/google-services.json
+client/ios/App/App/GoogleService-Info.plist
+
 # ========================
 # IDE
 # ========================

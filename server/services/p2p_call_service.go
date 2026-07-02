@@ -48,11 +48,15 @@ type P2PCallService interface {
 	RelaySignal(senderID, callID string, signal ws.P2PSignalData) error
 	HandleDisconnect(userID string)
 	GetUserCall(userID string) *models.P2PCall
+	// PendingIncomingCall returns the broadcast for a user's active RINGING incoming
+	// call (they are the receiver), or nil — used to re-deliver it on (re)connect.
+	PendingIncomingCall(userID string) *models.P2PCallBroadcast
 	// HasActiveCall reports whether the user is in an ACCEPTED (active) call.
 	// Status is read under the lock — no mutable pointer escapes.
 	HasActiveCall(userID string) bool
 	SetAppLogger(logger P2PAppLogger)
 	SetCallLogger(logger CallLogger)
+	SetPushNotifier(n PushNotifier)
 }
 
 type p2pCallService struct {
@@ -61,6 +65,7 @@ type p2pCallService struct {
 	hub           ws.BroadcastAndOnline
 	appLogger     P2PAppLogger
 	callLogger    CallLogger
+	pushNotifier  PushNotifier
 	urlSigner     FileURLSigner
 
 	// In-memory state, cleared on server restart.
@@ -180,8 +185,25 @@ func (s *p2pCallService) timeoutRinging(callID string) {
 			Data: map[string]string{"call_id": callID, "reason": "timeout"},
 		})
 	}
+	// Receiver may be backgrounded with only the incoming-call push — stop its ring.
+	s.cancelReceiverPush(call.ReceiverID, callID)
 
 	s.logCall(call.CallerID, call.ReceiverID, call.CallType, models.CallOutcomeMissed, 0)
+}
+
+// SetPushNotifier wires the (optional) push notifier. InitiateCall guards on nil,
+// so push stays disabled when never set.
+func (s *p2pCallService) SetPushNotifier(n PushNotifier) {
+	s.pushNotifier = n
+}
+
+// cancelReceiverPush stops a backgrounded receiver's ring (CallKit / Android call
+// notification) when a still-ringing call is torn down by the caller or the ring
+// timeout — the WS OpP2PCallEnd can't reach a device that only has the push.
+func (s *p2pCallService) cancelReceiverPush(receiverID, callID string) {
+	if s.pushNotifier != nil {
+		s.pushNotifier.NotifyCallCancel(receiverID, callID)
+	}
 }
 
 func (s *p2pCallService) InitiateCall(callerID, receiverID string, callType models.P2PCallType) error {
@@ -285,6 +307,11 @@ func (s *p2pCallService) InitiateCall(callerID, receiverID string, callType mode
 		Data: broadcast,
 	})
 
+	// Push the receiver if offline (mobile). Online receivers get the WS event.
+	if s.pushNotifier != nil {
+		s.pushNotifier.NotifyCall(receiverID, pushDisplayName(caller), callType, call.ID, callerID)
+	}
+
 	return nil
 }
 
@@ -367,6 +394,13 @@ func (s *p2pCallService) DeclineCall(userID, callID string) error {
 		Data: map[string]string{"call_id": callID},
 	})
 
+	// Caller cancelling a still-ringing call: the receiver may be backgrounded with
+	// only the push — stop its ring. (Receiver declining doesn't need this: it dismisses
+	// its own CallKit locally, and the caller is foregrounded on WS.)
+	if call.Status == models.P2PCallStatusRinging && userID == call.CallerID {
+		s.cancelReceiverPush(call.ReceiverID, callID)
+	}
+
 	// Outcome: an answered call torn down here is completed; otherwise the
 	// receiver declining is "declined", the caller cancelling is "missed".
 	switch {
@@ -414,6 +448,11 @@ func (s *p2pCallService) EndCall(userID string) error {
 		Op:   ws.OpP2PCallEnd,
 		Data: map[string]string{"call_id": callID},
 	})
+
+	// Caller hanging up while still ringing: stop the backgrounded receiver's push ring.
+	if call.Status == models.P2PCallStatusRinging && userID == call.CallerID {
+		s.cancelReceiverPush(call.ReceiverID, callID)
+	}
 
 	if call.Status == models.P2PCallStatusActive {
 		s.logCall(call.CallerID, call.ReceiverID, call.CallType, models.CallOutcomeCompleted, callDurationSec(call.AcceptedAt))
@@ -485,6 +524,16 @@ func (s *p2pCallService) HandleDisconnect(userID string) {
 		return
 	}
 
+	// A receiver whose socket drops while the call is still RINGING may be a mobile
+	// client backgrounding to answer from its push notification. Keep the call alive
+	// so reconnect + PendingIncomingCall can re-deliver the incoming call; the ring
+	// timer still times it out at 60s if they never return. Active calls — and a
+	// caller dropping — still tear down here.
+	if call.Status == models.P2PCallStatusRinging && call.ReceiverID == userID {
+		s.mu.Unlock()
+		return
+	}
+
 	delete(s.activeCalls, callID)
 	s.removeUserMapping(call.CallerID, callID)
 	s.removeUserMapping(call.ReceiverID, callID)
@@ -505,6 +554,12 @@ func (s *p2pCallService) HandleDisconnect(userID string) {
 		Op:   ws.OpP2PCallEnd,
 		Data: map[string]string{"call_id": callID, "reason": "disconnect"},
 	})
+
+	// A ringing call torn down here means the caller dropped (a ringing receiver drop
+	// returns early above) — stop the backgrounded receiver's push ring.
+	if call.Status == models.P2PCallStatusRinging {
+		s.cancelReceiverPush(call.ReceiverID, callID)
+	}
 
 	if call.Status == models.P2PCallStatusActive {
 		s.logCall(call.CallerID, call.ReceiverID, call.CallType, models.CallOutcomeCompleted, callDurationSec(call.AcceptedAt))
@@ -556,6 +611,38 @@ func (s *p2pCallService) cleanupCall(callID string) {
 	s.removeUserMapping(call.CallerID, callID)
 	s.removeUserMapping(call.ReceiverID, callID)
 	s.stopRingTimer(callID)
+}
+
+// PendingIncomingCall re-delivers a ringing incoming call to a receiver who
+// connects after missing the live event (was offline, or tapped a push). Returns
+// nil unless the user is the receiver of a still-ringing call.
+func (s *p2pCallService) PendingIncomingCall(userID string) *models.P2PCallBroadcast {
+	// Snapshot the call under the lock — the live pointer can be mutated concurrently.
+	s.mu.RLock()
+	var call *models.P2PCall
+	if callID, ok := s.userCalls[userID]; ok {
+		if c := s.activeCalls[callID]; c != nil {
+			snapshot := *c
+			call = &snapshot
+		}
+	}
+	s.mu.RUnlock()
+
+	if call == nil || call.Status != models.P2PCallStatusRinging || call.ReceiverID != userID {
+		return nil
+	}
+
+	ctx := context.Background()
+	caller, err := s.userGetter.GetByID(ctx, call.CallerID)
+	if err != nil {
+		return nil
+	}
+	receiver, err := s.userGetter.GetByID(ctx, call.ReceiverID)
+	if err != nil {
+		return nil
+	}
+	bc := s.buildBroadcast(call, caller, receiver)
+	return &bc
 }
 
 func (s *p2pCallService) buildBroadcast(call *models.P2PCall, caller, receiver *models.User) models.P2PCallBroadcast {

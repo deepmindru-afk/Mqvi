@@ -1,5 +1,6 @@
 /**
- * ConnectionsSettings — Backend server connection management (Electron-only).
+ * ConnectionsSettings — Backend server connection management (native apps:
+ * Electron + mobile). Lets a self-hoster point the app at their own server.
  * Saved connections stored in localStorage. Switching triggers a reload
  * since SERVER_URL is computed at module level.
  */

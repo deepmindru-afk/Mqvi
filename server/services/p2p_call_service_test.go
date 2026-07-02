@@ -41,6 +41,12 @@ func (fakeUserGetter) GetActiveByID(_ context.Context, id string) (*models.User,
 	return &models.User{ID: id}, nil
 }
 
+// fakeURLSigner is a pass-through signer for buildBroadcast in tests.
+type fakeURLSigner struct{}
+
+func (fakeURLSigner) SignURL(s string) string     { return s }
+func (fakeURLSigner) SignURLPtr(p *string) *string { return p }
+
 // TestHasActiveCall verifies the TURN credential gate boundary: only an
 // accepted (active) call qualifies — ringing, stale, or absent must not.
 // Constructs the struct directly (same package) and populates the two state
@@ -288,6 +294,96 @@ func TestTimeoutRinging(t *testing.T) {
 		svc.timeoutRinging("a")
 		if _, ok := svc.activeCalls["a"]; !ok {
 			t.Error("accepted call must NOT be removed by a stale ringing timeout")
+		}
+	})
+}
+
+// TestPendingIncomingCall verifies the connect-time replay gating: only the
+// RECEIVER of a still-RINGING call gets re-delivered the incoming call. Caller,
+// active calls, and users with no call must get nil.
+func TestPendingIncomingCall(t *testing.T) {
+	svc := &p2pCallService{
+		userGetter: fakeUserGetter{},
+		urlSigner:  fakeURLSigner{},
+		activeCalls: map[string]*models.P2PCall{
+			"x": {ID: "x", CallerID: "caller", ReceiverID: "rcv", CallType: models.P2PCallTypeVoice, Status: models.P2PCallStatusRinging},
+			"y": {ID: "y", CallerID: "c2", ReceiverID: "r2", Status: models.P2PCallStatusActive},
+		},
+		userCalls: map[string]string{"caller": "x", "rcv": "x", "c2": "y", "r2": "y"},
+	}
+
+	t.Run("ringing receiver gets the broadcast", func(t *testing.T) {
+		bc := svc.PendingIncomingCall("rcv")
+		if bc == nil {
+			t.Fatal("expected a broadcast for a ringing receiver, got nil")
+		}
+		if bc.ID != "x" || bc.ReceiverID != "rcv" {
+			t.Errorf("wrong broadcast: %+v", bc)
+		}
+	})
+	t.Run("caller of a ringing call gets nil", func(t *testing.T) {
+		if bc := svc.PendingIncomingCall("caller"); bc != nil {
+			t.Errorf("caller must not get a replay, got %+v", bc)
+		}
+	})
+	t.Run("active-call receiver gets nil (only ringing replays)", func(t *testing.T) {
+		if bc := svc.PendingIncomingCall("r2"); bc != nil {
+			t.Errorf("active call must not replay, got %+v", bc)
+		}
+	})
+	t.Run("user with no call gets nil", func(t *testing.T) {
+		if bc := svc.PendingIncomingCall("nobody"); bc != nil {
+			t.Errorf("expected nil, got %+v", bc)
+		}
+	})
+}
+
+// TestHandleDisconnectRingingReceiver verifies a receiver dropping its socket while
+// a call is still RINGING keeps the call alive (a mobile client may be backgrounding
+// to answer from its push), while a caller drop or an active call still tears down.
+func TestHandleDisconnectRingingReceiver(t *testing.T) {
+	t.Run("receiver disconnect during ringing keeps the call", func(t *testing.T) {
+		svc := &p2pCallService{
+			hub:         fakeHub{},
+			activeCalls: map[string]*models.P2PCall{"x": {ID: "x", CallerID: "caller", ReceiverID: "rcv", Status: models.P2PCallStatusRinging}},
+			userCalls:   map[string]string{"caller": "x", "rcv": "x"},
+			ringTimers:  map[string]*time.Timer{"x": time.AfterFunc(time.Hour, func() {})},
+		}
+		svc.HandleDisconnect("rcv")
+		if _, ok := svc.activeCalls["x"]; !ok {
+			t.Error("ringing call must survive a receiver disconnect (mobile may answer via push)")
+		}
+		if _, ok := svc.userCalls["rcv"]; !ok {
+			t.Error("receiver mapping must be kept so PendingIncomingCall can replay")
+		}
+		if _, ok := svc.ringTimers["x"]; !ok {
+			t.Error("ring timer must keep running to time out at 60s")
+		}
+	})
+
+	t.Run("caller disconnect during ringing tears down", func(t *testing.T) {
+		svc := &p2pCallService{
+			hub:         fakeHub{},
+			activeCalls: map[string]*models.P2PCall{"x": {ID: "x", CallerID: "caller", ReceiverID: "rcv", Status: models.P2PCallStatusRinging}},
+			userCalls:   map[string]string{"caller": "x", "rcv": "x"},
+			ringTimers:  map[string]*time.Timer{"x": time.AfterFunc(time.Hour, func() {})},
+		}
+		svc.HandleDisconnect("caller")
+		if _, ok := svc.activeCalls["x"]; ok {
+			t.Error("caller leaving a ringing call must tear it down")
+		}
+	})
+
+	t.Run("active-call disconnect tears down", func(t *testing.T) {
+		svc := &p2pCallService{
+			hub:         fakeHub{},
+			activeCalls: map[string]*models.P2PCall{"x": {ID: "x", CallerID: "caller", ReceiverID: "rcv", Status: models.P2PCallStatusActive, AcceptedAt: time.Now().Add(-time.Second)}},
+			userCalls:   map[string]string{"caller": "x", "rcv": "x"},
+			ringTimers:  map[string]*time.Timer{},
+		}
+		svc.HandleDisconnect("rcv")
+		if _, ok := svc.activeCalls["x"]; ok {
+			t.Error("an active call must tear down on any party disconnect")
 		}
 	})
 }

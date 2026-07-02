@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application
         android:allowBackup="true"
@@ -30,6 +31,21 @@
             android:name=".VoiceCallService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback|microphone|mediaProjection" />
+
+
+        <!-- Incoming-call push: replace the Capacitor FCM service with our subclass so
+             call data messages render a full-screen-intent notification; all other
+             messages (DMs, token refresh) delegate to the Capacitor base via super. -->
+        <service
+            android:name="com.capacitorjs.plugins.pushnotifications.MessagingService"
+            tools:node="remove" />
+        <service
+            android:name=".MqviMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -62,4 +78,6 @@
 
     <!-- Notifications for foreground service and calls -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Full-screen incoming-call notification (auto-granted for CATEGORY_CALL on Android 14+) -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 </manifest>

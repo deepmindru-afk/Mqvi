@@ -1,4 +1,9 @@
 {
+  "push": {
+    "newMessage": "Yeni mesaj",
+    "incomingVoiceCall": "Gelen sesli arama",
+    "incomingVideoCall": "Gelen görüntülü arama"
+  },
   "auth": {
     "invalidCredentials": "Geçersiz kullanıcı adı veya şifre",
     "usernameRequired": "Kullanıcı adı gerekli",

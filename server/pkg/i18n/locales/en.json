@@ -1,4 +1,9 @@
 {
+  "push": {
+    "newMessage": "New message",
+    "incomingVoiceCall": "Incoming voice call",
+    "incomingVideoCall": "Incoming video call"
+  },
   "auth": {
     "invalidCredentials": "Invalid username or password",
     "usernameRequired": "Username is required",

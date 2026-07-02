@@ -73,6 +73,24 @@ func (r *sqliteDMRepo) GetChannelByID(ctx context.Context, id string) (*models.D
 	return &ch, nil
 }
 
+// IsChannelMuted reports whether the user has an active mute (muted_until in the
+// future) on the DM channel. Used to suppress push notifications. No settings row
+// => not muted.
+func (r *sqliteDMRepo) IsChannelMuted(ctx context.Context, userID, channelID string) (bool, error) {
+	var muted int
+	err := r.db.QueryRowContext(ctx, `
+		SELECT CASE WHEN muted_until IS NOT NULL AND muted_until > datetime('now') THEN 1 ELSE 0 END
+		FROM user_dm_settings
+		WHERE user_id = ? AND dm_channel_id = ?`, userID, channelID).Scan(&muted)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("failed to check DM mute: %w", err)
+	}
+	return muted == 1, nil
+}
+
 // ListChannels returns a user's DM channels with the other user's info.
 // Joins user_dm_settings to filter hidden channels and include pin/mute state.
 // Sorted: pinned first (by activity), then unpinned by activity.
