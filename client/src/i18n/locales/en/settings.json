@@ -559,7 +559,7 @@
 
   "connections": "Connections",
   "connectionsTitle": "Server Connections",
-  "connectionsDescription": "Manage backend server connections. Switch between production and test servers.",
+  "connectionsDescription": "Manage backend server connections. Use this if you're self-hosting your own server.",
   "connectionsAddNew": "Add Connection",
   "connectionsName": "Connection Name",
   "connectionsNamePlaceholder": "e.g. Test Server",

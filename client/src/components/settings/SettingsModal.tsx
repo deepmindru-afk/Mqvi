@@ -18,7 +18,6 @@ import AdminServerList from "./AdminServerList";
 import AdminUserList from "./AdminUserList";
 import AdminReportList from "./AdminReportList";
 import AdminLogsPanel from "./AdminLogsPanel";
-import ConnectionsSettings from "./ConnectionsSettings";
 import EncryptionSettings from "./EncryptionSettings";
 import GeneralSettings from "./GeneralSettings";
 import FeedbackSettings from "./FeedbackSettings";
@@ -154,9 +153,6 @@ function SettingsContent({ activeTab }: { activeTab: string }) {
 
     case "platform-feedback":
       return <AdminFeedbackList />;
-
-    case "connections":
-      return <ConnectionsSettings />;
 
     default:
       return null;

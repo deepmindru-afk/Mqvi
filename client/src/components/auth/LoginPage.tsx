@@ -7,6 +7,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { isElectron, isNativeApp } from "../../utils/constants";
 import { detectOS, shouldShowDownloadPrompt } from "../../utils/detectOS";
 import AccountRecoveryModal from "./AccountRecoveryModal";
+import ConnectionsModal from "../settings/ConnectionsModal";
 
 function LoginPage() {
   // ─── Hooks ───
@@ -24,6 +25,7 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConnections, setShowConnections] = useState(false);
 
   // Load saved credentials from Electron safeStorage on mount
   useEffect(() => {
@@ -72,6 +74,7 @@ function LoginPage() {
   return (
     <div className="auth-page">
       {accountDeleted && <AccountRecoveryModal />}
+      <ConnectionsModal isOpen={showConnections} onClose={() => setShowConnections(false)} />
       <div className="auth-card">
         {/* Header */}
         <h1 className="auth-title">{t("welcomeBack")}</h1>
@@ -181,6 +184,14 @@ function LoginPage() {
             </a>
           );
         })()}
+
+        {isNativeApp() && (
+          <p className="auth-link">
+            <button type="button" className="auth-terms-link" onClick={() => setShowConnections(true)}>
+              {t("changeServer")}
+            </button>
+          </p>
+        )}
 
         {!isNativeApp() && (
           <Link to="/" className="auth-home-link">

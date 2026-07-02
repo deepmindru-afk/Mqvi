@@ -193,7 +193,6 @@ function ConnectionsSettings() {
 
   return (
     <div className="settings-section">
-      <h2 className="settings-section-title">{t("connectionsTitle")}</h2>
       <p className="settings-hint" style={{ marginBottom: 20 }}>
         {t("connectionsDescription")}
       </p>

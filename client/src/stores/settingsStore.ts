@@ -82,7 +82,6 @@ type SettingsTab =
   | "platform-users"
   | "platform-reports"
   | "platform-logs"
-  | "connections"
   | "platform-feedback"
   | "feedback"
   | "blocked-users"

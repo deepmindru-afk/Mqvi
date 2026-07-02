@@ -1,8 +1,9 @@
 /** Settings sidebar navigation. Server Settings visible only to authorized users. */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "../../stores/settingsStore";
+import ConnectionsModal from "./ConnectionsModal";
 import { useAuthStore } from "../../stores/authStore";
 import { useActiveMembers } from "../../stores/memberStore";
 import { useSettingsBadgeStore } from "../../stores/settingsBadgeStore";
@@ -56,6 +57,7 @@ function SettingsNav() {
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
   const isMobile = useIsMobile();
+  const [showConnections, setShowConnections] = useState(false);
 
   const members = useActiveMembers();
   const currentMember = members.find((m) => m.id === user?.id);
@@ -81,6 +83,7 @@ function SettingsNav() {
     hasPermission(perms, Permissions.BanMembers);
 
   return (
+    <>
     <nav className="settings-nav">
       {/* User Settings */}
       <h3 className="settings-nav-label">{t("userSettings")}</h3>
@@ -107,11 +110,12 @@ function SettingsNav() {
         </button>
       )}
 
-      {/* Connections (self-host backend switch) — native apps: Electron + mobile */}
+      {/* Connections (self-host backend switch) — native apps: Electron + mobile.
+          Opens a modal so it's reachable both here and from the login/register pages. */}
       {isNativeApp() && (
         <button
-          className={`settings-nav-item${activeTab === "connections" ? " active" : ""}`}
-          onClick={() => setActiveTab("connections")}
+          className="settings-nav-item"
+          onClick={() => setShowConnections(true)}
         >
           {t("connections")}
         </button>
@@ -171,6 +175,8 @@ function SettingsNav() {
         <p className="settings-nav-version">mqvi v2.17.0</p>
       )}
     </nav>
+    <ConnectionsModal isOpen={showConnections} onClose={() => setShowConnections(false)} />
+    </>
   );
 }
 

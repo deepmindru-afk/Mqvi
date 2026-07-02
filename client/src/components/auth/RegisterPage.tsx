@@ -6,6 +6,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { isNativeApp } from "../../utils/constants";
 import { detectOS, shouldShowDownloadPrompt } from "../../utils/detectOS";
+import ConnectionsModal from "../settings/ConnectionsModal";
 
 /** Inline modal for Terms of Service / Privacy Policy */
 function LegalModal({ type, onClose }: { type: "terms" | "privacy"; onClose: () => void }) {
@@ -103,6 +104,7 @@ function RegisterPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [legalModal, setLegalModal] = useState<"terms" | "privacy" | null>(null);
+  const [showConnections, setShowConnections] = useState(false);
 
   // ─── Handlers ───
   async function handleSubmit(e: React.FormEvent) {
@@ -159,6 +161,7 @@ function RegisterPage() {
   // ─── Render ───
   return (
     <div className="auth-page">
+      <ConnectionsModal isOpen={showConnections} onClose={() => setShowConnections(false)} />
       <div className="auth-card">
         {/* Header */}
         <h1 className="auth-title">{t("createAccount")}</h1>
@@ -327,6 +330,14 @@ function RegisterPage() {
             </a>
           );
         })()}
+
+        {isNativeApp() && (
+          <p className="auth-link">
+            <button type="button" className="auth-terms-link" onClick={() => setShowConnections(true)}>
+              {t("changeServer")}
+            </button>
+          </p>
+        )}
 
         {!isNativeApp() && (
           <Link to="/" className="auth-home-link">

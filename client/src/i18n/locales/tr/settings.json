@@ -559,7 +559,7 @@
 
   "connections": "Bağlantılar",
   "connectionsTitle": "Sunucu Bağlantıları",
-  "connectionsDescription": "Backend sunucu bağlantılarını yönet. Üretim ve test sunucuları arasında geçiş yap.",
+  "connectionsDescription": "Backend sunucu bağlantılarını yönet. Kendi sunucunu barındırıyorsan burayı kullan.",
   "connectionsAddNew": "Bağlantı Ekle",
   "connectionsName": "Bağlantı Adı",
   "connectionsNamePlaceholder": "örn. Test Sunucusu",
